@@ -1,0 +1,11 @@
+# Copy selected values into sdkconfig.defaults or configure them with menuconfig.
+# Do not store real secrets in Git.
+
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+
+# Example non-secret placeholders for future Kconfig/menuconfig integration.
+# WIFI_SSID="replace-with-local-ssid"
+# CLOUD_LLM_ENDPOINT="https://example.invalid/v1/chat/completions"
+# CLOUD_LLM_MODEL="replace-with-model-name"
+# CLOUD_LLM_TOKEN="replace-with-local-secret-only"
+

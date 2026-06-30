@@ -1,0 +1,27 @@
+# Local/editor state
+.agents/
+.codex/
+
+# Build outputs and local ESP-IDF config
+build*/
+sdkconfig
+managed_components/
+dependencies.lock
+
+# Large local SDK/reference repositories
+references/esp-adf/
+references/esp-idf/
+references/esp-idf-v5.5.2/
+references/esp-idf-zh_CN-v5.5.2/
+references/esp-iot-solution/
+references/esp-dev-kits/
+references/esp-idf-template/
+references/esp-now/
+references/esp-protocols/
+references/esp-rainmaker/
+
+# Local source documents and generated binaries
+*.pdf
+*.bin
+*.elf
+*.map
