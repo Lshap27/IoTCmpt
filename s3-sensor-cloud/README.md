@@ -16,13 +16,13 @@ ESP32-S3-DevKitC-1 firmware skeleton for the 2026 IoT competition direction: sen
 - Applies simple placeholder commands: `led:on` and `led:off`.
 
 ## Build
-Run from this directory after loading ESP-IDF environment:
+Run from the workspace root:
 
 ```powershell
-. ..\references\esp-idf-v5.5.2\export.ps1
-idf.py set-target esp32s3
-idf.py build
+.\scripts\build.ps1
 ```
+
+The script prefers the EIM-managed ESP-IDF v5.5.2 setup and falls back to the local reference checkout if EIM is not available.
 
 Flash only after confirming the serial port:
 
