@@ -8,6 +8,12 @@
 - Fallback SDK: `../references/esp-idf-v5.5.2/`.
 - Baseline command from the workspace root: `scripts\build.ps1`.
 
+## Editor Configuration
+- For VS Code ESP-IDF extension work, `idf.currentSetup` should be the actual SDK path: `C:\esp\v5.5.2\esp-idf`.
+- Do not replace `idf.currentSetup` with the EIM id such as `esp-idf-...`; extension 2.1.0 expects a path here.
+- If CMake Tools asks for a kit or compiler, treat it as an editor-side CMake Tools prompt, not an ESP-IDF requirement. ESP-IDF uses its own CMake toolchain and the `xtensa-esp32s3-elf` cross compiler.
+- Keep `cmake.configureOnOpen` disabled unless the user explicitly wants CMake Tools to manage this project directly.
+
 ## Firmware Direction
 - This project is for the ESP32-S3-DevKitC-1 competition work, focused on sensor data plus cloud LLM control.
 - Use Wi-Fi plus HTTPS/HTTP or MQTT as the default cloud path.

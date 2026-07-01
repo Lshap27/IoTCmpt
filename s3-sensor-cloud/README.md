@@ -30,6 +30,11 @@ Flash only after confirming the serial port:
 idf.py -p COMx flash monitor
 ```
 
+## VS Code Notes
+- The ESP-IDF extension should use `C:\esp\v5.5.2\esp-idf` as `idf.currentSetup`.
+- If CMake Tools asks for a kit/compiler, it can usually be ignored for ESP-IDF work. The ESP-IDF extension and `idf.py` provide the CMake toolchain and ESP32-S3 cross compiler.
+- This workspace keeps `cmake.configureOnOpen` disabled to avoid CMake Tools auto-configuring the repository root.
+
 ## Next Development Steps
 - Choose the actual sensor set and replace `sensor_read_placeholder()`.
 - Add Wi-Fi provisioning or local Wi-Fi config.
