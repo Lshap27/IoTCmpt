@@ -1,0 +1,15 @@
+{
+  "idf.currentSetup": "C:\\esp\\v5.5.2\\esp-idf",
+  "idf.adapterTargetName": "esp32s3",
+  "idf.flashType": "UART",
+  "idf.buildPathWin": "${workspaceFolder}\\build",
+  "idf.customExtraVars": {
+    "IDF_TARGET": "esp32s3"
+  },
+  "clangd.path": "C:\\Espressif\\tools\\esp-clang\\esp-19.1.2_20250312\\esp-clang\\bin\\clangd.exe",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=**",
+    "--compile-commands-dir=c:\\Users\\lshap\\Documents\\Code\\IoTCmpt\\s3-sensor-cloud\\build"
+  ]
+}

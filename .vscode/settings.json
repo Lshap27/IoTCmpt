@@ -1,0 +1,6 @@
+{
+    "cmake.sourceDirectory": "C:/Users/lshap/Documents/Code/IoTCmpt/s3-sensor-cloud",
+    "idf.currentSetup": "C:\\esp\\v5.5.2\\esp-idf",
+    "idf.adapterTargetName": "esp32s3",
+    "idf.flashType": "UART"
+}
