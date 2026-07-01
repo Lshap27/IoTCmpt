@@ -11,5 +11,6 @@
     "--background-index",
     "--query-driver=**",
     "--compile-commands-dir=c:\\Users\\lshap\\Documents\\Code\\IoTCmpt\\s3-sensor-cloud\\build"
-  ]
+  ],
+  "cmake.configureOnOpen": false
 }
