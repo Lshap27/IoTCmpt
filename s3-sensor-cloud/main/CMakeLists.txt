@@ -1,5 +1,2 @@
-idf_component_register(
-    SRCS "app_main.c"
-    INCLUDE_DIRS "."
-    REQUIRES driver esp_http_client esp_wifi json nvs_flash
-)
+idf_component_register(SRCS "main.c"
+                       INCLUDE_DIRS ".")
