@@ -87,3 +87,37 @@
 
 ### 结论
 当前接线和软件配置下，OV2640 摄像头与 Wi-Fi STA 可稳定共存。Wi-Fi 射频未对 DVP 并行接口造成明显干扰，JPEG 帧输出正常。模块化后的 camera_app 与 wifi_app 协同工作良好。
+
+## HTTP 图像上传测试
+
+### 时间
+2026-07-01
+
+### 硬件
+- ESP32-S3
+- OV2640 摄像头
+
+### 软件配置
+- ESP-IDF v5.5.2
+- esp32-camera
+- Wi-Fi STA 模式
+- HTTP POST 上传
+- Python HTTPServer 接收图片
+
+### 摄像头参数
+- pixel_format = PIXFORMAT_JPEG
+- frame_size = FRAMESIZE_QVGA
+- xclk_freq_hz = 10000000
+- fb_location = CAMERA_FB_IN_DRAM
+- fb_count = 1
+
+### 结果
+- ESP32-S3 成功连接 Wi-Fi
+- OV2640 成功采集 QVGA JPEG
+- ESP32-S3 成功 POST 到电脑服务端
+- 服务端返回 HTTP 200
+- 图片保存到电脑并可正常打开
+
+### 关键日志
+HTTP_UPLOAD: HTTP POST status=200, content_length=2
+MAIN: Image upload success
