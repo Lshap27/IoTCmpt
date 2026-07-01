@@ -3,6 +3,7 @@ idf_component_register(
         "main.c"
         "camera_app.c"
         "wifi_app.c"
+        "http_upload.c"
     INCLUDE_DIRS
         "."
 )
