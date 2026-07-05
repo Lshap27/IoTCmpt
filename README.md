@@ -6,6 +6,8 @@ control firmware.
 ## Layout
 
 - `s3-sensor-cloud/`: the ESP-IDF product firmware project.
+- `backend/`: FastAPI backend for sensor upload, image storage, pose detection,
+  dashboard APIs, command queue, and cloud LLM exchange.
 - `scripts/`: workspace-level setup and build helpers.
 - `references/RESOURCE_INDEX.md`: notes for optional local SDKs, docs, and reference repositories.
 
@@ -27,6 +29,19 @@ contains the teammate prototype features behind menuconfig switches:
 The default configuration is safe for a fresh checkout: mock sensor data is on,
 and Wi-Fi, backend upload, cloud, camera, display, actuator, and button modules
 are off. Enable real hardware and endpoints from local `sdkconfig`/menuconfig.
+
+## Backend
+
+The backend lives in `backend/` and is versioned with the firmware protocol. It
+keeps the current ESP32 upload endpoints stable:
+
+- `POST /api/upload_sensor`
+- `POST /api/upload_image`
+- `POST /api/detect_pose`
+- `POST /api/cloud/exchange`
+
+See `backend/README.md` for environment variables, database migration, Docker
+Compose, and menuconfig URL examples.
 
 ## Build
 
