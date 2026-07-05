@@ -1,41 +1,53 @@
 # ESP32-S3 Sensor Cloud
 
 ESP-IDF firmware for the ESP32-S3-DevKitC-1 competition direction: sensor
-sampling, local fusion, cloud LLM exchange, and downstream device commands.
+sampling, local fusion, ordinary backend upload, cloud LLM exchange, and
+downstream device commands.
 
 ## Current Architecture
 
 - `main/config`: loads Kconfig/sdkconfig values into `app_config_t`.
-- `main/sensors`: exposes `sensor_sample_t` through `sensors_init()` and `sensors_read()`.
-- `main/fusion`: turns sensor samples into `fusion_state_t`.
+- `main/sensors`: reads SHT30, TVOC301, and LM393, or emits mock samples.
+- `main/fusion`: turns samples into air quality, window, and alarm decisions.
+- `main/backend`: uploads sensor JSON and camera JPEG multipart payloads.
 - `main/cloud`: sends state to an HTTP-compatible cloud LLM endpoint and parses commands.
-- `main/commands`: validates and applies supported downstream commands.
-- `main/net`: owns Wi-Fi station connection setup.
+- `main/actuators`: drives the SG90 window servo and active beeper.
+- `main/inputs`: handles the manual toggle button.
+- `main/display`: renders status bars on the ST7735 TFT.
+- `main/camera`: initializes OV2640 and captures QVGA JPEG frames.
+- `main/state`: stores local manual override, window, and alarm state.
 
-The default configuration uses mock sensor samples and keeps Wi-Fi/cloud disabled,
-so the firmware can compile and boot without external hardware or secrets.
+The default configuration is deliberately safe: mock sensor samples are enabled,
+while Wi-Fi, backend upload, cloud, camera, display, actuator, and button modules
+are disabled. This lets the firmware build and boot without hardware or secrets.
 
 ## Configuration
 
-Run menuconfig inside the ESP-IDF environment to enable real connectivity:
+Run menuconfig inside the ESP-IDF environment:
 
 ```powershell
 idf.py menuconfig
 ```
 
-Relevant options are under `S3 Sensor Cloud`:
+Useful options are under `S3 Sensor Cloud`:
 
-- `APP_SENSOR_MOCK_ENABLED`
-- `APP_SENSOR_INTERVAL_MS`
-- `APP_WIFI_ENABLED`
-- `APP_WIFI_SSID`
-- `APP_WIFI_PASSWORD`
-- `APP_CLOUD_ENABLED`
-- `APP_CLOUD_ENDPOINT`
-- `APP_CLOUD_MODEL`
-- `APP_CLOUD_TOKEN`
+- Connectivity: `APP_WIFI_ENABLED`, `APP_WIFI_SSID`, `APP_WIFI_PASSWORD`.
+- Cloud LLM: `APP_CLOUD_ENABLED`, `APP_CLOUD_ENDPOINT`, `APP_CLOUD_MODEL`, `APP_CLOUD_TOKEN`.
+- Backend upload: `APP_BACKEND_ENABLED`, `APP_SENSOR_UPLOAD_URL`, `APP_IMAGE_UPLOAD_URL`, `APP_POSE_UPLOAD_URL`.
+- Feature modules: `APP_CAMERA_ENABLED`, `APP_DISPLAY_ENABLED`, `APP_ACTUATOR_ENABLED`, `APP_BUTTON_ENABLED`.
+- Sensors and pins: SHT30, TVOC301, LM393, SG90, beeper, button, TFT, and OV2640 GPIO options.
 
-Do not commit local `sdkconfig` files containing Wi-Fi or cloud credentials.
+Do not commit local `sdkconfig` files containing Wi-Fi passwords, backend URLs,
+cloud tokens, or model credentials.
+
+## Hardware Notes
+
+The OV2640 camera defaults preserve the teammate-verified setup: QVGA JPEG,
+10 MHz XCLK, one DRAM framebuffer, and the DVP pin map from the prototype.
+
+The prototype used GPIO10 for both OV2640 XCLK and TFT CS. The modular default
+keeps camera XCLK on GPIO10 and sets `APP_TFT_CS_GPIO=5`. Change this in
+menuconfig to match the actual display wiring before enabling both modules.
 
 ## Build
 
@@ -58,9 +70,11 @@ Flash only after confirming the serial port and board connection:
 idf.py -p COMx flash monitor
 ```
 
-## Next Steps
+## Bring-Up Order
 
-- Replace the mock sensor layer with SHT30, TVOC301, and LM393 drivers.
-- Add an actuator implementation for the validated command set.
-- Lock the cloud response schema for the selected LLM provider.
-- Add host-side or component tests for fusion rules and command parsing.
+1. Build and boot with defaults.
+2. Disable `APP_SENSOR_MOCK_ENABLED` and verify SHT30/TVOC301/LM393 logs.
+3. Enable Wi-Fi and backend sensor upload with local URLs in `sdkconfig`.
+4. Enable actuator and button, then verify manual window toggle.
+5. Enable display after confirming TFT CS does not conflict with camera XCLK.
+6. Enable camera and image/pose upload after backend endpoints are reachable.

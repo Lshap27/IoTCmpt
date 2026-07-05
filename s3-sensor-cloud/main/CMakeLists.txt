@@ -6,6 +6,12 @@ idf_component_register(
         "fusion/fusion.c"
         "cloud/cloud_client.c"
         "commands/commands.c"
+        "backend/backend_upload.c"
+        "camera/camera_app.c"
+        "display/display.c"
+        "actuators/actuators.c"
+        "inputs/inputs.c"
+        "state/control_state.c"
         "net/wifi_app.c"
     INCLUDE_DIRS
         "include"
@@ -17,4 +23,7 @@ idf_component_register(
         esp_event
         json
         nvs_flash
+        driver
+        esp_lcd
+        esp32-camera
 )
