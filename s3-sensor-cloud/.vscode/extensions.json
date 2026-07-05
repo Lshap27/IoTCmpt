@@ -4,34 +4,6 @@
     "ms-vscode.cpptools",
     "ms-vscode.cmake-tools",
     "ms-python.python",
-    "ms-vscode.vscode-serial-monitor",
-    "ms-vscode.hexeditor",
-    "marus25.cortex-debug",
-    "vadimcn.vscode-lldb",
-    "npclaudiu.vscode-gn",
-    "eamodio.gitlens",
-    "openai.chatgpt",
-    "ms-ceintl.vscode-language-pack-zh-hans"
-  ],
-  "unwantedRecommendations": [
-    "cweijan.dbclient-jdbc",
-    "cweijan.vscode-mysql-client2",
-    "github.codespaces",
-    "huawei.burntool",
-    "huawei.deveco-chip-config",
-    "huawei.deveco-device-tool",
-    "huawei.deveco-device-tool-debug",
-    "huawei.deveco-device-tool-remote",
-    "huawei.zeroscript-build",
-    "labuladong.leetcode-helper",
-    "ms-vscode.azure-repos",
-    "redhat.java",
-    "thqby.vscode-autohotkey2-lsp",
-    "vscjava.vscode-gradle",
-    "vscjava.vscode-java-debug",
-    "vscjava.vscode-java-dependency",
-    "vscjava.vscode-java-pack",
-    "vscjava.vscode-java-test",
-    "vscjava.vscode-maven"
+    "ms-vscode.vscode-serial-monitor"
   ]
 }

@@ -1,43 +1,66 @@
 # ESP32-S3 Sensor Cloud
 
-ESP32-S3-DevKitC-1 firmware skeleton for the 2026 IoT competition direction: sensor data plus cloud large-model control.
+ESP-IDF firmware for the ESP32-S3-DevKitC-1 competition direction: sensor
+sampling, local fusion, cloud LLM exchange, and downstream device commands.
 
-## Goals
-- Collect and fuse sensor data on ESP32-S3.
-- Send non-audio/video perception data to a cloud LLM provider.
-- Receive compact downstream commands and apply them to local device state.
-- Keep provider choice replaceable: Volcengine AI Gateway, Qwen, iFlytek Spark, DeepSeek, Baidu AI Studio, or another HTTP-compatible service.
+## Current Architecture
 
-## Current Skeleton
-- Initializes NVS and a status GPIO placeholder.
-- Provides a fake sensor sample source for buildable structure.
-- Builds a JSON payload with cJSON.
-- Contains a placeholder cloud exchange function intended to be replaced with `esp_http_client` or MQTT.
-- Applies simple placeholder commands: `led:on` and `led:off`.
+- `main/config`: loads Kconfig/sdkconfig values into `app_config_t`.
+- `main/sensors`: exposes `sensor_sample_t` through `sensors_init()` and `sensors_read()`.
+- `main/fusion`: turns sensor samples into `fusion_state_t`.
+- `main/cloud`: sends state to an HTTP-compatible cloud LLM endpoint and parses commands.
+- `main/commands`: validates and applies supported downstream commands.
+- `main/net`: owns Wi-Fi station connection setup.
+
+The default configuration uses mock sensor samples and keeps Wi-Fi/cloud disabled,
+so the firmware can compile and boot without external hardware or secrets.
+
+## Configuration
+
+Run menuconfig inside the ESP-IDF environment to enable real connectivity:
+
+```powershell
+idf.py menuconfig
+```
+
+Relevant options are under `S3 Sensor Cloud`:
+
+- `APP_SENSOR_MOCK_ENABLED`
+- `APP_SENSOR_INTERVAL_MS`
+- `APP_WIFI_ENABLED`
+- `APP_WIFI_SSID`
+- `APP_WIFI_PASSWORD`
+- `APP_CLOUD_ENABLED`
+- `APP_CLOUD_ENDPOINT`
+- `APP_CLOUD_MODEL`
+- `APP_CLOUD_TOKEN`
+
+Do not commit local `sdkconfig` files containing Wi-Fi or cloud credentials.
 
 ## Build
-Run from the workspace root:
+
+From the workspace root:
 
 ```powershell
 .\scripts\build.ps1
 ```
 
-The script prefers the EIM-managed ESP-IDF v5.5.2 setup and falls back to the local reference checkout if EIM is not available.
+Manual ESP-IDF flow:
 
-Flash only after confirming the serial port:
+```powershell
+idf.py set-target esp32s3
+idf.py build
+```
+
+Flash only after confirming the serial port and board connection:
 
 ```powershell
 idf.py -p COMx flash monitor
 ```
 
-## VS Code Notes
-- The ESP-IDF extension should use `C:\esp\v5.5.2\esp-idf` as `idf.currentSetup`.
-- If CMake Tools asks for a kit/compiler, it can usually be ignored for ESP-IDF work. The ESP-IDF extension and `idf.py` provide the CMake toolchain and ESP32-S3 cross compiler.
-- This workspace keeps `cmake.configureOnOpen` disabled to avoid CMake Tools auto-configuring the repository root.
+## Next Steps
 
-## Next Development Steps
-- Choose the actual sensor set and replace `sensor_read_placeholder()`.
-- Add Wi-Fi provisioning or local Wi-Fi config.
-- Add menuconfig or config-file support for endpoint, model, and token.
-- Replace `cloud_llm_exchange_placeholder()` with HTTP/MQTT implementation.
-- Define a strict command schema for LLM responses.
+- Replace the mock sensor layer with SHT30, TVOC301, and LM393 drivers.
+- Add an actuator implementation for the validated command set.
+- Lock the cloud response schema for the selected LLM provider.
+- Add host-side or component tests for fusion rules and command parsing.

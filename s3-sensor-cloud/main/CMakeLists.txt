@@ -1,18 +1,20 @@
-idf_component_register(SRCS
-    "main.c"
-    "sensor_upload.c"
-    "camera_app.c"
-    "http_upload.c"
-    "wifi_app.c"
-    INCLUDE_DIRS "."
+idf_component_register(
+    SRCS
+        "main.c"
+        "config/app_config.c"
+        "sensors/sensors.c"
+        "fusion/fusion.c"
+        "cloud/cloud_client.c"
+        "commands/commands.c"
+        "net/wifi_app.c"
+    INCLUDE_DIRS
+        "include"
     REQUIRES
         esp_http_client
-        json
+        esp_timer
         esp_wifi
-        nvs_flash
         esp_netif
         esp_event
-        driver
-        esp_lcd
-        # 你原有的其他组件
+        json
+        nvs_flash
 )

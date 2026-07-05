@@ -1,0 +1,47 @@
+menu "S3 Sensor Cloud"
+
+    config APP_SENSOR_MOCK_ENABLED
+        bool "Use mock sensor samples"
+        default y
+        help
+            Enables deterministic mock readings so the firmware can build and
+            run without external SHT30, TVOC301, or light sensor hardware.
+
+    config APP_SENSOR_INTERVAL_MS
+        int "Sensor loop interval in milliseconds"
+        default 5000
+        range 1000 60000
+
+    config APP_WIFI_ENABLED
+        bool "Enable Wi-Fi station connection"
+        default n
+
+    config APP_WIFI_SSID
+        string "Wi-Fi SSID"
+        default ""
+        depends on APP_WIFI_ENABLED
+
+    config APP_WIFI_PASSWORD
+        string "Wi-Fi password"
+        default ""
+        depends on APP_WIFI_ENABLED
+
+    config APP_CLOUD_ENABLED
+        bool "Enable cloud LLM exchange"
+        default n
+
+    config APP_CLOUD_ENDPOINT
+        string "Cloud LLM endpoint"
+        default ""
+        depends on APP_CLOUD_ENABLED
+
+    config APP_CLOUD_MODEL
+        string "Cloud LLM model"
+        default "demo-model"
+
+    config APP_CLOUD_TOKEN
+        string "Cloud LLM bearer token"
+        default ""
+        depends on APP_CLOUD_ENABLED
+
+endmenu

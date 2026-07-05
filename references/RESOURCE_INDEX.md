@@ -1,43 +1,38 @@
 # ESP32-S3 Sensor + Cloud Resource Index
 
+This directory is for optional local references only. Large SDKs, generated docs,
+PDFs, and cloned example repositories should stay ignored and out of Git.
+
 ## Competition Requirements
-- Original competition PDF is stored at `references/乐鑫命题和开发板类型情况说明.pdf`.
-- Use one of the allowed Espressif chips; this project targets ESP32-S3.
-- Fuse at least one sensor data source.
-- Connect to at least one cloud large-model service.
-- Support either device-to-model upstream perception data, or model-to-device downstream commands.
-- Bonus directions relevant to this project: multi-source sensor fusion, low power, environment-triggered interaction, practical energy-saving/safety/service scenarios, and useful device form factor.
 
-## ESP32-S3-DevKitC-1 Facts
-- Board selected by the team: ESP32-S3-DevKitC-1.
-- Module family: ESP32-S3-WROOM-1/1U.
-- CPU: dual-core Xtensa LX7 up to 240 MHz.
-- Wireless: 2.4 GHz Wi-Fi and Bluetooth 5 LE.
-- Board I/O: most GPIO pins are broken out to side headers for jumper-wire or breadboard use.
-- USB: dual Micro-USB paths for UART and native USB.
-- AI support: PIE/vector-style acceleration instructions are available on ESP32-S3.
+- Target board: ESP32-S3-DevKitC-1.
+- Main direction: sensor data plus cloud LLM control.
+- Required capabilities:
+  - ESP32-S3 main controller.
+  - At least one fused sensor data source.
+  - At least one cloud LLM service.
+  - Either upstream sensor processing or downstream LLM-issued device commands.
 
-## Existing Local Resources
-- `references/esp-idf/`: ESP-IDF source checkout. Currently left untouched even if it is on `master`.
-- `references/esp-idf-v5.5.2/`: pinned ESP-IDF v5.5.2 SDK checkout for building the competition firmware without mutating `references/esp-idf/`.
-- `references/esp-idf-zh_CN-v5.5.2/`: local Chinese ESP-IDF v5.5.2 documentation snapshot.
-- `references/esp-iot-solution/`: ESP IoT Solution components and examples, especially sensors, display, touch, motor, USB, and utility examples.
-- `references/esp-adf/`: ESP audio framework kept for future voice expansion, not used in the first sensor + cloud skeleton.
+## Optional Local Resources
 
-## Added Reference Repositories
-| Directory | Source | Why it is here | First use |
-| --- | --- | --- | --- |
-| `references/esp-dev-kits` | https://github.com/espressif/esp-dev-kits.git | ESP development board documentation and examples, including ESP32-S3 board references. | Hardware pinout, board setup, flashing notes. |
-| `references/esp-rainmaker` | https://github.com/espressif/esp-rainmaker.git | Espressif cloud control, provisioning, and device state examples. | Cloud control pattern and mobile/cloud managed device state. |
-| `references/esp-now` | https://github.com/espressif/esp-now.git | Low-latency local wireless control and multi-node examples. | Optional sensor node expansion or local controller link. |
-| `references/esp-protocols` | https://github.com/espressif/esp-protocols.git | Protocol components such as MQTT, WebSocket, modem, mDNS, and network helpers. | HTTP/MQTT/WebSocket reference implementations. |
-| `references/esp-idf-template` | https://github.com/espressif/esp-idf-template.git | Minimal ESP-IDF project template. | Sanity reference for project layout. |
+These directories may exist on a developer machine, but are not required to be
+tracked by this repository:
 
-## Links Recorded, Not Cloned
-- Marketplace, questionnaire, Bilibili, CSDN, and social/community links from the PDF are reference-only and should not be cloned.
-- Cloud LLM documentation should be consulted online when choosing a provider: Volcengine AI Gateway, Baidu AI Studio, Aliyun Qwen, iFlytek Spark, and DeepSeek.
-- Voice/vision/UI repositories such as `esp-sr`, `esp-who`, `esp-dl`, `esp-brookesia`, and `xiaozhi-esp32` are intentionally deferred because the current direction is sensor + cloud control.
+| Directory | Purpose |
+| --- | --- |
+| `references/esp-idf-v5.5.2/` | Fallback ESP-IDF SDK checkout when EIM is unavailable. |
+| `references/esp-idf-zh_CN-v5.5.2/` | Local Chinese ESP-IDF documentation snapshot. |
+| `references/esp-idf/` | Existing ESP-IDF checkout; leave untouched unless explicitly needed. |
+| `references/esp-iot-solution/` | Sensor, display, touch, motor, USB, and utility examples. |
+| `references/esp-adf/` | Audio framework for possible future voice expansion. |
+| `references/esp-dev-kits/` | Board documentation and development kit examples. |
+| `references/esp-rainmaker/` | Espressif cloud control and provisioning examples. |
+| `references/esp-now/` | Optional local wireless node examples. |
+| `references/esp-protocols/` | MQTT, WebSocket, mDNS, and protocol examples. |
+| `references/esp-idf-template/` | Minimal ESP-IDF project template. |
 
 ## Notes
-- `esp-dev-kits` may show case-collision warnings on Windows for unrelated examples. The S3 DevKitC-1 documentation remains usable.
-- Because some repositories were cloned through an elevated Git process, Git may require a one-shot `-c safe.directory=<path>` when reading their metadata from the sandbox user.
+
+- Prefer EIM-managed ESP-IDF v5.5.2 on Windows when available.
+- Use `scripts/setup-esp-idf.ps1` only when a local fallback SDK is needed.
+- Do not commit PDFs, SDK checkouts, generated docs, binaries, or cloud secrets.

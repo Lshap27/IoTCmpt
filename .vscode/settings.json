@@ -1,10 +1,4 @@
 {
-  "cmake.sourceDirectory": "C:/Users/lshap/Documents/Code/IoTCmpt/s3-sensor-cloud",
-  "idf.currentSetup": "C:\\esp\\v5.5.2\\esp-idf",
-  "idf.adapterTargetName": "esp32s3",
-  "idf.flashType": "UART",
-  "cmake.configureOnOpen": false,
-  "C_Cpp.default.compileCommands": "C:\\Users\\lshap\\Documents\\Code\\IoTCmpt\\s3-sensor-cloud\\build\\compile_commands.json",
-  "C_Cpp.default.compilerPath": "C:\\Espressif\\tools\\xtensa-esp-elf\\esp-14.2.0_20251107\\xtensa-esp-elf\\bin\\xtensa-esp32s3-elf-gcc.exe",
-  "C_Cpp.intelliSenseEngine": "disabled"
+  "cmake.sourceDirectory": "${workspaceFolder}/s3-sensor-cloud",
+  "cmake.configureOnOpen": false
 }
