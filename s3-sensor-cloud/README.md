@@ -29,7 +29,7 @@ Run menuconfig inside the ESP-IDF environment:
 idf.py menuconfig
 ```
 
-Useful options are under `S3 Sensor Cloud`:
+Useful options are under `S3 传感器云端控制`:
 
 - Connectivity: `APP_WIFI_ENABLED`, `APP_WIFI_SSID`, `APP_WIFI_PASSWORD`.
 - Cloud LLM: `APP_CLOUD_ENABLED`, `APP_CLOUD_ENDPOINT`, `APP_CLOUD_MODEL`, `APP_CLOUD_TOKEN`.
@@ -39,6 +39,31 @@ Useful options are under `S3 Sensor Cloud`:
 
 Do not commit local `sdkconfig` files containing Wi-Fi passwords, backend URLs,
 cloud tokens, or model credentials.
+
+To recover the teammate prototype behavior on a local board, configure at least:
+
+```text
+APP_SENSOR_MOCK_ENABLED=n
+APP_WIFI_ENABLED=y
+APP_BACKEND_ENABLED=y
+APP_CAMERA_ENABLED=y
+APP_DISPLAY_ENABLED=y
+APP_ACTUATOR_ENABLED=y
+APP_BUTTON_ENABLED=y
+```
+
+Then fill in local-only values:
+
+```text
+APP_WIFI_SSID=<your Wi-Fi>
+APP_WIFI_PASSWORD=<your Wi-Fi password>
+APP_SENSOR_UPLOAD_URL=http://<server-ip>:8000/api/upload_sensor
+APP_IMAGE_UPLOAD_URL=http://<server-ip>:8000/api/upload_image
+APP_POSE_UPLOAD_URL=http://<server-ip>:8000/api/detect_pose
+```
+
+Cloud LLM settings are optional and separate from ordinary backend upload.
+Enable `APP_CLOUD_ENABLED` only after choosing a real LLM provider and response schema.
 
 ## Hardware Notes
 
@@ -78,3 +103,11 @@ idf.py -p COMx flash monitor
 4. Enable actuator and button, then verify manual window toggle.
 5. Enable display after confirming TFT CS does not conflict with camera XCLK.
 6. Enable camera and image/pose upload after backend endpoints are reachable.
+
+## Development Notes
+
+- Keep `main/main.c` focused on orchestration and task startup.
+- Add or change hardware behavior in its module, not in `main.c`.
+- Keep `main/backend` for ordinary HTTP uploads and `main/cloud` for LLM exchange.
+- Keep `APP_*` Kconfig symbol names stable even though the visible labels are Chinese.
+- Do not reintroduce hard-coded Wi-Fi credentials, backend IPs, or cloud tokens.
