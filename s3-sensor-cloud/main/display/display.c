@@ -2,13 +2,13 @@
 
 #include <string.h>
 
+#include "app_config_defaults.h"
 #include "control_state.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "sdkconfig.h"
 
 static const char *TAG = "DISPLAY";
 
@@ -161,7 +161,8 @@ esp_err_t display_init(void)
     }
 
     if (CONFIG_APP_CAMERA_ENABLED && CONFIG_APP_TFT_CS_GPIO == CONFIG_APP_CAMERA_XCLK_GPIO) {
-        ESP_LOGW(TAG, "TFT CS GPIO%d conflicts with camera XCLK", CONFIG_APP_TFT_CS_GPIO);
+        ESP_LOGE(TAG, "TFT CS GPIO%d 与摄像头 XCLK 冲突", CONFIG_APP_TFT_CS_GPIO);
+        return ESP_ERR_INVALID_STATE;
     }
 
     gpio_config_t io = {
@@ -218,7 +219,7 @@ esp_err_t display_init(void)
 
     fb_fill(COLOR_DARK);
     tft_flush();
-    ESP_LOGI(TAG, "Display init OK");
+    ESP_LOGI(TAG, "显示屏初始化完成");
     return ESP_OK;
 }
 

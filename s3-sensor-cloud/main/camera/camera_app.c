@@ -1,10 +1,10 @@
 #include "camera_app.h"
 
+#include "app_config_defaults.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "sdkconfig.h"
 
 static const char *TAG = "CAMERA";
 
@@ -61,7 +61,7 @@ static esp_err_t camera_init_once(void)
         sensor->set_bpc(sensor, 1);
         sensor->set_wpc(sensor, 1);
         sensor->set_gainceiling(sensor, GAINCEILING_4X);
-        ESP_LOGI(TAG, "Camera sensor PID: 0x%02x", sensor->id.PID);
+        ESP_LOGI(TAG, "摄像头传感器 PID：0x%02x", sensor->id.PID);
     }
 
     return ESP_OK;
@@ -70,20 +70,20 @@ static esp_err_t camera_init_once(void)
 esp_err_t camera_app_init(void)
 {
     if (!CONFIG_APP_CAMERA_ENABLED) {
-        ESP_LOGW(TAG, "Camera disabled");
+        ESP_LOGW(TAG, "摄像头已禁用");
         return ESP_ERR_INVALID_STATE;
     }
 
     esp_err_t err = ESP_FAIL;
     for (int attempt = 1; attempt <= 3; attempt++) {
-        ESP_LOGI(TAG, "Camera init attempt %d/3", attempt);
+        ESP_LOGI(TAG, "摄像头初始化尝试 %d/3", attempt);
         err = camera_init_once();
         if (err == ESP_OK) {
-            ESP_LOGI(TAG, "Camera init success");
+            ESP_LOGI(TAG, "摄像头初始化成功");
             return ESP_OK;
         }
 
-        ESP_LOGW(TAG, "Camera init failed: %s", esp_err_to_name(err));
+        ESP_LOGW(TAG, "摄像头初始化失败：%s", esp_err_to_name(err));
         esp_camera_deinit();
         vTaskDelay(pdMS_TO_TICKS(500));
     }
@@ -95,13 +95,13 @@ camera_fb_t *camera_app_capture(void)
 {
     camera_fb_t *frame = esp_camera_fb_get();
     if (!frame) {
-        ESP_LOGW(TAG, "Camera capture failed");
+        ESP_LOGW(TAG, "摄像头采集失败");
         return NULL;
     }
 
     ESP_LOGI(
         TAG,
-        "Captured frame len=%u width=%u height=%u format=%u",
+        "已采集图像：长度=%u 宽=%u 高=%u 格式=%u",
         (unsigned int)frame->len,
         (unsigned int)frame->width,
         (unsigned int)frame->height,

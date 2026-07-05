@@ -1,11 +1,11 @@
 #include "inputs.h"
 
+#include "app_config_defaults.h"
 #include "control_state.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "sdkconfig.h"
 
 static const char *TAG = "INPUTS";
 
@@ -19,7 +19,7 @@ static void button_task(void *arg)
         if (pressed && !last_pressed) {
             vTaskDelay(pdMS_TO_TICKS(20));
             if (gpio_get_level(CONFIG_APP_BUTTON_GPIO) == 0) {
-                ESP_LOGI(TAG, "Manual button toggled window state");
+                ESP_LOGI(TAG, "手动按键已切换窗户状态");
                 control_state_toggle_manual_window();
             }
         }
@@ -31,7 +31,7 @@ static void button_task(void *arg)
 esp_err_t inputs_start(void)
 {
     if (!CONFIG_APP_BUTTON_ENABLED) {
-        ESP_LOGW(TAG, "Button input disabled");
+        ESP_LOGW(TAG, "按键输入已禁用");
         return ESP_ERR_INVALID_STATE;
     }
 

@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "app_string.h"
+
 static void append_reason(char *dest, size_t dest_size, const char *format, ...)
 {
     if (!dest || dest_size == 0) {
@@ -31,7 +33,7 @@ esp_err_t fusion_evaluate(const sensor_sample_t *sample, fusion_state_t *out_sta
     out_state->air_quality = FUSION_AIR_QUALITY_UNKNOWN;
 
     if (!sample->air_valid && !sample->climate_valid && !sample->light_valid) {
-        (void)snprintf(out_state->reason, sizeof(out_state->reason), "no valid sensor data");
+        app_string_copy(out_state->reason, sizeof(out_state->reason), "没有有效传感器数据");
         return ESP_OK;
     }
 
@@ -41,46 +43,46 @@ esp_err_t fusion_evaluate(const sensor_sample_t *sample, fusion_state_t *out_sta
     if (sample->climate_valid) {
         if (sample->temperature_c > 32.0f) {
             bad = true;
-            append_reason(out_state->reason, sizeof(out_state->reason), "temperature critical %.1fC; ", sample->temperature_c);
+            append_reason(out_state->reason, sizeof(out_state->reason), "温度严重偏高 %.1fC；", sample->temperature_c);
         } else if (sample->temperature_c > 28.0f) {
             watch = true;
-            append_reason(out_state->reason, sizeof(out_state->reason), "temperature high %.1fC; ", sample->temperature_c);
+            append_reason(out_state->reason, sizeof(out_state->reason), "温度偏高 %.1fC；", sample->temperature_c);
         }
 
         if (sample->humidity_percent > 75.0f || sample->humidity_percent < 30.0f) {
             watch = true;
-            append_reason(out_state->reason, sizeof(out_state->reason), "humidity abnormal %.1f%%; ", sample->humidity_percent);
+            append_reason(out_state->reason, sizeof(out_state->reason), "湿度异常 %.1f%%；", sample->humidity_percent);
         }
     }
 
     if (sample->air_valid) {
         if (sample->tvoc_ppb > 600) {
             bad = true;
-            append_reason(out_state->reason, sizeof(out_state->reason), "TVOC critical %u; ", sample->tvoc_ppb);
+            append_reason(out_state->reason, sizeof(out_state->reason), "TVOC 严重偏高 %u；", sample->tvoc_ppb);
         } else if (sample->tvoc_ppb > 300) {
             watch = true;
-            append_reason(out_state->reason, sizeof(out_state->reason), "TVOC high %u; ", sample->tvoc_ppb);
+            append_reason(out_state->reason, sizeof(out_state->reason), "TVOC 偏高 %u；", sample->tvoc_ppb);
         }
 
         if (sample->hcho_ug_m3 > 100) {
             bad = true;
-            append_reason(out_state->reason, sizeof(out_state->reason), "HCHO critical %u; ", sample->hcho_ug_m3);
+            append_reason(out_state->reason, sizeof(out_state->reason), "HCHO 严重偏高 %u；", sample->hcho_ug_m3);
         } else if (sample->hcho_ug_m3 > 60) {
             watch = true;
-            append_reason(out_state->reason, sizeof(out_state->reason), "HCHO high %u; ", sample->hcho_ug_m3);
+            append_reason(out_state->reason, sizeof(out_state->reason), "HCHO 偏高 %u；", sample->hcho_ug_m3);
         }
 
         if (sample->eco2_ppm > 1500) {
             bad = true;
-            append_reason(out_state->reason, sizeof(out_state->reason), "eCO2 critical %u; ", sample->eco2_ppm);
+            append_reason(out_state->reason, sizeof(out_state->reason), "eCO2 严重偏高 %u；", sample->eco2_ppm);
         } else if (sample->eco2_ppm > 1000) {
             watch = true;
-            append_reason(out_state->reason, sizeof(out_state->reason), "eCO2 high %u; ", sample->eco2_ppm);
+            append_reason(out_state->reason, sizeof(out_state->reason), "eCO2 偏高 %u；", sample->eco2_ppm);
         }
     }
 
     if (sample->light_valid && sample->light_is_dark) {
-        append_reason(out_state->reason, sizeof(out_state->reason), "light is dim; ");
+        append_reason(out_state->reason, sizeof(out_state->reason), "光照偏暗；");
     }
 
     if (bad) {
@@ -95,11 +97,11 @@ esp_err_t fusion_evaluate(const sensor_sample_t *sample, fusion_state_t *out_sta
         out_state->air_quality = FUSION_AIR_QUALITY_GOOD;
         out_state->recommend_open_window = false;
         out_state->alarm_enabled = false;
-        (void)snprintf(out_state->reason, sizeof(out_state->reason), "air quality good");
+        app_string_copy(out_state->reason, sizeof(out_state->reason), "空气质量良好");
     }
 
     if (out_state->reason[0] == '\0') {
-        (void)snprintf(out_state->reason, sizeof(out_state->reason), "%s", fusion_air_quality_name(out_state->air_quality));
+        app_string_copy(out_state->reason, sizeof(out_state->reason), "空气质量状态未知");
     }
 
     return ESP_OK;

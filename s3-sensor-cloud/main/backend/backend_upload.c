@@ -1,9 +1,9 @@
 #include "backend_upload.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "app_string.h"
 #include "cJSON.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
@@ -24,7 +24,7 @@ esp_err_t backend_upload_init(const app_config_t *config)
 
     s_config = *config;
     if (!s_config.backend_enabled) {
-        ESP_LOGW(TAG, "Backend upload disabled");
+        ESP_LOGW(TAG, "普通后端上传已禁用");
         return ESP_OK;
     }
 
@@ -42,7 +42,7 @@ esp_err_t backend_upload_sensor(const sensor_sample_t *sample, const fusion_stat
     }
 
     if (!sample->climate_valid && !sample->air_valid && !sample->light_valid) {
-        ESP_LOGW(TAG, "Skip sensor upload: no valid sample fields");
+        ESP_LOGW(TAG, "跳过传感器上传：没有有效采样字段");
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -90,11 +90,11 @@ esp_err_t backend_upload_sensor(const sensor_sample_t *sample, const fusion_stat
     if (err == ESP_OK) {
         const int status = esp_http_client_get_status_code(client);
         if (status < 200 || status >= 300) {
-            ESP_LOGW(TAG, "Sensor upload HTTP status=%d", status);
+            ESP_LOGW(TAG, "传感器上传 HTTP 状态码异常：%d", status);
             err = ESP_FAIL;
         }
     } else {
-        ESP_LOGW(TAG, "Sensor upload failed: %s", esp_err_to_name(err));
+        ESP_LOGW(TAG, "传感器上传失败：%s", esp_err_to_name(err));
     }
 
     esp_http_client_cleanup(client);
@@ -112,25 +112,32 @@ esp_err_t backend_upload_jpeg(const char *url, const uint8_t *data, size_t len)
         return ESP_ERR_INVALID_STATE;
     }
 
-    const char *boundary = "----ESP32Boundary";
-    char header[256];
-    const int header_len = snprintf(
-        header,
-        sizeof(header),
-        "--%s\r\n"
-        "Content-Disposition: form-data; name=\"file\"; filename=\"image.jpg\"\r\n"
-        "Content-Type: image/jpeg\r\n"
-        "\r\n",
-        boundary
-    );
+    const char boundary[] = "----ESP32Boundary";
+    char header[256] = {0};
+    char footer[64] = {0};
 
-    char footer[64];
-    const int footer_len = snprintf(footer, sizeof(footer), "\r\n--%s--\r\n", boundary);
-    if (header_len <= 0 || footer_len <= 0) {
+    const bool header_ok =
+        app_string_append(header, sizeof(header), "--") &&
+        app_string_append(header, sizeof(header), boundary) &&
+        app_string_append(
+            header,
+            sizeof(header),
+            "\r\n"
+            "Content-Disposition: form-data; name=\"file\"; filename=\"image.jpg\"\r\n"
+            "Content-Type: image/jpeg\r\n"
+            "\r\n"
+        );
+    const bool footer_ok =
+        app_string_append(footer, sizeof(footer), "\r\n--") &&
+        app_string_append(footer, sizeof(footer), boundary) &&
+        app_string_append(footer, sizeof(footer), "--\r\n");
+    if (!header_ok || !footer_ok) {
         return ESP_FAIL;
     }
 
-    const size_t total_len = (size_t)header_len + len + (size_t)footer_len;
+    const size_t header_len = strlen(header);
+    const size_t footer_len = strlen(footer);
+    const size_t total_len = header_len + len + footer_len;
     uint8_t *body = malloc(total_len);
     if (!body) {
         return ESP_ERR_NO_MEM;
@@ -152,8 +159,13 @@ esp_err_t backend_upload_jpeg(const char *url, const uint8_t *data, size_t len)
         return ESP_FAIL;
     }
 
-    char content_type[128];
-    snprintf(content_type, sizeof(content_type), "multipart/form-data; boundary=%s", boundary);
+    char content_type[128] = {0};
+    if (!app_string_append(content_type, sizeof(content_type), "multipart/form-data; boundary=") ||
+        !app_string_append(content_type, sizeof(content_type), boundary)) {
+        esp_http_client_cleanup(client);
+        free(body);
+        return ESP_FAIL;
+    }
     esp_http_client_set_header(client, "Content-Type", content_type);
     esp_http_client_set_post_field(client, (const char *)body, total_len);
 
@@ -161,11 +173,11 @@ esp_err_t backend_upload_jpeg(const char *url, const uint8_t *data, size_t len)
     if (err == ESP_OK) {
         const int status = esp_http_client_get_status_code(client);
         if (status < 200 || status >= 300) {
-            ESP_LOGW(TAG, "JPEG upload HTTP status=%d", status);
+            ESP_LOGW(TAG, "JPEG 上传 HTTP 状态码异常：%d", status);
             err = ESP_FAIL;
         }
     } else {
-        ESP_LOGW(TAG, "JPEG upload failed: %s", esp_err_to_name(err));
+        ESP_LOGW(TAG, "JPEG 上传失败：%s", esp_err_to_name(err));
     }
 
     esp_http_client_cleanup(client);

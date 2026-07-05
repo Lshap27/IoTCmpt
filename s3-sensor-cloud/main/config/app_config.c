@@ -1,9 +1,8 @@
 #include "app_config.h"
 
-#include <stdio.h>
 #include <string.h>
 
-#include "sdkconfig.h"
+#include "app_string.h"
 
 static void copy_config_string(char *dest, size_t dest_size, const char *source)
 {
@@ -16,7 +15,7 @@ static void copy_config_string(char *dest, size_t dest_size, const char *source)
         return;
     }
 
-    (void)snprintf(dest, dest_size, "%s", source);
+    app_string_copy(dest, dest_size, source);
 }
 
 esp_err_t app_config_load(app_config_t *out_config)

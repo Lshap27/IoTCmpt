@@ -1,8 +1,8 @@
 #include "cloud_client.h"
 
-#include <stdio.h>
 #include <string.h>
 
+#include "app_string.h"
 #include "cJSON.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
@@ -75,12 +75,12 @@ static esp_err_t command_from_json_object(const cJSON *object, cloud_command_t *
 
     const cJSON *parameter = cJSON_GetObjectItemCaseSensitive(object, "parameter");
     if (cJSON_IsString(parameter) && parameter->valuestring) {
-        (void)snprintf(out_command->parameter, sizeof(out_command->parameter), "%s", parameter->valuestring);
+        app_string_copy(out_command->parameter, sizeof(out_command->parameter), parameter->valuestring);
     }
 
     const char *printed = cJSON_PrintUnformatted((cJSON *)object);
     if (printed) {
-        (void)snprintf(out_command->raw, sizeof(out_command->raw), "%s", printed);
+        app_string_copy(out_command->raw, sizeof(out_command->raw), printed);
         cJSON_free((void *)printed);
     }
 
@@ -97,7 +97,7 @@ static esp_err_t parse_command_response(const char *response, cloud_command_t *o
 
     cJSON *root = cJSON_Parse(response);
     if (!root) {
-        ESP_LOGW(TAG, "Cloud response is not valid JSON");
+        ESP_LOGW(TAG, "云端响应不是有效 JSON");
         return ESP_ERR_INVALID_RESPONSE;
     }
 
@@ -120,7 +120,7 @@ static esp_err_t parse_command_response(const char *response, cloud_command_t *o
     cJSON_Delete(root);
 
     if (err == ESP_ERR_NOT_FOUND) {
-        ESP_LOGW(TAG, "Cloud response did not include a command");
+        ESP_LOGW(TAG, "云端响应未包含设备命令");
         command_clear(out_command);
         return ESP_OK;
     }
@@ -137,16 +137,16 @@ esp_err_t cloud_client_init(const app_config_t *config)
     s_config = *config;
 
     if (!s_config.cloud_enabled) {
-        ESP_LOGW(TAG, "Cloud client is disabled by configuration");
+        ESP_LOGW(TAG, "云端大模型客户端已被配置禁用");
         return ESP_OK;
     }
 
     if (string_is_empty(s_config.cloud_endpoint)) {
-        ESP_LOGW(TAG, "Cloud client is enabled but endpoint is empty");
+        ESP_LOGW(TAG, "云端大模型已启用，但接口地址为空");
         return ESP_OK;
     }
 
-    ESP_LOGI(TAG, "Cloud client configured for model '%s'", s_config.cloud_model);
+    ESP_LOGI(TAG, "云端大模型客户端已配置，模型：%s", s_config.cloud_model);
     return ESP_OK;
 }
 
@@ -193,8 +193,13 @@ esp_err_t cloud_send_state(
 
     esp_http_client_set_header(client, "Content-Type", "application/json");
     if (!string_is_empty(s_config.cloud_token)) {
-        char auth_header[APP_CONFIG_CLOUD_TOKEN_MAX_LEN + 16];
-        (void)snprintf(auth_header, sizeof(auth_header), "Bearer %s", s_config.cloud_token);
+        char auth_header[APP_CONFIG_CLOUD_TOKEN_MAX_LEN + 16] = {0};
+        if (!app_string_append(auth_header, sizeof(auth_header), "Bearer ") ||
+            !app_string_append(auth_header, sizeof(auth_header), s_config.cloud_token)) {
+            esp_http_client_cleanup(client);
+            cJSON_free(json);
+            return ESP_FAIL;
+        }
         esp_http_client_set_header(client, "Authorization", auth_header);
     }
     esp_http_client_set_post_field(client, json, strlen(json));
@@ -203,7 +208,7 @@ esp_err_t cloud_send_state(
     if (err == ESP_OK) {
         const int status_code = esp_http_client_get_status_code(client);
         if (status_code < 200 || status_code >= 300) {
-            ESP_LOGW(TAG, "Cloud HTTP status=%d", status_code);
+            ESP_LOGW(TAG, "云端 HTTP 状态码异常：%d", status_code);
             err = ESP_FAIL;
         } else {
             char response[1024];
@@ -217,7 +222,7 @@ esp_err_t cloud_send_state(
             }
         }
     } else {
-        ESP_LOGW(TAG, "Cloud request failed: %s", esp_err_to_name(err));
+        ESP_LOGW(TAG, "云端请求失败：%s", esp_err_to_name(err));
     }
 
     esp_http_client_cleanup(client);

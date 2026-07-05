@@ -1,8 +1,8 @@
 #include "commands.h"
 
-#include <stdio.h>
 #include <string.h>
 
+#include "app_string.h"
 #include "esp_log.h"
 
 static const char *TAG = "COMMANDS";
@@ -35,7 +35,7 @@ esp_err_t command_from_name(const char *name, cloud_command_t *out_command)
         out_command->type = CLOUD_COMMAND_ALARM_OFF;
     } else {
         out_command->type = CLOUD_COMMAND_UNKNOWN;
-        (void)snprintf(out_command->raw, sizeof(out_command->raw), "%s", name);
+        app_string_copy(out_command->raw, sizeof(out_command->raw), name);
         return ESP_ERR_NOT_SUPPORTED;
     }
 
@@ -50,23 +50,23 @@ esp_err_t command_apply(const cloud_command_t *command)
 
     switch (command->type) {
     case CLOUD_COMMAND_NONE:
-        ESP_LOGI(TAG, "No downstream command");
+        ESP_LOGI(TAG, "没有下游设备命令");
         return ESP_OK;
     case CLOUD_COMMAND_WINDOW_OPEN:
-        ESP_LOGI(TAG, "Apply command: window.open");
+        ESP_LOGI(TAG, "执行命令：打开窗户");
         return ESP_OK;
     case CLOUD_COMMAND_WINDOW_CLOSE:
-        ESP_LOGI(TAG, "Apply command: window.close");
+        ESP_LOGI(TAG, "执行命令：关闭窗户");
         return ESP_OK;
     case CLOUD_COMMAND_ALARM_ON:
-        ESP_LOGI(TAG, "Apply command: alarm.on");
+        ESP_LOGI(TAG, "执行命令：开启报警");
         return ESP_OK;
     case CLOUD_COMMAND_ALARM_OFF:
-        ESP_LOGI(TAG, "Apply command: alarm.off");
+        ESP_LOGI(TAG, "执行命令：关闭报警");
         return ESP_OK;
     case CLOUD_COMMAND_UNKNOWN:
     default:
-        ESP_LOGW(TAG, "Reject unsupported command: %s", command->raw);
+        ESP_LOGW(TAG, "拒绝不支持的命令：%s", command->raw);
         return ESP_ERR_NOT_SUPPORTED;
     }
 }

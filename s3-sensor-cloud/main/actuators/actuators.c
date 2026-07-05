@@ -1,12 +1,12 @@
 #include "actuators.h"
 
+#include "app_config_defaults.h"
 #include "control_state.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "sdkconfig.h"
 
 static const char *TAG = "ACTUATOR";
 
@@ -84,7 +84,7 @@ static esp_err_t set_window(bool open)
         return ESP_OK;
     }
 
-    ESP_LOGI(TAG, "Window %s", open ? "open" : "close");
+    ESP_LOGI(TAG, "窗户状态切换为：%s", open ? "打开" : "关闭");
     servo_smooth_turn(open ? SERVO_OPEN_US : SERVO_CLOSE_US);
     control_state_set_window_open(open);
     return ESP_OK;
@@ -93,7 +93,7 @@ static esp_err_t set_window(bool open)
 esp_err_t actuator_init(void)
 {
     if (!CONFIG_APP_ACTUATOR_ENABLED) {
-        ESP_LOGW(TAG, "Actuator module disabled");
+        ESP_LOGW(TAG, "执行器模块已禁用");
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -130,7 +130,7 @@ esp_err_t actuator_init(void)
     servo_set_pulse(SERVO_CLOSE_US);
     s_servo_current_us = SERVO_CLOSE_US;
     control_state_set_window_open(false);
-    ESP_LOGI(TAG, "Actuator init OK (servo GPIO%d, beeper GPIO%d)", CONFIG_APP_SERVO_GPIO, CONFIG_APP_BEEP_GPIO);
+    ESP_LOGI(TAG, "执行器初始化完成（舵机 GPIO%d，蜂鸣器 GPIO%d）", CONFIG_APP_SERVO_GPIO, CONFIG_APP_BEEP_GPIO);
     return ESP_OK;
 }
 

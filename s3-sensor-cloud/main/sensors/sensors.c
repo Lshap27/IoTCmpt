@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "app_config_defaults.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "esp_log.h"
@@ -9,7 +10,6 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "sdkconfig.h"
 
 static const char *TAG = "SENSORS";
 
@@ -167,7 +167,7 @@ static void sht30_init(void)
     gpio_config(&io_cfg);
     gpio_set_level(sda_gpio(), 1);
     gpio_set_level(scl_gpio(), 1);
-    ESP_LOGI(TAG, "SHT30 soft I2C init OK (SCL=GPIO%d SDA=GPIO%d)", scl_gpio(), sda_gpio());
+    ESP_LOGI(TAG, "SHT30 软件 I2C 初始化完成（SCL=GPIO%d SDA=GPIO%d）", scl_gpio(), sda_gpio());
 }
 
 static bool sht30_read(float *temp, float *hum)
@@ -175,7 +175,7 @@ static bool sht30_read(float *temp, float *hum)
     sht30_i2c_start();
     if (!sht30_i2c_write_byte((SHT30_ADDR << 1) | 0)) {
         sht30_i2c_stop();
-        ESP_LOGW(TAG, "SHT30 address ACK failed for write");
+        ESP_LOGW(TAG, "SHT30 写地址 ACK 失败");
         return false;
     }
 
@@ -187,7 +187,7 @@ static bool sht30_read(float *temp, float *hum)
     sht30_i2c_start();
     if (!sht30_i2c_write_byte((SHT30_ADDR << 1) | 1)) {
         sht30_i2c_stop();
-        ESP_LOGW(TAG, "SHT30 address ACK failed for read");
+        ESP_LOGW(TAG, "SHT30 读地址 ACK 失败");
         return false;
     }
 
@@ -232,7 +232,7 @@ static void tvoc_init(void)
         UART_PIN_NO_CHANGE,
         UART_PIN_NO_CHANGE
     ));
-    ESP_LOGI(TAG, "TVOC301 UART%d init OK", CONFIG_APP_TVOC_UART_NUM);
+    ESP_LOGI(TAG, "TVOC301 UART%d 初始化完成", CONFIG_APP_TVOC_UART_NUM);
 }
 
 static bool tvoc_read(uint16_t *tvoc, uint16_t *hcho, uint16_t *eco2)
@@ -272,13 +272,13 @@ static void lm393_init(void)
         .intr_type = GPIO_INTR_DISABLE,
     };
     gpio_config(&cfg);
-    ESP_LOGI(TAG, "LM393 GPIO%d init OK", CONFIG_APP_LM393_DO_GPIO);
+    ESP_LOGI(TAG, "LM393 GPIO%d 初始化完成", CONFIG_APP_LM393_DO_GPIO);
 }
 
 esp_err_t sensors_init(void)
 {
     if (CONFIG_APP_SENSOR_MOCK_ENABLED) {
-        ESP_LOGW(TAG, "Using mock sensor samples");
+        ESP_LOGW(TAG, "当前使用模拟传感器数据");
         return ESP_OK;
     }
 

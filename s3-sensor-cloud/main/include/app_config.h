@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "app_config_defaults.h"
 #include "esp_err.h"
 
 #define APP_CONFIG_WIFI_SSID_MAX_LEN 32
