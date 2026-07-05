@@ -5,6 +5,12 @@
 - This root directory is the workspace Git repository. Check nested reference repositories separately before using Git commands inside them.
 - For a fresh checkout, prefer Espressif EIM/VS Code ESP-IDF v5.5.2 if present; otherwise use `scripts/setup-esp-idf.ps1`. Use `scripts/build.ps1` to build the firmware.
 
+## Firmware Build
+- Start firmware builds from the repository root, not from `s3-sensor-cloud/`.
+- Use PowerShell 7 and run: `& 'C:\Users\lshap\Documents\Code\IoTCmpt\scripts\build.ps1'`.
+- The build script selects the EIM ESP-IDF v5.5.2 environment from `C:\Espressif\tools\eim_idf.json` when available, then builds `s3-sensor-cloud` with build directory `build-esp32s3`.
+- If the Codex sandbox blocks compiler process creation with `CreateProcess: Access is denied`, rerun the same `scripts\build.ps1` command with escalated permissions instead of changing SDK paths or invoking `idf.py` manually.
+
 ## VS Code ESP-IDF Notes
 - `idf.currentSetup` must be the ESP-IDF SDK path, for example `C:\esp\v5.5.2\esp-idf`; do not set it to the EIM install id.
 - `idf.eimIdfJsonPath` belongs in the VS Code user/application settings and should point to `C:\Espressif\tools\eim_idf.json` when using EIM.

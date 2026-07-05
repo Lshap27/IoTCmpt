@@ -6,6 +6,7 @@
 
 #include "app_string.h"
 #include "cJSON.h"
+#include "control_state.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
 
@@ -17,6 +18,39 @@ static app_config_t s_config;
 static bool string_is_empty(const char *value)
 {
     return !value || value[0] == '\0';
+}
+
+static void strip_trailing_slashes(char *value)
+{
+    if (!value) {
+        return;
+    }
+
+    size_t len = strlen(value);
+    while (len > 0 && value[len - 1] == '/') {
+        value[len - 1] = '\0';
+        len--;
+    }
+}
+
+static bool strip_suffix(char *value, const char *suffix)
+{
+    if (!value || !suffix) {
+        return false;
+    }
+
+    const size_t value_len = strlen(value);
+    const size_t suffix_len = strlen(suffix);
+    if (value_len < suffix_len) {
+        return false;
+    }
+    if (strcmp(value + value_len - suffix_len, suffix) != 0) {
+        return false;
+    }
+
+    value[value_len - suffix_len] = '\0';
+    strip_trailing_slashes(value);
+    return true;
 }
 
 esp_err_t backend_upload_init(const app_config_t *config)
@@ -62,6 +96,13 @@ esp_err_t backend_upload_sensor(const sensor_sample_t *sample, const fusion_stat
     cJSON_AddNumberToObject(root, "tvoc", sample->air_valid ? sample->tvoc_ppb : 0);
     cJSON_AddNumberToObject(root, "hcho", sample->air_valid ? sample->hcho_ug_m3 : 0);
     cJSON_AddNumberToObject(root, "light", sample->light_valid ? (sample->light_is_dark ? 0 : 100) : 50);
+
+    control_state_t control = {0};
+    control_state_get(&control);
+    cJSON_AddStringToObject(root, "led_status", control.alarm_on ? "on" : "off");
+    cJSON_AddStringToObject(root, "window_status", control.window_open ? "open" : "closed");
+    cJSON_AddStringToObject(root, "dehumidifier_state", state->recommend_open_window ? "on" : "off");
+
     cJSON_AddStringToObject(root, "air_quality", fusion_air_quality_name(state->air_quality));
     cJSON_AddBoolToObject(root, "recommend_open_window", state->recommend_open_window);
     cJSON_AddBoolToObject(root, "alarm_enabled", state->alarm_enabled);
@@ -203,10 +244,9 @@ static esp_err_t build_backend_command_url(char *buffer, size_t buffer_size, con
         return ESP_ERR_INVALID_SIZE;
     }
 
-    const size_t len = strlen(buffer);
-    if (len > 0 && buffer[len - 1] == '/') {
-        buffer[len - 1] = '\0';
-    }
+    strip_trailing_slashes(buffer);
+    strip_suffix(buffer, "/api/command/pending");
+    strip_suffix(buffer, "/api/command");
 
     if (!app_string_append(buffer, buffer_size, suffix)) {
         return ESP_ERR_INVALID_SIZE;
