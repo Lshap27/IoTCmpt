@@ -2,12 +2,19 @@
 .agents/
 .codex/
 .DS_Store
+.env
+.venv/
+__pycache__/
+.pytest_cache/
 
 # Build outputs and local ESP-IDF config
 build*/
 sdkconfig
 managed_components/
 dependencies.lock
+backend/data/
+backend/test_backend.db
+backend/test_images/
 
 # Large local SDK/reference repositories
 references/esp-adf/
