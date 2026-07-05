@@ -63,3 +63,17 @@ docker compose up
 - `device_commands`：前端下发或云端生成的设备命令。
 
 传感器采样和姿态事件分表存储，`/api/latest` 会聚合最新传感器记录和最新姿态记录，避免拍照刷新传感器采样时间。
+
+## 队友版本兼容字段
+
+`/api/upload_sensor` 兼容队友新版前后端使用的设备状态字段，并会在 `/api/latest`、`/api/history`、`/api/summary` 原样返回：
+
+```json
+{
+  "led_status": "on",
+  "window_status": "closed",
+  "dehumidifier_state": "off"
+}
+```
+
+图片清理默认保留最近 100 张，可通过 `.env` 的 `APP_MAX_IMAGES` 调整。

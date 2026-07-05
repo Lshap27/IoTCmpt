@@ -12,6 +12,7 @@
 #define APP_CONFIG_CLOUD_MODEL_MAX_LEN 64
 #define APP_CONFIG_CLOUD_TOKEN_MAX_LEN 256
 #define APP_CONFIG_BACKEND_URL_MAX_LEN 256
+#define APP_CONFIG_BACKEND_BASE_URL_MAX_LEN 192
 
 typedef struct {
     bool wifi_enabled;
@@ -30,6 +31,9 @@ typedef struct {
     char sensor_upload_url[APP_CONFIG_BACKEND_URL_MAX_LEN + 1];
     char image_upload_url[APP_CONFIG_BACKEND_URL_MAX_LEN + 1];
     char pose_upload_url[APP_CONFIG_BACKEND_URL_MAX_LEN + 1];
+    bool backend_command_enabled;
+    char backend_command_base_url[APP_CONFIG_BACKEND_BASE_URL_MAX_LEN + 1];
+    uint32_t backend_command_poll_ms;
 
     bool camera_enabled;
     bool display_enabled;

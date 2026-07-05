@@ -25,13 +25,13 @@ esp_err_t command_from_name(const char *name, cloud_command_t *out_command)
 
     if (strcmp(name, "none") == 0 || strcmp(name, "") == 0) {
         out_command->type = CLOUD_COMMAND_NONE;
-    } else if (strcmp(name, "window.open") == 0) {
+    } else if (strcmp(name, "window.open") == 0 || strcmp(name, "open") == 0) {
         out_command->type = CLOUD_COMMAND_WINDOW_OPEN;
-    } else if (strcmp(name, "window.close") == 0) {
+    } else if (strcmp(name, "window.close") == 0 || strcmp(name, "close") == 0) {
         out_command->type = CLOUD_COMMAND_WINDOW_CLOSE;
-    } else if (strcmp(name, "alarm.on") == 0) {
+    } else if (strcmp(name, "alarm.on") == 0 || strcmp(name, "alarm_on") == 0) {
         out_command->type = CLOUD_COMMAND_ALARM_ON;
-    } else if (strcmp(name, "alarm.off") == 0) {
+    } else if (strcmp(name, "alarm.off") == 0 || strcmp(name, "alarm_off") == 0) {
         out_command->type = CLOUD_COMMAND_ALARM_OFF;
     } else {
         out_command->type = CLOUD_COMMAND_UNKNOWN;

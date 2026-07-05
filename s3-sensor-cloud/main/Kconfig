@@ -53,6 +53,22 @@ menu "S3 传感器云端控制"
         config APP_POSE_UPLOAD_URL
             string "姿态检测上传地址"
             default ""
+
+        config APP_BACKEND_COMMAND_ENABLED
+            bool "启用普通后端指令轮询"
+            default n
+
+        config APP_BACKEND_COMMAND_BASE_URL
+            string "普通后端指令基础地址"
+            default ""
+            help
+                例如 http://192.168.1.10:8000。固件会访问
+                /api/command/pending，并在执行后 POST /api/command/ack/<id>。
+
+        config APP_BACKEND_COMMAND_POLL_MS
+            int "普通后端指令轮询间隔（毫秒）"
+            default 5000
+            range 1000 60000
     endmenu
 
     menu "功能模块"

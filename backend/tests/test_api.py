@@ -15,6 +15,9 @@ def test_sensor_upload_and_latest(client):
             "tvoc": 120,
             "hcho": 0.03,
             "light": 100,
+            "led_status": "on",
+            "window_status": "closed",
+            "dehumidifier_state": "off",
             "air_quality": "good",
             "recommend_open_window": False,
             "alarm_enabled": False,
@@ -25,7 +28,15 @@ def test_sensor_upload_and_latest(client):
     latest = client.get("/api/latest").json()
     assert latest["temperature_in"] == 25.2
     assert latest["air_quality"] == "good"
+    assert latest["led_status"] == "on"
+    assert latest["window_status"] == "closed"
+    assert latest["dehumidifier_state"] == "off"
     assert latest["human_presence"] == "unknown"
+
+    history = client.get("/api/history").json()
+    assert history[0]["led_status"] == "on"
+    summary = client.get("/api/summary").json()
+    assert summary["window_status"] == "closed"
 
 
 def test_upload_image_validates_and_saves(client, tiny_jpeg):

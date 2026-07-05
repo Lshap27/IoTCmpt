@@ -45,6 +45,16 @@ esp_err_t app_config_load(app_config_t *out_config)
     copy_config_string(out_config->sensor_upload_url, sizeof(out_config->sensor_upload_url), CONFIG_APP_SENSOR_UPLOAD_URL);
     copy_config_string(out_config->image_upload_url, sizeof(out_config->image_upload_url), CONFIG_APP_IMAGE_UPLOAD_URL);
     copy_config_string(out_config->pose_upload_url, sizeof(out_config->pose_upload_url), CONFIG_APP_POSE_UPLOAD_URL);
+    out_config->backend_command_enabled = CONFIG_APP_BACKEND_COMMAND_ENABLED;
+    copy_config_string(
+        out_config->backend_command_base_url,
+        sizeof(out_config->backend_command_base_url),
+        CONFIG_APP_BACKEND_COMMAND_BASE_URL
+    );
+    out_config->backend_command_poll_ms = CONFIG_APP_BACKEND_COMMAND_POLL_MS;
+    if (out_config->backend_command_poll_ms == 0) {
+        out_config->backend_command_poll_ms = 5000;
+    }
 
     out_config->camera_enabled = CONFIG_APP_CAMERA_ENABLED;
     out_config->display_enabled = CONFIG_APP_DISPLAY_ENABLED;

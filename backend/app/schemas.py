@@ -16,6 +16,9 @@ class SensorUpload(BaseModel):
     tvoc: Optional[float] = None
     hcho: Optional[float] = None
     light: Optional[int] = None
+    led_status: Optional[str] = None
+    window_status: Optional[str] = None
+    dehumidifier_state: Optional[str] = None
     air_quality: Optional[str] = None
     recommend_open_window: Optional[bool] = None
     alarm_enabled: Optional[bool] = None

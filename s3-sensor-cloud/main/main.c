@@ -167,9 +167,37 @@ static void app_loop_task(void *arg)
         } else {
             s_status.cloud = link_status_from_result(s_status.last_cloud_result);
         }
-        latest_command_set(&command);
+        if (command.type != CLOUD_COMMAND_NONE) {
+            latest_command_set(&command);
+        }
 
         vTaskDelay(pdMS_TO_TICKS(s_config.sensor_interval_ms));
+    }
+}
+
+static void backend_command_task(void *arg)
+{
+    (void)arg;
+
+    vTaskDelay(pdMS_TO_TICKS(3000));
+
+    while (true) {
+        cloud_command_t command;
+        int command_id = 0;
+        command_clear(&command);
+
+        esp_err_t err = backend_poll_command(&command, &command_id);
+        if (err == ESP_OK && command_id > 0 && command.type != CLOUD_COMMAND_NONE) {
+            latest_command_set(&command);
+            err = backend_ack_command(command_id);
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "普通后端指令确认失败：%s", esp_err_to_name(err));
+            }
+        } else if (err != ESP_OK && err != ESP_ERR_INVALID_STATE && err != ESP_ERR_NOT_FOUND) {
+            ESP_LOGW(TAG, "普通后端指令轮询失败：%s", esp_err_to_name(err));
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(s_config.backend_command_poll_ms));
     }
 }
 
@@ -334,6 +362,17 @@ void app_main(void)
         ok = xTaskCreate(actuator_task, "actuator_task", 4096, NULL, 4, NULL);
         if (ok != pdPASS) {
             ESP_LOGE(TAG, "启动执行器任务失败");
+        }
+    }
+
+    if (CONFIG_APP_BACKEND_COMMAND_ENABLED) {
+        if (!CONFIG_APP_ACTUATOR_ENABLED) {
+            ESP_LOGW(TAG, "普通后端指令轮询已启用，但执行器任务未启用，跳过轮询任务");
+        } else {
+            ok = xTaskCreate(backend_command_task, "backend_cmd", 4096, NULL, 2, NULL);
+            if (ok != pdPASS) {
+                ESP_LOGE(TAG, "启动普通后端指令轮询任务失败");
+            }
         }
     }
 

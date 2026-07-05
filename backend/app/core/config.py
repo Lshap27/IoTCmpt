@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     images_dir: Path = Path("data/images")
     base_url: str = "http://127.0.0.1:8000"
     max_upload_bytes: int = 10 * 1024 * 1024
-    max_images: int = 500
+    max_images: int = 100
     max_image_age_days: int = 14
 
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:8000"])

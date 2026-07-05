@@ -9,7 +9,7 @@ downstream device commands.
 - `main/config`: loads Kconfig/sdkconfig values into `app_config_t`.
 - `main/sensors`: reads SHT30, TVOC301, and LM393, or emits mock samples.
 - `main/fusion`: turns samples into air quality, window, and alarm decisions.
-- `main/backend`: uploads sensor JSON and camera JPEG multipart payloads.
+- `main/backend`: uploads sensor JSON and camera JPEG multipart payloads, and can poll ordinary backend commands.
 - `main/cloud`: sends state to an HTTP-compatible cloud LLM endpoint and parses commands.
 - `main/actuators`: drives the SG90 window servo and active beeper.
 - `main/inputs`: handles the manual toggle button.
@@ -33,7 +33,8 @@ Useful options are under `S3 传感器云端控制`:
 
 - Connectivity: `APP_WIFI_ENABLED`, `APP_WIFI_SSID`, `APP_WIFI_PASSWORD`.
 - Cloud LLM: `APP_CLOUD_ENABLED`, `APP_CLOUD_ENDPOINT`, `APP_CLOUD_MODEL`, `APP_CLOUD_TOKEN`.
-- Backend upload: `APP_BACKEND_ENABLED`, `APP_SENSOR_UPLOAD_URL`, `APP_IMAGE_UPLOAD_URL`, `APP_POSE_UPLOAD_URL`.
+- Backend upload/control: `APP_BACKEND_ENABLED`, `APP_SENSOR_UPLOAD_URL`, `APP_IMAGE_UPLOAD_URL`,
+  `APP_POSE_UPLOAD_URL`, `APP_BACKEND_COMMAND_ENABLED`, `APP_BACKEND_COMMAND_BASE_URL`.
 - Feature modules: `APP_CAMERA_ENABLED`, `APP_DISPLAY_ENABLED`, `APP_ACTUATOR_ENABLED`, `APP_BUTTON_ENABLED`.
 - Sensors and pins: SHT30, TVOC301, LM393, SG90, beeper, button, TFT, and OV2640 GPIO options.
 
@@ -60,7 +61,15 @@ APP_WIFI_PASSWORD=<your Wi-Fi password>
 APP_SENSOR_UPLOAD_URL=http://<server-ip>:8000/api/upload_sensor
 APP_IMAGE_UPLOAD_URL=http://<server-ip>:8000/api/upload_image
 APP_POSE_UPLOAD_URL=http://<server-ip>:8000/api/detect_pose
+APP_BACKEND_COMMAND_ENABLED=y
+APP_BACKEND_COMMAND_BASE_URL=http://<server-ip>:8000
 ```
+
+When backend command polling is enabled, the firmware checks
+`/api/command/pending` and acknowledges handled commands with
+`POST /api/command/ack/<id>`. The expected backend response can be an object or
+array item like `{"status":"success","id":155,"device":"window","command":"open"}`.
+`open` and `close` map to the existing window actuator command pipeline.
 
 Cloud LLM settings are optional and separate from ordinary backend upload.
 Enable `APP_CLOUD_ENABLED` only after choosing a real LLM provider and response schema.
@@ -101,8 +110,9 @@ idf.py -p COMx flash monitor
 2. Disable `APP_SENSOR_MOCK_ENABLED` and verify SHT30/TVOC301/LM393 logs.
 3. Enable Wi-Fi and backend sensor upload with local URLs in `sdkconfig`.
 4. Enable actuator and button, then verify manual window toggle.
-5. Enable display after confirming TFT CS does not conflict with camera XCLK.
-6. Enable camera and image/pose upload after backend endpoints are reachable.
+5. Enable backend command polling and verify `open`/`close` commands are acknowledged.
+6. Enable display after confirming TFT CS does not conflict with camera XCLK.
+7. Enable camera and image/pose upload after backend endpoints are reachable.
 
 ## Development Notes
 
