@@ -1,206 +1,206 @@
-menu "S3 Sensor Cloud"
+menu "S3 传感器云端控制"
 
     config APP_SENSOR_MOCK_ENABLED
-        bool "Use mock sensor samples"
+        bool "使用模拟传感器数据"
         default y
 
     config APP_SENSOR_INTERVAL_MS
-        int "Sensor loop interval in milliseconds"
+        int "传感器循环间隔（毫秒）"
         default 5000
         range 1000 60000
 
     config APP_WIFI_ENABLED
-        bool "Enable Wi-Fi station connection"
+        bool "启用 Wi-Fi 连接"
         default n
 
     config APP_WIFI_SSID
-        string "Wi-Fi SSID"
+        string "Wi-Fi 名称（SSID）"
         default ""
 
     config APP_WIFI_PASSWORD
-        string "Wi-Fi password"
+        string "Wi-Fi 密码"
         default ""
 
     config APP_CLOUD_ENABLED
-        bool "Enable cloud LLM exchange"
+        bool "启用云端大模型交互"
         default n
 
     config APP_CLOUD_ENDPOINT
-        string "Cloud LLM endpoint"
+        string "云端大模型接口地址"
         default ""
 
     config APP_CLOUD_MODEL
-        string "Cloud LLM model"
+        string "云端大模型名称"
         default "demo-model"
 
     config APP_CLOUD_TOKEN
-        string "Cloud LLM bearer token"
+        string "云端大模型访问令牌"
         default ""
 
-    menu "Backend upload"
+    menu "后端上传"
         config APP_BACKEND_ENABLED
-            bool "Enable ordinary backend uploads"
+            bool "启用普通后端上传"
             default n
 
         config APP_SENSOR_UPLOAD_URL
-            string "Sensor JSON upload URL"
+            string "传感器 JSON 上传地址"
             default ""
 
         config APP_IMAGE_UPLOAD_URL
-            string "Camera image upload URL"
+            string "摄像头图片上传地址"
             default ""
 
         config APP_POSE_UPLOAD_URL
-            string "Pose detection upload URL"
+            string "姿态检测上传地址"
             default ""
     endmenu
 
-    menu "Feature modules"
+    menu "功能模块"
         config APP_CAMERA_ENABLED
-            bool "Enable OV2640 camera task"
+            bool "启用 OV2640 摄像头任务"
             default n
 
         config APP_DISPLAY_ENABLED
-            bool "Enable ST7735 display task"
+            bool "启用 ST7735 显示屏任务"
             default n
 
         config APP_ACTUATOR_ENABLED
-            bool "Enable servo and beeper actuator task"
+            bool "启用舵机和蜂鸣器执行任务"
             default n
 
         config APP_BUTTON_ENABLED
-            bool "Enable manual button task"
+            bool "启用手动按键任务"
             default n
     endmenu
 
-    menu "Sensor pins"
+    menu "传感器引脚"
         config APP_SHT30_SDA_GPIO
-            int "SHT30 software I2C SDA GPIO"
+            int "SHT30 软件 I2C SDA 引脚"
             default 1
 
         config APP_SHT30_SCL_GPIO
-            int "SHT30 software I2C SCL GPIO"
+            int "SHT30 软件 I2C SCL 引脚"
             default 2
 
         config APP_TVOC_UART_NUM
-            int "TVOC301 UART number"
+            int "TVOC301 使用的 UART 编号"
             default 2
 
         config APP_TVOC_TX_GPIO
-            int "TVOC301 UART TX GPIO"
+            int "TVOC301 UART TX 引脚"
             default 19
 
         config APP_TVOC_RX_GPIO
-            int "TVOC301 UART RX GPIO"
+            int "TVOC301 UART RX 引脚"
             default 20
 
         config APP_LM393_DO_GPIO
-            int "LM393 digital output GPIO"
+            int "LM393 数字输出引脚"
             default 4
     endmenu
 
-    menu "Actuator and input pins"
+    menu "执行器和输入引脚"
         config APP_SERVO_GPIO
-            int "SG90 servo signal GPIO"
+            int "SG90 舵机信号引脚"
             default 36
 
         config APP_BUTTON_GPIO
-            int "Manual toggle button GPIO"
+            int "手动切换按键引脚"
             default 21
 
         config APP_BEEP_GPIO
-            int "Active beeper GPIO"
+            int "有源蜂鸣器引脚"
             default 35
 
         config APP_BEEP_ACTIVE_LOW
-            bool "Beeper is active low"
+            bool "蜂鸣器低电平触发"
             default y
     endmenu
 
-    menu "Display pins"
+    menu "显示屏引脚"
         config APP_TFT_MOSI_GPIO
-            int "ST7735 MOSI GPIO"
+            int "ST7735 MOSI 引脚"
             default 6
 
         config APP_TFT_SCLK_GPIO
-            int "ST7735 SCLK GPIO"
+            int "ST7735 SCLK 引脚"
             default 8
 
         config APP_TFT_CS_GPIO
-            int "ST7735 CS GPIO"
+            int "ST7735 CS 片选引脚"
             default 5
             help
-                Teammate prototype used GPIO10, which conflicts with the
-                verified camera XCLK pin. Set this to the board's actual TFT CS.
+                队友原型曾使用 GPIO10 作为 TFT CS，但 GPIO10 同时也是
+                已验证摄像头 XCLK 引脚。请按实际接线设置 TFT CS。
 
         config APP_TFT_DC_GPIO
-            int "ST7735 DC GPIO"
+            int "ST7735 DC 引脚"
             default 9
 
         config APP_TFT_RST_GPIO
-            int "ST7735 reset GPIO"
+            int "ST7735 复位引脚"
             default 46
 
         config APP_TFT_BLK_GPIO
-            int "ST7735 backlight GPIO"
+            int "ST7735 背光引脚"
             default 7
     endmenu
 
-    menu "Camera pins"
+    menu "摄像头引脚"
         config APP_CAMERA_XCLK_GPIO
-            int "OV2640 XCLK GPIO"
+            int "OV2640 XCLK 引脚"
             default 10
 
         config APP_CAMERA_SIOD_GPIO
-            int "OV2640 SIOD GPIO"
+            int "OV2640 SIOD 引脚"
             default 40
 
         config APP_CAMERA_SIOC_GPIO
-            int "OV2640 SIOC GPIO"
+            int "OV2640 SIOC 引脚"
             default 39
 
         config APP_CAMERA_D0_GPIO
-            int "OV2640 D0 GPIO"
+            int "OV2640 D0 引脚"
             default 15
 
         config APP_CAMERA_D1_GPIO
-            int "OV2640 D1 GPIO"
+            int "OV2640 D1 引脚"
             default 17
 
         config APP_CAMERA_D2_GPIO
-            int "OV2640 D2 GPIO"
+            int "OV2640 D2 引脚"
             default 18
 
         config APP_CAMERA_D3_GPIO
-            int "OV2640 D3 GPIO"
+            int "OV2640 D3 引脚"
             default 16
 
         config APP_CAMERA_D4_GPIO
-            int "OV2640 D4 GPIO"
+            int "OV2640 D4 引脚"
             default 14
 
         config APP_CAMERA_D5_GPIO
-            int "OV2640 D5 GPIO"
+            int "OV2640 D5 引脚"
             default 12
 
         config APP_CAMERA_D6_GPIO
-            int "OV2640 D6 GPIO"
+            int "OV2640 D6 引脚"
             default 11
 
         config APP_CAMERA_D7_GPIO
-            int "OV2640 D7 GPIO"
+            int "OV2640 D7 引脚"
             default 48
 
         config APP_CAMERA_VSYNC_GPIO
-            int "OV2640 VSYNC GPIO"
+            int "OV2640 VSYNC 引脚"
             default 38
 
         config APP_CAMERA_HREF_GPIO
-            int "OV2640 HREF GPIO"
+            int "OV2640 HREF 引脚"
             default 47
 
         config APP_CAMERA_PCLK_GPIO
-            int "OV2640 PCLK GPIO"
+            int "OV2640 PCLK 引脚"
             default 13
     endmenu
 
