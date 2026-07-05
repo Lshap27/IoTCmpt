@@ -160,11 +160,6 @@ esp_err_t display_init(void)
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (CONFIG_APP_CAMERA_ENABLED && CONFIG_APP_TFT_CS_GPIO == CONFIG_APP_CAMERA_XCLK_GPIO) {
-        ESP_LOGE(TAG, "TFT CS GPIO%d 与摄像头 XCLK 冲突", CONFIG_APP_TFT_CS_GPIO);
-        return ESP_ERR_INVALID_STATE;
-    }
-
     gpio_config_t io = {
         .pin_bit_mask = (1ULL << CONFIG_APP_TFT_CS_GPIO) | (1ULL << CONFIG_APP_TFT_DC_GPIO) |
                         (1ULL << CONFIG_APP_TFT_RST_GPIO) | (1ULL << CONFIG_APP_TFT_BLK_GPIO),

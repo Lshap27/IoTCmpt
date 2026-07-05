@@ -128,10 +128,7 @@ menu "S3 传感器云端控制"
 
         config APP_TFT_CS_GPIO
             int "ST7735 CS 片选引脚"
-            default 5
-            help
-                队友原型曾使用 GPIO10 作为 TFT CS，但 GPIO10 同时也是
-                已验证摄像头 XCLK 引脚。请按实际接线设置 TFT CS。
+            default 10
 
         config APP_TFT_DC_GPIO
             int "ST7735 DC 引脚"
@@ -147,9 +144,9 @@ menu "S3 传感器云端控制"
     endmenu
 
     menu "摄像头引脚"
-        config APP_CAMERA_XCLK_GPIO
-            int "OV2640 XCLK 引脚"
-            default 10
+        config APP_CAMERA_PWDN_GPIO
+            int "OV2640 PWDN 引脚"
+            default 42
 
         config APP_CAMERA_SIOD_GPIO
             int "OV2640 SIOD 引脚"

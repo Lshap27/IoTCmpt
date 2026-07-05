@@ -55,7 +55,7 @@ typedef struct {
     int tft_rst_gpio;
     int tft_blk_gpio;
 
-    int camera_xclk_gpio;
+    int camera_pwdn_gpio;
     int camera_siod_gpio;
     int camera_sioc_gpio;
     int camera_d0_gpio;

@@ -70,7 +70,7 @@ esp_err_t app_config_load(app_config_t *out_config)
     out_config->tft_rst_gpio = CONFIG_APP_TFT_RST_GPIO;
     out_config->tft_blk_gpio = CONFIG_APP_TFT_BLK_GPIO;
 
-    out_config->camera_xclk_gpio = CONFIG_APP_CAMERA_XCLK_GPIO;
+    out_config->camera_pwdn_gpio = CONFIG_APP_CAMERA_PWDN_GPIO;
     out_config->camera_siod_gpio = CONFIG_APP_CAMERA_SIOD_GPIO;
     out_config->camera_sioc_gpio = CONFIG_APP_CAMERA_SIOC_GPIO;
     out_config->camera_d0_gpio = CONFIG_APP_CAMERA_D0_GPIO;

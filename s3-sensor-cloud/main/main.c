@@ -36,11 +36,6 @@ static app_status_link_t link_status_from_result(esp_err_t result)
     return result == ESP_OK ? APP_STATUS_LINK_READY : APP_STATUS_LINK_DEGRADED;
 }
 
-static bool display_camera_gpio_conflict(void)
-{
-    return s_config.display_enabled && s_config.camera_enabled && s_config.tft_cs_gpio == s_config.camera_xclk_gpio;
-}
-
 static const char *fusion_air_quality_log_name(fusion_air_quality_t quality)
 {
     switch (quality) {
@@ -329,18 +324,9 @@ void app_main(void)
     }
 
     if (CONFIG_APP_DISPLAY_ENABLED) {
-        if (display_camera_gpio_conflict()) {
-            ESP_LOGE(
-                TAG,
-                "显示屏任务已禁用：TFT CS GPIO%d 与摄像头 XCLK GPIO%d 冲突",
-                s_config.tft_cs_gpio,
-                s_config.camera_xclk_gpio
-            );
-        } else {
-            ok = xTaskCreate(display_task, "display_task", 4096, NULL, 4, NULL);
-            if (ok != pdPASS) {
-                ESP_LOGE(TAG, "启动显示屏任务失败");
-            }
+        ok = xTaskCreate(display_task, "display_task", 4096, NULL, 4, NULL);
+        if (ok != pdPASS) {
+            ESP_LOGE(TAG, "启动显示屏任务失败");
         }
     }
 

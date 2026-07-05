@@ -22,9 +22,9 @@ static esp_err_t camera_init_once(void)
     vTaskDelay(pdMS_TO_TICKS(300));
 
     camera_config_t config = {
-        .pin_pwdn = -1,
+        .pin_pwdn = CONFIG_APP_CAMERA_PWDN_GPIO,
         .pin_reset = -1,
-        .pin_xclk = CONFIG_APP_CAMERA_XCLK_GPIO,
+        .pin_xclk = -1,
         .pin_sccb_sda = CONFIG_APP_CAMERA_SIOD_GPIO,
         .pin_sccb_scl = CONFIG_APP_CAMERA_SIOC_GPIO,
         .pin_d7 = CONFIG_APP_CAMERA_D7_GPIO,
