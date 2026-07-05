@@ -1,6 +1,7 @@
 # Local/editor state
 .agents/
 .codex/
+.DS_Store
 
 # Build outputs and local ESP-IDF config
 build*/
