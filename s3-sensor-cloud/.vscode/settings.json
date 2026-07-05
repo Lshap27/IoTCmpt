@@ -11,5 +11,6 @@
   ],
   "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
   "cmake.configureOnOpen": false,
-  "idf.portWin": "COM6"
+  "idf.portWin": "COM6",
+  "idf.currentSetup": "C:\\esp\\v5.5.2\\esp-idf"
 }
