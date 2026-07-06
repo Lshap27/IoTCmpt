@@ -26,6 +26,22 @@ When the ESP32-S3 and laptop are on the same Wi-Fi:
 - MQTT broker: `<laptop-ip>:1883`
 - Image/API base URL: `http://<laptop-ip>:8000`
 
+## Simulated Device
+
+After the Compose stack is running, publish test telemetry from the repository
+root:
+
+```powershell
+server\.venv\Scripts\python.exe scripts\simulate-device.py --host 127.0.0.1 --device-id esp32s3-001
+```
+
+Expected checks:
+
+- `GET http://localhost:8000/api/devices/esp32s3-001/latest` shows telemetry.
+- `http://localhost:3000` updates the dashboard.
+- Manual commands from the dashboard are printed by the simulator and
+  acknowledged through `devices/esp32s3-001/command_ack`.
+
 ## Secrets
 
 Do not store production secrets in this repository. Use local `.env` files or
@@ -35,4 +51,3 @@ deployment-specific secret stores for:
 - MQTT username/password
 - Wi-Fi SSID/password
 - database passwords outside local demo use
-

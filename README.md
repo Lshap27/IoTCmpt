@@ -75,8 +75,8 @@ Run the new web console directly:
 
 ```powershell
 cd web
-npm install
-npm run dev
+pnpm install --ignore-scripts
+pnpm run dev
 ```
 
 Build the current verified firmware path:
@@ -87,6 +87,12 @@ Build the current verified firmware path:
 
 The build script still targets `s3-sensor-cloud/` while the new firmware
 mainline is being assembled.
+
+Simulate a device after the server or Compose stack is running:
+
+```powershell
+server\.venv\Scripts\python.exe scripts\simulate-device.py --host 127.0.0.1 --device-id esp32s3-001
+```
 
 ## Migration Rules
 

@@ -23,3 +23,17 @@ python -m venv .venv
 The default direct-run configuration uses PostgreSQL connection settings from
 environment variables. Tests override the database with SQLite.
 
+## Test
+
+```powershell
+cd server
+.\.venv\Scripts\python -m pytest tests
+```
+
+The test suite must run without PostgreSQL or EMQX. It uses SQLite and disables
+MQTT through environment overrides.
+
+## Environment
+
+Copy `.env.example` to `.env` for local direct-run configuration. Keep real LLM
+keys and MQTT credentials out of source control.
