@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: aiot
+      POSTGRES_USER: aiot
+      POSTGRES_PASSWORD: aiot
+    ports:
+      - "5432:5432"
+    volumes:
+      - aiot_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiot -d aiot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  emqx:
+    image: emqx/emqx:5
+    environment:
+      EMQX_NAME: aiot-emqx
+      EMQX_DASHBOARD__DEFAULT_USERNAME: admin
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: public
+      EMQX_ALLOW_ANONYMOUS: "true"
+    ports:
+      - "1883:1883"
+      - "18083:18083"
+    volumes:
+      - aiot_emqx_data:/opt/emqx/data
+      - aiot_emqx_log:/opt/emqx/log
+
+  server:
+    build:
+      context: ./server
+    environment:
+      AIOT_DATABASE_URL: postgresql+psycopg://aiot:aiot@postgres:5432/aiot
+      AIOT_BASE_URL: http://localhost:8000
+      AIOT_UPLOADS_DIR: /app/uploads
+      AIOT_MQTT_ENABLED: "true"
+      AIOT_MQTT_HOST: emqx
+      AIOT_MQTT_PORT: "1883"
+      AIOT_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8000:8000"
+    volumes:
+      - aiot_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      emqx:
+        condition: service_started
+
+  web:
+    build:
+      context: ./web
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - server
+
+volumes:
+  aiot_postgres_data:
+  aiot_emqx_data:
+  aiot_emqx_log:
+  aiot_uploads:
+

@@ -15,6 +15,16 @@ dependencies.lock
 backend/data/
 backend/test_backend.db
 backend/test_images/
+server/.venv/
+server/uploads/
+server/test*.db
+web/node_modules/
+web/.next/
+web/out/
+web/.env*.local
+postgres_data/
+emqx_data/
+emqx_log/
 
 # Large local SDK/reference repositories
 references/esp-adf/

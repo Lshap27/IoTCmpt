@@ -1,0 +1,2 @@
+"""AIoT Gateway application package."""
+
