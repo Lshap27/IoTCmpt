@@ -9,11 +9,7 @@
 #define APP_CONFIG_WIFI_SSID_MAX_LEN 32
 #define APP_CONFIG_WIFI_PASSWORD_MAX_LEN 64
 #define APP_CONFIG_MQTT_URI_MAX_LEN 128
-#define APP_CONFIG_CLOUD_ENDPOINT_MAX_LEN 256
-#define APP_CONFIG_CLOUD_MODEL_MAX_LEN 64
-#define APP_CONFIG_CLOUD_TOKEN_MAX_LEN 256
-#define APP_CONFIG_BACKEND_URL_MAX_LEN 256
-#define APP_CONFIG_BACKEND_BASE_URL_MAX_LEN 192
+#define APP_CONFIG_HTTP_URL_MAX_LEN 256
 
 typedef struct {
     char device_id[APP_CONFIG_DEVICE_ID_MAX_LEN];
@@ -24,21 +20,11 @@ typedef struct {
     bool mqtt_enabled;
     char mqtt_broker_uri[APP_CONFIG_MQTT_URI_MAX_LEN + 1];
 
-    bool cloud_enabled;
-    char cloud_endpoint[APP_CONFIG_CLOUD_ENDPOINT_MAX_LEN + 1];
-    char cloud_model[APP_CONFIG_CLOUD_MODEL_MAX_LEN + 1];
-    char cloud_token[APP_CONFIG_CLOUD_TOKEN_MAX_LEN + 1];
-
     bool sensor_mock_enabled;
     uint32_t sensor_interval_ms;
 
-    bool backend_enabled;
-    char sensor_upload_url[APP_CONFIG_BACKEND_URL_MAX_LEN + 1];
-    char image_upload_url[APP_CONFIG_BACKEND_URL_MAX_LEN + 1];
-    char pose_upload_url[APP_CONFIG_BACKEND_URL_MAX_LEN + 1];
-    bool backend_command_enabled;
-    char backend_command_base_url[APP_CONFIG_BACKEND_BASE_URL_MAX_LEN + 1];
-    uint32_t backend_command_poll_ms;
+    bool image_upload_enabled;
+    char image_upload_url[APP_CONFIG_HTTP_URL_MAX_LEN + 1];
 
     bool camera_enabled;
     bool display_enabled;

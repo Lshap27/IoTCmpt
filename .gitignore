@@ -13,9 +13,6 @@ build*/
 sdkconfig
 managed_components/
 dependencies.lock
-backend/data/
-backend/test_backend.db
-backend/test_images/
 server/.venv/
 server/uploads/
 server/test*.db

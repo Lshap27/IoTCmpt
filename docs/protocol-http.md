@@ -108,8 +108,3 @@ Request:
 The server stores the command and publishes it to
 `devices/{device_id}/command`.
 
-## Compatibility
-
-Legacy endpoints in `backend/` can remain available during migration, but new
-features must target the endpoints above.
-

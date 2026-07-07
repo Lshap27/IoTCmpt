@@ -2,7 +2,6 @@
 #include "app_config_defaults.h"
 #include "app_status.h"
 #include "actuators.h"
-#include "backend_upload.h"
 #include "camera_app.h"
 #include "control_state.h"
 #include "display.h"
@@ -10,6 +9,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "fusion.h"
+#include "http_upload.h"
 #include "inputs.h"
 #include "mqtt_app.h"
 #include "sensors.h"
@@ -302,7 +302,7 @@ static void camera_upload_task(void *arg)
         }
 
         capture_failures = 0;
-        esp_err_t err = backend_upload_jpeg(s_config.image_upload_url, frame->buf, frame->len);
+        esp_err_t err = http_upload_jpeg(s_config.image_upload_url, frame->buf, frame->len);
         if (err == ESP_OK) {
             upload_failures = 0;
             ESP_LOGI(TAG, "image uploaded");
@@ -310,15 +310,6 @@ static void camera_upload_task(void *arg)
             upload_failures++;
             if (upload_failures == 1 || upload_failures % 30 == 0) {
                 ESP_LOGW(TAG, "image upload failed %d times: %s", upload_failures, esp_err_to_name(err));
-            }
-        }
-
-        if (s_config.pose_upload_url[0] != '\0') {
-            err = backend_upload_jpeg(s_config.pose_upload_url, frame->buf, frame->len);
-            if (err == ESP_OK) {
-                ESP_LOGI(TAG, "pose upload succeeded");
-            } else if (err != ESP_ERR_INVALID_STATE && err != ESP_ERR_INVALID_ARG) {
-                ESP_LOGW(TAG, "pose upload failed: %s", esp_err_to_name(err));
             }
         }
 
@@ -367,7 +358,7 @@ void app_main(void)
         s_status.wifi = link_status_from_result(err);
     }
 
-    ESP_ERROR_CHECK(backend_upload_init(&s_config));
+    ESP_ERROR_CHECK(http_upload_init(&s_config));
     ESP_ERROR_CHECK(mqtt_app_set_command_handler(on_command));
     err = mqtt_app_init(&s_config);
     if (err == ESP_OK && s_config.wifi_enabled && s_config.mqtt_enabled) {

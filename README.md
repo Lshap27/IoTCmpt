@@ -1,31 +1,25 @@
 # IoTCmpt AIoT Workspace
 
-ESP32-S3 competition workspace for a sensor + cloud LLM + device-control
-system. The project is moving to a protocol-first AIoT architecture:
+ESP32-S3 competition workspace for a protocol-first AIoT system:
 
 ```text
 ESP32-S3 firmware -> MQTT/HTTP -> FastAPI AIoT Gateway -> PostgreSQL/WebSocket -> Next.js console
 ```
 
-The legacy firmware and backend remain in place until the new path has passed
-hardware and demo verification.
+The repository now keeps only the new AIoT mainline. MQTT is the telemetry and
+control backbone. HTTP is used for health checks, dashboard APIs, and JPEG image
+upload.
 
-## New Architecture
+## Architecture
 
-- `firmware/esp32s3/`: new ESP-IDF firmware mainline. It will migrate the
-  verified modules from `s3-sensor-cloud/` and replace sensor HTTP polling with
-  MQTT telemetry and command topics.
-- `server/`: FastAPI AIoT Gateway. It owns MQTT ingestion, HTTP APIs,
-  WebSocket fanout, PostgreSQL persistence, image storage, LLM calls, and
-  command validation.
+- `firmware/esp32s3/`: ESP-IDF firmware for ESP32-S3-DevKitC-1.
+- `server/`: FastAPI AIoT Gateway for MQTT ingestion, HTTP APIs, WebSocket
+  fanout, PostgreSQL persistence, image storage, LLM calls, and command
+  validation.
 - `web/`: Next.js real-time device console.
-- `infra/`: deployment and service configuration for PostgreSQL, EMQX, and
-  local demo infrastructure.
-- `docs/`: architecture, protocol, data model, and migration contracts.
-- `backend/`: legacy FastAPI backend kept for compatibility during migration.
-- `s3-sensor-cloud/`: legacy ESP-IDF firmware kept as the verified hardware
-  reference until `firmware/esp32s3/` is fully validated.
-- `scripts/`: workspace-level setup and firmware build helpers.
+- `infra/`: deployment notes and service configuration.
+- `docs/`: architecture, protocol, and data model contracts.
+- `scripts/`: workspace setup, firmware build, and simulated-device helpers.
 - `references/`: optional local SDKs, docs, and reference repositories.
 
 ## Protocol Entry Points
@@ -56,13 +50,13 @@ See `docs/` for the full wire contracts.
 
 Use PowerShell 7 on Windows.
 
-Start the new AIoT stack:
+Start the AIoT stack:
 
 ```powershell
 docker compose up --build
 ```
 
-Run the new server directly:
+Run the server directly:
 
 ```powershell
 cd server
@@ -71,7 +65,7 @@ python -m venv .venv
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Run the new web console directly:
+Run the web console directly:
 
 ```powershell
 cd web
@@ -79,14 +73,11 @@ pnpm install --ignore-scripts
 pnpm run dev
 ```
 
-Build the current verified firmware path:
+Build the firmware from the repository root:
 
 ```powershell
 & 'C:\Users\lshap\Documents\Code\IoTCmpt\scripts\build.ps1'
 ```
-
-The build script still targets `s3-sensor-cloud/` while the new firmware
-mainline is being assembled.
 
 Simulate a device after the server or Compose stack is running:
 
@@ -94,16 +85,14 @@ Simulate a device after the server or Compose stack is running:
 server\.venv\Scripts\python.exe scripts\simulate-device.py --host 127.0.0.1 --device-id esp32s3-001
 ```
 
-## Migration Rules
+## Rules
 
-- Treat `docs/` as the contract for new work.
-- Do not add new features to legacy `backend/` or `s3-sensor-cloud/` unless
-  they are needed to keep the hardware fallback working.
+- Treat `docs/` as the protocol contract.
 - Keep LLM API keys, Wi-Fi secrets, MQTT credentials, and database passwords out
   of source files.
-- MQTT is the sensor/control backbone. HTTP is for images, health checks, and
-  dashboard APIs.
-- The ESP32-S3 firmware must not call external LLM providers directly in the
-  production path; the server owns LLM calls and command validation.
+- MQTT owns sensor telemetry and commands.
+- The ESP32-S3 firmware must not call external LLM providers directly; the
+  server owns LLM calls and command validation.
 - Do not commit build outputs, local `sdkconfig`, `managed_components/`,
-  `dependencies.lock`, uploaded images, database files, or local SDK checkouts.
+  `dependencies.lock`, uploaded images, database files, virtual environments,
+  frontend build output, or local SDK checkouts.

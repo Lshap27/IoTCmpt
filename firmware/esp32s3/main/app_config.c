@@ -36,31 +36,14 @@ esp_err_t app_config_load(app_config_t *out_config)
     out_config->mqtt_enabled = CONFIG_APP_MQTT_ENABLED;
     copy_config_string(out_config->mqtt_broker_uri, sizeof(out_config->mqtt_broker_uri), CONFIG_APP_MQTT_BROKER_URI);
 
-    out_config->cloud_enabled = CONFIG_APP_CLOUD_ENABLED;
-    copy_config_string(out_config->cloud_endpoint, sizeof(out_config->cloud_endpoint), CONFIG_APP_CLOUD_ENDPOINT);
-    copy_config_string(out_config->cloud_model, sizeof(out_config->cloud_model), CONFIG_APP_CLOUD_MODEL);
-    copy_config_string(out_config->cloud_token, sizeof(out_config->cloud_token), CONFIG_APP_CLOUD_TOKEN);
-
     out_config->sensor_mock_enabled = CONFIG_APP_SENSOR_MOCK_ENABLED;
     out_config->sensor_interval_ms = CONFIG_APP_SENSOR_INTERVAL_MS;
     if (out_config->sensor_interval_ms == 0) {
         out_config->sensor_interval_ms = 5000;
     }
 
-    out_config->backend_enabled = CONFIG_APP_BACKEND_ENABLED;
-    copy_config_string(out_config->sensor_upload_url, sizeof(out_config->sensor_upload_url), CONFIG_APP_SENSOR_UPLOAD_URL);
+    out_config->image_upload_enabled = CONFIG_APP_IMAGE_UPLOAD_ENABLED;
     copy_config_string(out_config->image_upload_url, sizeof(out_config->image_upload_url), CONFIG_APP_IMAGE_UPLOAD_URL);
-    copy_config_string(out_config->pose_upload_url, sizeof(out_config->pose_upload_url), CONFIG_APP_POSE_UPLOAD_URL);
-    out_config->backend_command_enabled = CONFIG_APP_BACKEND_COMMAND_ENABLED;
-    copy_config_string(
-        out_config->backend_command_base_url,
-        sizeof(out_config->backend_command_base_url),
-        CONFIG_APP_BACKEND_COMMAND_BASE_URL
-    );
-    out_config->backend_command_poll_ms = CONFIG_APP_BACKEND_COMMAND_POLL_MS;
-    if (out_config->backend_command_poll_ms == 0) {
-        out_config->backend_command_poll_ms = 5000;
-    }
 
     out_config->camera_enabled = CONFIG_APP_CAMERA_ENABLED;
     out_config->display_enabled = CONFIG_APP_DISPLAY_ENABLED;

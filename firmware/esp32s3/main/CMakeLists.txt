@@ -6,7 +6,7 @@ idf_component_register(
         "sensors/sensors.c"
         "fusion/fusion.c"
         "commands/commands.c"
-        "backend/backend_upload.c"
+        "http/http_upload.c"
         "camera/camera_app.c"
         "display/display.c"
         "actuators/actuators.c"

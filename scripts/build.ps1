@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$projectDir = Join-Path $repoRoot "s3-sensor-cloud"
+$projectDir = Join-Path $repoRoot "firmware\esp32s3"
 $eimConfig = "C:\Espressif\tools\eim_idf.json"
 $idfDir = Join-Path $repoRoot "references\esp-idf-v5.5.2"
 $activationScript = $null

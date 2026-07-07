@@ -1,12 +1,8 @@
-# ESP32-S3 Firmware Mainline
+# ESP32-S3 Firmware
 
-This directory is the target firmware mainline for the AIoT architecture.
+This directory is the ESP-IDF firmware mainline for the AIoT architecture.
 
-The current verified implementation still lives in `s3-sensor-cloud/`. During
-migration, copy or move hardware modules here only after their behavior is
-covered by the new MQTT/HTTP protocol contract.
-
-## Target Behavior
+## Behavior
 
 - Publish retained online/offline status through MQTT.
 - Publish periodic telemetry to `devices/{device_id}/telemetry`.
@@ -15,9 +11,7 @@ covered by the new MQTT/HTTP protocol contract.
 - Execute supported commands locally.
 - Publish `devices/{device_id}/command_ack` after execution.
 
-## Reused Hardware Modules
-
-The migration should preserve the known-good modules from `s3-sensor-cloud/`:
+## Hardware Modules
 
 - SHT30, TVOC301, and LM393 sampling.
 - Local fusion rules.
@@ -28,37 +22,31 @@ The migration should preserve the known-good modules from `s3-sensor-cloud/`:
 - Manual button.
 - Runtime control state.
 
-## Current Status
+## Configuration
 
-This directory now contains a minimal ESP-IDF project shell for the new
-mainline. It does not migrate the verified hardware drivers yet.
+The default configuration keeps Wi-Fi, MQTT, image upload, camera, display,
+actuator, and button modules disabled so the project can compile without local
+credentials or attached hardware.
 
-The default configuration keeps Wi-Fi and MQTT disabled, so the project can
-compile without local credentials. Enable `APP_WIFI_ENABLED` and
-`APP_MQTT_ENABLED` through `idf.py menuconfig` before hardware MQTT bring-up.
+Enable runtime features through `idf.py menuconfig` or local `sdkconfig`.
+Do not commit Wi-Fi credentials, MQTT credentials, LLM keys, or local server
+addresses.
 
 ## Build
 
 From the repository root, use PowerShell 7:
 
 ```powershell
-& .\scripts\build-firmware-mainline.ps1
-```
-
-The current verified production firmware still lives in `s3-sensor-cloud/`.
-Use the existing root build entry for legacy regression:
-
-```powershell
 & .\scripts\build.ps1
 ```
 
-## MQTT Shell Behavior
+## MQTT Behavior
 
-When Wi-Fi and MQTT are enabled, the shell:
+When Wi-Fi and MQTT are enabled, the firmware:
 
 - connects to the configured broker URI;
 - publishes retained `online` status;
-- publishes periodic mock telemetry;
+- publishes periodic telemetry from real or mock sensors;
 - subscribes to `devices/{device_id}/command`;
-- logs received command payloads;
-- publishes `command_ack` with mock execution status.
+- executes `window.open`, `window.close`, `alarm.on`, and `alarm.off`;
+- publishes command ACKs with `executed`, `rejected`, or `failed` status.

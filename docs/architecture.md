@@ -53,10 +53,9 @@ Local demo deployment uses root `docker-compose.yml`:
 
 The ESP32-S3 connects to the host IP on MQTT port 1883 and HTTP port 8000.
 
-## Migration Stance
+## Mainline Stance
 
-The old `backend/` and `s3-sensor-cloud/` directories are compatibility
-references. New features target `server/`, `web/`, `infra/`, and
-`firmware/esp32s3/`. Existing verified hardware code should be migrated rather
-than reimplemented from scratch.
-
+The repository keeps the current AIoT mainline only. New features target
+`server/`, `web/`, `infra/`, and `firmware/esp32s3/`. MQTT remains the device
+telemetry/control contract, and HTTP remains limited to images, health checks,
+and dashboard APIs.

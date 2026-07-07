@@ -33,30 +33,10 @@ menu "AIoT MQTT 固件主线"
         string "MQTT Broker URI"
         default "mqtt://192.168.1.10:1883"
 
-    config APP_CLOUD_ENABLED
-        bool "启用云端大模型调试路径"
-        default n
-
-    config APP_CLOUD_ENDPOINT
-        string "云端大模型接口地址"
-        default ""
-
-    config APP_CLOUD_MODEL
-        string "云端大模型名称"
-        default "demo-model"
-
-    config APP_CLOUD_TOKEN
-        string "云端大模型访问令牌"
-        default ""
-
-    menu "后端上传"
-        config APP_BACKEND_ENABLED
+    menu "HTTP 图片上传"
+        config APP_IMAGE_UPLOAD_ENABLED
             bool "启用 HTTP 图片上传"
             default n
-
-        config APP_SENSOR_UPLOAD_URL
-            string "旧传感器 JSON 上传地址（保留兼容，不用于新主线）"
-            default ""
 
         config APP_IMAGE_UPLOAD_URL
             string "摄像头图片上传地址"
@@ -64,23 +44,6 @@ menu "AIoT MQTT 固件主线"
             help
                 新架构默认格式为：
                 http://<server-host>:8000/api/devices/esp32s3-001/images
-
-        config APP_POSE_UPLOAD_URL
-            string "姿态检测上传地址（可选调试）"
-            default ""
-
-        config APP_BACKEND_COMMAND_ENABLED
-            bool "启用旧普通后端指令轮询（调试兼容）"
-            default n
-
-        config APP_BACKEND_COMMAND_BASE_URL
-            string "旧普通后端指令基础地址"
-            default ""
-
-        config APP_BACKEND_COMMAND_POLL_MS
-            int "旧普通后端指令轮询间隔（毫秒）"
-            default 5000
-            range 1000 60000
     endmenu
 
     menu "功能模块"
