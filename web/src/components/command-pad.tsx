@@ -2,6 +2,8 @@
 
 import { BellOff, BellRing, DoorClosed, DoorOpen, Loader2, SlidersHorizontal } from "lucide-react";
 import { Panel } from "@/components/panel";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 const COMMANDS: { type: string; label: string; Icon: typeof DoorOpen }[] = [
   { type: "window.open", label: "开窗", Icon: DoorOpen },
@@ -12,7 +14,10 @@ const COMMANDS: { type: string; label: string; Icon: typeof DoorOpen }[] = [
 
 function StateChip({ label, active }: { label: string; active: boolean | null | undefined }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-raised px-2 py-0.5 text-[11px] text-ink2">
+    <Badge
+      variant="outline"
+      className="gap-1.5 rounded-full border-line bg-raised px-2 py-0.5 text-[11px] text-ink2"
+    >
       <span
         className="h-1.5 w-1.5 rounded-full"
         style={{ background: active ? "var(--accent)" : "var(--ink-3)" }}
@@ -20,7 +25,7 @@ function StateChip({ label, active }: { label: string; active: boolean | null | 
       />
       {label}
       {active === null || active === undefined ? " --" : active ? " 开" : " 关"}
-    </span>
+    </Badge>
   );
 }
 
@@ -55,12 +60,13 @@ export function CommandPad({
         {COMMANDS.map(({ type, label, Icon }) => {
           const pending = pendingTypes.has(type);
           return (
-            <button
+            <Button
               key={type}
               type="button"
+              variant="outline"
               disabled={pending}
               onClick={() => onCommand(type)}
-              className="group flex flex-col items-center gap-1.5 rounded-xl border border-line bg-raised px-3 py-3.5 text-sm font-medium text-ink2 transition-all hover:border-accent hover:text-ink hover:shadow-glow active:scale-[0.98] disabled:opacity-60"
+              className="group h-auto flex-col gap-1.5 rounded-xl border-line bg-raised px-3 py-3.5 text-sm font-medium text-ink2 transition-all hover:border-accent hover:bg-raised hover:text-ink hover:shadow-glow active:scale-[0.98] disabled:opacity-60"
             >
               {pending ? (
                 <Loader2 size={20} className="animate-spin text-accent" />
@@ -68,7 +74,7 @@ export function CommandPad({
                 <Icon size={20} className="text-ink3 transition-colors group-hover:text-accent" />
               )}
               {pending ? "等待确认…" : label}
-            </button>
+            </Button>
           );
         })}
       </div>

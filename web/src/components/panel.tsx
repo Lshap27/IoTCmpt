@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export function Panel({
@@ -15,7 +16,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={cn("glass-panel p-4", className)}>
+    <Card className={cn("glass-panel block gap-0 rounded-2xl border-line p-4 shadow-panel", className)}>
       {title || actions ? (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-ink">
@@ -26,6 +27,6 @@ export function Panel({
         </div>
       ) : null}
       {children}
-    </section>
+    </Card>
   );
 }

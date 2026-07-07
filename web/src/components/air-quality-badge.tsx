@@ -1,4 +1,6 @@
 import { AlertOctagon, AlertTriangle, CheckCircle2, HelpCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 const LEVELS: Record<string, { label: string; color: string; soft: string; Icon: typeof CheckCircle2 }> = {
   good: { label: "空气优良", color: "var(--good)", soft: "var(--good-soft)", Icon: CheckCircle2 },
@@ -18,14 +20,13 @@ export function AirQualityBadge({
   const entry = LEVELS[level ?? "unknown"] ?? LEVELS.unknown;
   const { Icon } = entry;
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs font-medium text-ink2 ${
-        className ?? ""
-      }`}
+    <Badge
+      variant="outline"
+      className={cn("gap-1.5 rounded-full border-line px-2.5 py-1 text-xs font-medium text-ink2", className)}
       style={{ background: entry.soft }}
     >
       <Icon size={14} style={{ color: entry.color }} />
       {entry.label}
-    </span>
+    </Badge>
   );
 }
