@@ -1,45 +1,99 @@
-# Local/editor state
+# Local agent/editor state
 .agents/
 .codex/
+.claude/
 .DS_Store
-.env
-.venv/
-__pycache__/
-.pytest_cache/
-server/.pytest-tmp/
-.pnpm-store/
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+*.log
 
-# Build outputs and local ESP-IDF config
-build*/
-sdkconfig
-managed_components/
-dependencies.lock
+# Keep project VS Code settings trackable, ignore transient workspace files.
+.vscode/*.log
+.vscode/*.code-workspace
+firmware/esp32s3/.vscode/
+firmware/esp32s3/.clangd
+
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+server/.env
+server/.env.*
+!server/.env.example
+web/.env*.local
+
+# Python / FastAPI
+__pycache__/
+*.py[cod]
+*$py.class
+.python-version
+.venv/
+venv/
+env/
 server/.venv/
-server/uploads/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+server/.pytest-tmp/
 server/test*.db
+server/uploads/
+server/captured_images/
+
+# Node / Next.js
+node_modules/
 web/node_modules/
+.pnpm-store/
+web/.pnpm-store/
 web/.next/
 web/out/
-web/.env*.local
-web/.pnpm-store/
-postgres_data/
-emqx_data/
-emqx_log/
+web/coverage/
+web/.turbo/
+web/tsconfig.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Large local SDK/reference repositories
-references/esp-adf/
-references/esp-idf/
-references/esp-idf-v5.5.2/
-references/esp-idf-zh_CN-v5.5.2/
-references/esp-iot-solution/
-references/esp-dev-kits/
-references/esp-idf-template/
-references/esp-now/
-references/esp-protocols/
-references/esp-rainmaker/
-
-# Local source documents and generated binaries
-*.pdf
+# ESP-IDF firmware outputs and local config
+build/
+build-*/
+**/build/
+**/build-*/
+**/managed_components/
+**/dependencies.lock
+**/sdkconfig
+**/sdkconfig.old
+**/sdkconfig.bak
+**/sdkconfig.tmp
+**/sdkconfig.debug
+**/sdkconfig.release
+**/compile_commands.json
 *.bin
 *.elf
 *.map
+*.hex
+*.uf2
+*.lst
+*.img
+
+# Local runtime/deployment data
+postgres_data/
+emqx_data/
+emqx_log/
+uploads/
+captured_images/
+*.db
+*.sqlite
+*.sqlite3
+
+# Large local SDK/reference repositories
+references/
+
+# Local source documents or exports
+*.pdf

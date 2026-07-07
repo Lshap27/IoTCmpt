@@ -37,7 +37,8 @@ addresses.
 From the repository root, use PowerShell 7:
 
 ```powershell
-& .\scripts\build.ps1
+cd firmware\esp32s3
+idf.py -B build-esp32s3 build
 ```
 
 ## MQTT Behavior

@@ -1,4 +1,6 @@
 {
   "cmake.sourceDirectory": "${workspaceFolder}/s3-sensor-cloud",
-  "cmake.configureOnOpen": false
+  "cmake.configureOnOpen": false,
+  "idf.customExtraVars": {},
+  "idf.currentSetup": "C:\\esp\\v5.5.2\\esp-idf"
 }

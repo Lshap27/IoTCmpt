@@ -1,0 +1,19 @@
+{
+  "recommendations": [
+    "espressif.esp-idf-extension",
+    "ms-vscode.cpptools",
+    "ms-vscode.cmake-tools",
+    "ms-vscode.vscode-serial-monitor",
+    "marus25.cortex-debug",
+    "ms-vscode.hexeditor",
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "charliermarsh.ruff",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "bradlc.vscode-tailwindcss",
+    "redhat.vscode-yaml",
+    "humao.rest-client",
+    "ms-azuretools.vscode-docker"
+  ]
+}

@@ -19,8 +19,6 @@ upload.
 - `web/`: Next.js real-time device console.
 - `infra/`: deployment notes and service configuration.
 - `docs/`: architecture, protocol, and data model contracts.
-- `scripts/`: workspace setup, firmware build, and simulated-device helpers.
-- `references/`: optional local SDKs, docs, and reference repositories.
 
 ## Protocol Entry Points
 
@@ -76,13 +74,8 @@ pnpm run dev
 Build the firmware from the repository root:
 
 ```powershell
-& 'C:\Users\lshap\Documents\Code\IoTCmpt\scripts\build.ps1'
-```
-
-Simulate a device after the server or Compose stack is running:
-
-```powershell
-server\.venv\Scripts\python.exe scripts\simulate-device.py --host 127.0.0.1 --device-id esp32s3-001
+cd firmware\esp32s3
+idf.py -B build-esp32s3 build
 ```
 
 ## Rules

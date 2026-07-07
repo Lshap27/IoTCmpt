@@ -2,82 +2,183 @@
 
 ## Command Rules
 
-- Run PowerShell commands with PowerShell 7: `C:\Program Files\PowerShell\7\pwsh.exe`.
+- Run PowerShell commands with PowerShell 7:
+  `C:\Program Files\PowerShell\7\pwsh.exe`.
 - This root directory is the workspace Git repository. Check nested reference
   repositories separately before using Git commands inside them.
-- For a fresh checkout, prefer Espressif EIM/VS Code ESP-IDF v5.5.2 if present;
-  otherwise use `scripts/setup-esp-idf.ps1`.
+- The repository may have user edits in progress. Inspect `git status --short`
+  before changing files, and do not revert unrelated changes.
+- Prefer `rg` / `rg --files` for source discovery when available.
 
-## AIoT Mainline
+## Current Mainline
 
-- Architecture work belongs under `docs/`, `server/`, `web/`, `infra/`, and
-  `firmware/esp32s3/`.
+- This repository now keeps only the AIoT mainline:
+  `docs/`, `server/`, `web/`, `infra/`, `firmware/esp32s3/`, and root
+  `docker-compose.yml`.
+- Older `backend/`, `s3-sensor-cloud/`, `legacy/`, and compatibility-era HTTP
+  sensor upload paths are historical only. Do not route new work there unless an
+  older branch or restored checkout actually contains them.
 - Treat `docs/architecture.md`, `docs/protocol-mqtt.md`,
   `docs/protocol-http.md`, `docs/protocol-websocket.md`, and
   `docs/data-model.md` as the implementation contract.
-- MQTT is the telemetry/control backbone. HTTP is for images, health checks, and
-  frontend APIs.
-- FastAPI `server/` owns LLM provider calls, JSON command validation, database
-  writes, and WebSocket fanout.
-- Next.js `web/` is a real-time control console, not a marketing landing page.
-- Do not put LLM API keys, Wi-Fi credentials, MQTT credentials, or cloud tokens
-  in firmware or frontend source.
+- MQTT is the telemetry/control backbone. HTTP is for health checks, dashboard
+  APIs, manual actions, AI analysis triggers, and JPEG image upload.
+- The end-to-end loop is:
+  ESP32-S3 sensing -> MQTT telemetry -> FastAPI gateway -> LLM decision ->
+  MQTT command -> device action -> WebSocket dashboard.
 
-## Firmware Build
+## System Responsibilities
 
-- The firmware mainline is `firmware/esp32s3/`.
-- Start firmware builds from the repository root.
-- Use PowerShell 7 and run:
-  `& 'C:\Users\lshap\Documents\Code\IoTCmpt\scripts\build.ps1'`.
-- The build script selects the EIM ESP-IDF v5.5.2 environment from
-  `C:\Espressif\tools\eim_idf.json` when available, then builds
-  `firmware/esp32s3` with build directory `build-esp32s3`.
-- If the Codex sandbox blocks compiler process creation with
-  `CreateProcess: Access is denied`, rerun the same `scripts\build.ps1`
-  command with escalated permissions instead of changing SDK paths or invoking
-  `idf.py` manually.
+- `firmware/esp32s3/` is the ESP-IDF firmware for ESP32-S3-DevKitC-1.
+- `server/` is the FastAPI AIoT gateway. It owns MQTT ingestion, HTTP APIs,
+  PostgreSQL writes, image storage, LLM provider calls, JSON command validation,
+  MQTT command publishing, and WebSocket fanout.
+- `web/` is a Next.js real-time control console, not a marketing landing page.
+  The first screen should remain the working dashboard.
+- `infra/` documents local deployment targets and service configuration.
+- Root `docker-compose.yml` is the default local stack: PostgreSQL, EMQX,
+  FastAPI server, and Next.js web console.
 
-## VS Code ESP-IDF Notes
+## Protocol Contract
 
-- `idf.currentSetup` must be the ESP-IDF SDK path, for example
-  `C:\esp\v5.5.2\esp-idf`; do not set it to the EIM install id.
-- `idf.eimIdfJsonPath` belongs in VS Code user/application settings and should
-  point to `C:\Espressif\tools\eim_idf.json` when using EIM.
-- CMake Tools prompts for a kit/compiler are not the primary ESP-IDF build path.
-  ESP-IDF builds should go through the ESP-IDF extension or `idf.py`.
-- It is acceptable to keep `cmake.configureOnOpen` disabled for this workspace.
+- MQTT topics:
+  `devices/{device_id}/status`,
+  `devices/{device_id}/telemetry`,
+  `devices/{device_id}/event`,
+  `devices/{device_id}/command`,
+  `devices/{device_id}/command_ack`, and
+  `devices/{device_id}/log`.
+- Default demo device id is `esp32s3-001`.
+- Server HTTP/WebSocket entry points include:
+  `GET /health`, `GET /api/devices`,
+  `GET /api/devices/{device_id}/latest`,
+  `GET /api/devices/{device_id}/history`,
+  `POST /api/devices/{device_id}/images`,
+  `POST /api/devices/{device_id}/commands`,
+  `POST /api/devices/{device_id}/ai/analyze`,
+  `GET/PUT /api/devices/{device_id}/autopilot`, and
+  `WS /ws/devices/{device_id}`.
+- Firmware must publish command acknowledgements with `executed`, `rejected`,
+  or `failed`. Unsupported commands should be rejected, not silently executed.
+- The frontend reads initial state through HTTP and then applies WebSocket
+  envelopes. It must not connect directly to PostgreSQL or MQTT.
 
-## Project Focus
+## LLM and Autopilot
 
-- Primary board: ESP32-S3-DevKitC-1.
-- Primary framework: ESP-IDF v5.5.2. Prefer the EIM-managed setup from
-  `C:\Espressif\tools\eim_idf.json` for builds. Treat
-  `references/esp-idf-v5.5.2/` as a fallback/reference checkout; leave
-  `references/esp-idf/` untouched unless the user explicitly asks.
-- Competition direction: sensor + cloud control.
-- Required competition capabilities: ESP32-S3 main controller, at least one
-  fused sensor data source, at least one cloud LLM service, and either upstream
-  sensor data processing or downstream LLM-issued device commands.
-- Firmware modules include SHT30, TVOC301, LM393, ST7735, SG90, beeper, manual
-  button, OV2640 camera, MQTT telemetry/control, and HTTP image upload.
+- Keep all LLM provider integration in `server/`; firmware and frontend must
+  not call external LLM providers directly.
+- LLM integration is OpenAI-compatible `chat/completions` and may attach a fresh
+  JPEG as a vision message when `AIOT_LLM_VISION_ENABLED=true`.
+- `AIOT_LLM_ENDPOINT=mock` is the deterministic offline/demo mode and should
+  keep the full AI decision loop testable without network access or API keys.
+- AI-generated commands are persisted before publishing. Only executable
+  high-confidence commands are sent to MQTT; low-confidence decisions remain
+  pending suggestions.
+- Autopilot state is per-device and in-memory. It resets from
+  `AIOT_AUTOPILOT_ENABLED` on server restart.
 
-## Firmware Boundaries
+## Firmware Build and Boundaries
 
+- Firmware mainline is `firmware/esp32s3/`.
+- From the repository root, use PowerShell 7 and build with:
+
+  ```powershell
+  cd firmware\esp32s3
+  idf.py -B build-esp32s3 build
+  ```
+
+- The current checkout does not contain `scripts/build.ps1`; do not cite it as
+  the active build entrypoint unless that script is restored and verified.
+- Primary framework is ESP-IDF v5.5.2. Prefer the EIM/VS Code ESP-IDF setup if
+  present; otherwise use the active shell's ESP-IDF environment.
+- Default firmware configuration disables Wi-Fi, MQTT, image upload, camera,
+  display, actuators, and button modules so the project can compile without
+  local credentials or attached hardware.
+- Enable runtime features through `idf.py menuconfig` or a local `sdkconfig`.
+  Do not commit local `sdkconfig` or secrets.
 - Keep `app_main` as an orchestrator: load config, initialize modules, and start
-  tasks. Do not collapse hardware logic into a large monolithic function.
-- Keep local runtime state in `main/state/`; do not store manual override/window
-  state inside sensor samples.
+  tasks. Do not collapse hardware logic into one monolithic function.
+- Keep local runtime state in `main/state/`; do not store manual
+  override/window/alarm state inside sensor samples.
 - `main/Kconfig` user-facing titles are intentionally Chinese. Do not rename
   `APP_*` config symbols without updating all dependent C code.
-- Firmware telemetry and command handling must follow the MQTT protocol docs.
+- OV2640 camera configuration currently uses PWDN, SIOD/SIOC, D0-D7, VSYNC,
+  HREF, and PCLK. Do not invent unsupported camera pins or Kconfig symbols
+  without matching hardware and source changes.
 
-## Repository Layout
+## Server Workflow
 
-- ESP SDKs, docs, and reference repositories belong under `references/`.
-- Deployable infrastructure belongs under `infra/` plus root
-  `docker-compose.yml`.
-- Do not commit secrets, Wi-Fi passwords, API tokens, or cloud credentials into
-  source files.
-- Do not copy build artifacts from teammate or local projects into this
-  repository. Keep `build/`, `managed_components/`, `dependencies.lock`, local
-  `sdkconfig`, binaries, uploaded images, and captured images untracked.
+- Direct local run:
+
+  ```powershell
+  cd server
+  python -m venv .venv
+  .\.venv\Scripts\python -m pip install -r requirements.txt
+  .\.venv\Scripts\python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+  ```
+
+- Server tests:
+
+  ```powershell
+  cd server
+  .\.venv\Scripts\python -m pytest tests
+  ```
+
+- Tests must run without PostgreSQL or EMQX. They use SQLite and environment
+  overrides from `server/tests/conftest.py`.
+- Configuration uses `AIOT_*` environment variables and `server/.env` for local
+  direct runs. Keep real `.env` files untracked.
+
+## Web Workflow
+
+- Direct local run:
+
+  ```powershell
+  cd web
+  pnpm install --ignore-scripts
+  pnpm run dev
+  ```
+
+- Verification:
+
+  ```powershell
+  cd web
+  pnpm run build
+  ```
+
+- The app uses Next.js 15, React 19, TypeScript, Tailwind CSS, Recharts, and
+  lucide-react. Keep UI work dashboard-first and consistent with the existing
+  component structure under `web/src/components/`.
+- Use `NEXT_PUBLIC_API_BASE_URL` when the FastAPI server is not on
+  `http://localhost:8000`.
+
+## Local Stack
+
+- Start the full local demo stack from the repository root:
+
+  ```powershell
+  docker compose up --build
+  ```
+
+- Default local services:
+  PostgreSQL `localhost:5432`, EMQX MQTT `localhost:1883`, EMQX dashboard
+  `http://localhost:18083`, FastAPI `http://localhost:8000`, Next.js
+  `http://localhost:3000`.
+- Default EMQX dashboard credentials are `admin / public`; anonymous MQTT is
+  only acceptable for the first local demo stack.
+- For real device demos on the same Wi-Fi, configure firmware targets with the
+  laptop IP: MQTT `<laptop-ip>:1883` and image/API base
+  `http://<laptop-ip>:8000`.
+
+## Secrets and Generated Files
+
+- Do not put LLM API keys, Wi-Fi credentials, MQTT credentials, cloud tokens, or
+  non-demo database passwords in firmware, frontend, docs, or committed config.
+- Do not commit build outputs, `managed_components/`, `dependencies.lock`,
+  `sdkconfig*`, binaries, uploaded images, captured images, virtual
+  environments, frontend build output, database files, or local SDK/reference
+  checkouts.
+- `references/` is ignored and may contain large local SDK/reference clones.
+  Treat it as local support material unless the user explicitly asks otherwise.
+- Keep `.agents/`, `.codex/`, `.claude/`, local `.env` files, logs, and editor
+  transients out of committed project state.
