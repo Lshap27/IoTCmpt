@@ -97,6 +97,8 @@ export default function Dashboard() {
   const telemetry = latest?.telemetry;
   const hasTelemetry = Boolean(telemetry);
   const deviceStatus = latest?.device.status ?? "unknown";
+  const latestCommand = latest?.command;
+  const latestImageAt = latest?.image?.created_at ? new Date(latest.image.created_at).toLocaleString() : "--";
   const liveStatusText =
     socketState === "live"
       ? "实时通道已连接"
@@ -150,6 +152,16 @@ export default function Dashboard() {
             <Metric label="开窗建议" value={hasTelemetry ? (telemetry?.fusion.recommend_open_window ? "建议开窗" : "无需开窗") : "--"} />
           </Panel>
 
+          <Panel title="硬件验收" icon={<Cloud size={18} />}>
+            <Metric label="Telemetry" value={hasTelemetry ? "已接入" : "等待上报"} />
+            <Metric label="命令状态" value={latestCommand?.status ?? "--"} />
+            <Metric
+              label="执行时间"
+              value={latestCommand?.executed_at ? new Date(latestCommand.executed_at).toLocaleString() : "--"}
+            />
+            <Metric label="图片时间" value={latestImageAt} />
+          </Panel>
+
           <Panel title="传感器" icon={<Wind size={18} />}>
             <Metric label="温度" value={formatValue(telemetry?.sensors.temperature_c, "C")} />
             <Metric label="湿度" value={formatValue(telemetry?.sensors.humidity_percent, "%")} />
@@ -195,9 +207,14 @@ export default function Dashboard() {
 
         <aside className="space-y-4">
           <Panel title="AI 决策" icon={<BrainCircuit size={18} />}>
-            <Metric label="最新指令" value={String(latest?.command?.type ?? "--")} />
-            <Metric label="置信度" value={String(latest?.command?.confidence ?? "--")} />
-            <Metric label="原因" value={String(latest?.command?.reason ?? telemetry?.fusion.reason ?? "--")} />
+            <Metric label="最新指令" value={latestCommand?.type ?? "--"} />
+            <Metric label="发布状态" value={latestCommand?.status ?? "--"} />
+            <Metric
+              label="发布时间"
+              value={latestCommand?.published_at ? new Date(latestCommand.published_at).toLocaleString() : "--"}
+            />
+            <Metric label="置信度" value={String(latestCommand?.confidence ?? "--")} />
+            <Metric label="原因" value={latestCommand?.reason ?? telemetry?.fusion.reason ?? "--"} />
             <button className="mt-3 w-full border border-accent bg-accent px-3 py-2 text-sm font-semibold text-white" onClick={analyze}>
               触发 AI 分析
             </button>

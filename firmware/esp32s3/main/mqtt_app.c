@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cJSON.h"
+#include "control_state.h"
 #include "esp_check.h"
 #include "esp_log.h"
 #include "mqtt_client.h"
@@ -13,7 +15,8 @@ static const char *TAG = "MQTT_APP";
 static app_config_t s_config;
 static esp_mqtt_client_handle_t s_client;
 static mqtt_app_command_handler_t s_command_handler;
-static int s_sequence;
+static char s_status_topic[96];
+static char s_status_offline_payload[128];
 
 static esp_err_t make_topic(char *buffer, size_t buffer_size, const char *suffix)
 {
@@ -28,56 +31,66 @@ static esp_err_t make_topic(char *buffer, size_t buffer_size, const char *suffix
     return ESP_OK;
 }
 
-static void copy_json_string_value(char *dest, size_t dest_size, const char *payload, const char *key)
+static void copy_json_string(char *dest, size_t dest_size, const cJSON *root, const char *key)
 {
     if (!dest || dest_size == 0) {
         return;
     }
     dest[0] = '\0';
-    if (!payload || !key) {
+    if (!root || !key) {
         return;
     }
 
-    char pattern[32];
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-    const char *match = strstr(payload, pattern);
-    if (!match) {
-        return;
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, key);
+    if (cJSON_IsString(item) && item->valuestring) {
+        strlcpy(dest, item->valuestring, dest_size);
     }
-    match = strchr(match + strlen(pattern), ':');
-    if (!match) {
-        return;
-    }
-    match++;
-    while (*match == ' ' || *match == '"') {
-        match++;
-    }
-    const char *end = match;
-    while (*end && *end != '"' && *end != ',' && *end != '}') {
-        end++;
-    }
-    const size_t len = (size_t)(end - match);
-    const size_t copy_len = len < dest_size - 1 ? len : dest_size - 1;
-    memcpy(dest, match, copy_len);
-    dest[copy_len] = '\0';
 }
 
 static void handle_command_payload(const char *payload)
 {
-    static char command_id[64];
-    static char command_type[64];
-
-    copy_json_string_value(command_id, sizeof(command_id), payload, "command_id");
-    copy_json_string_value(command_type, sizeof(command_type), payload, "type");
-
-    ESP_LOGI(TAG, "received command id=%s type=%s", command_id, command_type);
-    mqtt_app_command_t command = {
-        .command_id = command_id,
-        .type = command_type,
-    };
-    if (s_command_handler) {
-        s_command_handler(&command);
+    if (!payload) {
+        return;
     }
+
+    cJSON *root = cJSON_Parse(payload);
+    if (!root) {
+        ESP_LOGW(TAG, "command payload is not JSON: %s", payload);
+        return;
+    }
+
+    mqtt_app_command_t envelope = {0};
+    command_clear(&envelope.command);
+    copy_json_string(envelope.command_id, sizeof(envelope.command_id), root, "command_id");
+
+    char command_type[64] = {0};
+    copy_json_string(command_type, sizeof(command_type), root, "type");
+    esp_err_t err = command_from_name(command_type, &envelope.command);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "unsupported command type=%s", command_type);
+    }
+
+    const cJSON *confidence = cJSON_GetObjectItemCaseSensitive(root, "confidence");
+    if (cJSON_IsNumber(confidence)) {
+        envelope.command.confidence = (float)confidence->valuedouble;
+    }
+
+    const cJSON *parameter = cJSON_GetObjectItemCaseSensitive(root, "parameter");
+    if (parameter) {
+        char *parameter_json = cJSON_PrintUnformatted(parameter);
+        if (parameter_json) {
+            strlcpy(envelope.command.parameter, parameter_json, sizeof(envelope.command.parameter));
+            cJSON_free(parameter_json);
+        }
+    }
+
+    strlcpy(envelope.command.raw, payload, sizeof(envelope.command.raw));
+    ESP_LOGI(TAG, "received command id=%s type=%s", envelope.command_id, command_type);
+    if (s_command_handler) {
+        s_command_handler(&envelope);
+    }
+
+    cJSON_Delete(root);
 }
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
@@ -103,7 +116,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
     }
     case MQTT_EVENT_DATA: {
-        char payload[256] = {0};
+        char payload[512] = {0};
         const int copy_len = event->data_len < (int)sizeof(payload) - 1 ? event->data_len : (int)sizeof(payload) - 1;
         memcpy(payload, event->data, copy_len);
         payload[copy_len] = '\0';
@@ -134,8 +147,15 @@ esp_err_t mqtt_app_init(const app_config_t *config)
         return ESP_ERR_INVALID_STATE;
     }
 
+    ESP_RETURN_ON_ERROR(make_topic(s_status_topic, sizeof(s_status_topic), "status"), TAG, "status topic");
+    snprintf(s_status_offline_payload, sizeof(s_status_offline_payload), "{\"status\":\"offline\"}");
+
     esp_mqtt_client_config_t mqtt_config = {
         .broker.address.uri = s_config.mqtt_broker_uri,
+        .session.last_will.topic = s_status_topic,
+        .session.last_will.msg = s_status_offline_payload,
+        .session.last_will.qos = 1,
+        .session.last_will.retain = true,
     };
     s_client = esp_mqtt_client_init(&mqtt_config);
     if (!s_client) {
@@ -171,38 +191,75 @@ esp_err_t mqtt_app_publish_status(const char *status)
     return ESP_OK;
 }
 
-esp_err_t mqtt_app_publish_telemetry(void)
+static void add_optional_number(cJSON *root, const char *name, bool valid, double value)
 {
-    if (!s_client) {
+    if (valid) {
+        cJSON_AddNumberToObject(root, name, value);
+    } else {
+        cJSON_AddNullToObject(root, name);
+    }
+}
+
+static char *build_telemetry_json(const sensor_sample_t *sample, const fusion_state_t *fusion)
+{
+    control_state_t control = {0};
+    control_state_get(&control);
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *sensors = cJSON_CreateObject();
+    cJSON *state = cJSON_CreateObject();
+    cJSON *fusion_json = cJSON_CreateObject();
+    if (!root || !sensors || !state || !fusion_json) {
+        cJSON_Delete(root);
+        cJSON_Delete(sensors);
+        cJSON_Delete(state);
+        cJSON_Delete(fusion_json);
+        return NULL;
+    }
+
+    cJSON_AddStringToObject(root, "device_id", s_config.device_id);
+    add_optional_number(sensors, "temperature_c", sample->climate_valid, sample->temperature_c);
+    add_optional_number(sensors, "humidity_percent", sample->climate_valid, sample->humidity_percent);
+    add_optional_number(sensors, "tvoc_ppb", sample->air_valid, sample->tvoc_ppb);
+    add_optional_number(sensors, "hcho_ug_m3", sample->air_valid, sample->hcho_ug_m3);
+    add_optional_number(sensors, "eco2_ppm", sample->air_valid, sample->eco2_ppm);
+    if (sample->light_valid) {
+        cJSON_AddBoolToObject(sensors, "light_is_dark", sample->light_is_dark);
+    } else {
+        cJSON_AddNullToObject(sensors, "light_is_dark");
+    }
+
+    cJSON_AddBoolToObject(state, "window_open", control.window_open);
+    cJSON_AddBoolToObject(state, "alarm_on", control.alarm_on);
+    cJSON_AddBoolToObject(state, "manual_override", control.manual_override);
+
+    cJSON_AddStringToObject(fusion_json, "air_quality", fusion_air_quality_name(fusion->air_quality));
+    cJSON_AddBoolToObject(fusion_json, "recommend_open_window", fusion->recommend_open_window);
+    cJSON_AddBoolToObject(fusion_json, "alarm_enabled", fusion->alarm_enabled);
+    cJSON_AddStringToObject(fusion_json, "reason", fusion->reason);
+
+    cJSON_AddItemToObject(root, "sensors", sensors);
+    cJSON_AddItemToObject(root, "state", state);
+    cJSON_AddItemToObject(root, "fusion", fusion_json);
+    return cJSON_PrintUnformatted(root);
+}
+
+esp_err_t mqtt_app_publish_telemetry(const sensor_sample_t *sample, const fusion_state_t *fusion)
+{
+    if (!s_client || !sample || !fusion) {
         return ESP_ERR_INVALID_STATE;
     }
 
     char topic[96];
-    char payload[512];
     ESP_RETURN_ON_ERROR(make_topic(topic, sizeof(topic), "telemetry"), TAG, "telemetry topic");
 
-    const int temp = 24 + (s_sequence % 4);
-    const int humidity = 58 + (s_sequence % 8);
-    const int tvoc = 120 + (s_sequence * 7) % 80;
-    const bool watch = tvoc > 170;
-    snprintf(
-        payload,
-        sizeof(payload),
-        "{\"device_id\":\"%s\",\"sensors\":{\"temperature_c\":%d,\"humidity_percent\":%d,"
-        "\"tvoc_ppb\":%d,\"hcho_ug_m3\":30,\"eco2_ppm\":450,\"light_is_dark\":false},"
-        "\"state\":{\"window_open\":false,\"alarm_on\":false,\"manual_override\":false},"
-        "\"fusion\":{\"air_quality\":\"%s\",\"recommend_open_window\":%s,"
-        "\"alarm_enabled\":%s,\"reason\":\"mock firmware telemetry\"}}",
-        s_config.device_id,
-        temp,
-        humidity,
-        tvoc,
-        watch ? "watch" : "good",
-        watch ? "true" : "false",
-        watch ? "true" : "false"
-    );
-    s_sequence++;
+    char *payload = build_telemetry_json(sample, fusion);
+    if (!payload) {
+        return ESP_ERR_NO_MEM;
+    }
+
     esp_mqtt_client_publish(s_client, topic, payload, 0, 0, false);
+    cJSON_free(payload);
     return ESP_OK;
 }
 
@@ -213,18 +270,24 @@ esp_err_t mqtt_app_publish_command_ack(const mqtt_app_command_t *command, const 
     }
 
     char topic[96];
-    char payload[256];
     ESP_RETURN_ON_ERROR(make_topic(topic, sizeof(topic), "command_ack"), TAG, "ack topic");
-    snprintf(
-        payload,
-        sizeof(payload),
-        "{\"device_id\":\"%s\",\"command_id\":\"%s\",\"status\":\"%s\",\"message\":\"%s\"}",
-        s_config.device_id,
-        command->command_id ? command->command_id : "",
-        status,
-        message ? message : ""
-    );
+
+    cJSON *root = cJSON_CreateObject();
+    if (!root) {
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_AddStringToObject(root, "device_id", s_config.device_id);
+    cJSON_AddStringToObject(root, "command_id", command->command_id);
+    cJSON_AddStringToObject(root, "status", status);
+    cJSON_AddStringToObject(root, "message", message ? message : "");
+    char *payload = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!payload) {
+        return ESP_ERR_NO_MEM;
+    }
+
     esp_mqtt_client_publish(s_client, topic, payload, 0, 1, false);
+    cJSON_free(payload);
     return ESP_OK;
 }
 

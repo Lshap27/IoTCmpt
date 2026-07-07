@@ -87,6 +87,8 @@ def serialize_command(command: models.Command) -> dict[str, Any]:
         "source": command.source,
         "confidence": command.confidence or 0.0,
         "reason": command.reason or "",
+        "status": command.status,
         "created_at": command.created_at.isoformat() if command.created_at else "",
+        "published_at": command.published_at.isoformat() if command.published_at else None,
+        "executed_at": command.executed_at.isoformat() if command.executed_at else None,
     }
-

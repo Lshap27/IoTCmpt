@@ -1,15 +1,27 @@
 #include "app_config.h"
+#include "app_config_defaults.h"
+#include "app_status.h"
+#include "actuators.h"
+#include "backend_upload.h"
+#include "camera_app.h"
+#include "control_state.h"
+#include "display.h"
+#include "esp_camera.h"
+#include "esp_err.h"
+#include "esp_log.h"
+#include "fusion.h"
+#include "inputs.h"
 #include "mqtt_app.h"
+#include "sensors.h"
 
 #include <string.h>
 
-#include "esp_err.h"
 #include "esp_event.h"
-#include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
 
@@ -17,12 +29,96 @@ static const char *TAG = "AIOT_FW";
 static const int WIFI_CONNECTED_BIT = BIT0;
 
 static app_config_t s_config;
+static app_status_t s_status;
+static sensor_sample_t s_latest_sample;
+static fusion_state_t s_latest_fusion;
+static mqtt_app_command_t s_latest_command;
+static bool s_has_command;
+static SemaphoreHandle_t s_latest_mutex;
+static SemaphoreHandle_t s_command_mutex;
 static EventGroupHandle_t s_wifi_events;
+
+static app_status_link_t link_status_from_result(esp_err_t result)
+{
+    return result == ESP_OK ? APP_STATUS_LINK_READY : APP_STATUS_LINK_DEGRADED;
+}
+
+static void latest_update(const sensor_sample_t *sample, const fusion_state_t *fusion)
+{
+    if (s_latest_mutex && xSemaphoreTake(s_latest_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        s_latest_sample = *sample;
+        s_latest_fusion = *fusion;
+        xSemaphoreGive(s_latest_mutex);
+    } else {
+        s_latest_sample = *sample;
+        s_latest_fusion = *fusion;
+    }
+}
+
+static void latest_get(sensor_sample_t *sample, fusion_state_t *fusion, app_status_t *status)
+{
+    if (s_latest_mutex && xSemaphoreTake(s_latest_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        *sample = s_latest_sample;
+        *fusion = s_latest_fusion;
+        *status = s_status;
+        xSemaphoreGive(s_latest_mutex);
+    } else {
+        *sample = s_latest_sample;
+        *fusion = s_latest_fusion;
+        *status = s_status;
+    }
+}
+
+static void latest_command_set(const mqtt_app_command_t *command)
+{
+    if (!command) {
+        return;
+    }
+
+    if (s_command_mutex && xSemaphoreTake(s_command_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        s_latest_command = *command;
+        s_has_command = true;
+        xSemaphoreGive(s_command_mutex);
+    } else {
+        s_latest_command = *command;
+        s_has_command = true;
+    }
+}
+
+static bool latest_command_take(mqtt_app_command_t *command)
+{
+    bool has_command = false;
+    if (!command) {
+        return false;
+    }
+
+    if (s_command_mutex && xSemaphoreTake(s_command_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        if (s_has_command) {
+            *command = s_latest_command;
+            memset(&s_latest_command, 0, sizeof(s_latest_command));
+            command_clear(&s_latest_command.command);
+            s_has_command = false;
+            has_command = true;
+        }
+        xSemaphoreGive(s_command_mutex);
+    } else if (s_has_command) {
+        *command = s_latest_command;
+        memset(&s_latest_command, 0, sizeof(s_latest_command));
+        command_clear(&s_latest_command.command);
+        s_has_command = false;
+        has_command = true;
+    }
+
+    return has_command;
+}
 
 static void on_command(const mqtt_app_command_t *command)
 {
-    ESP_LOGI(TAG, "command handler type=%s", command && command->type ? command->type : "");
-    mqtt_app_publish_command_ack(command, "executed", "mock firmware command handler");
+    if (!command) {
+        return;
+    }
+    ESP_LOGI(TAG, "queued command id=%s type=%s", command->command_id, command_type_name(command->command.type));
+    latest_command_set(command);
 }
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
@@ -85,19 +181,163 @@ static void telemetry_task(void *arg)
     (void)arg;
 
     while (true) {
-        esp_err_t err = mqtt_app_publish_telemetry();
-        if (err == ESP_OK) {
-            ESP_LOGI(TAG, "mock telemetry published");
-        } else {
-            ESP_LOGI(TAG, "mock telemetry ready but MQTT unavailable: %s", esp_err_to_name(err));
+        sensor_sample_t sample;
+        fusion_state_t fusion;
+
+        s_status.loop_count++;
+        s_status.last_sensor_result = sensors_read(&sample);
+        if (s_status.last_sensor_result != ESP_OK) {
+            ESP_LOGW(TAG, "sensor read skipped: %s", esp_err_to_name(s_status.last_sensor_result));
+            vTaskDelay(pdMS_TO_TICKS(s_config.sensor_interval_ms));
+            continue;
         }
+
+        esp_err_t err = fusion_evaluate(&sample, &fusion);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "fusion failed: %s", esp_err_to_name(err));
+            vTaskDelay(pdMS_TO_TICKS(s_config.sensor_interval_ms));
+            continue;
+        }
+
+        latest_update(&sample, &fusion);
+        err = mqtt_app_publish_telemetry(&sample, &fusion);
+        if (err == ESP_OK) {
+            s_status.cloud = APP_STATUS_LINK_READY;
+            ESP_LOGI(TAG, "telemetry published air_quality=%s", fusion_air_quality_name(fusion.air_quality));
+        } else {
+            s_status.cloud = s_config.mqtt_enabled ? APP_STATUS_LINK_DEGRADED : APP_STATUS_LINK_DISABLED;
+            ESP_LOGI(TAG, "telemetry ready but MQTT unavailable: %s", esp_err_to_name(err));
+        }
+
         vTaskDelay(pdMS_TO_TICKS(s_config.sensor_interval_ms));
+    }
+}
+
+static void actuator_task(void *arg)
+{
+    (void)arg;
+
+    esp_err_t err = actuator_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "actuator init skipped: %s", esp_err_to_name(err));
+    }
+
+    while (true) {
+        sensor_sample_t sample;
+        fusion_state_t fusion;
+        app_status_t status;
+        mqtt_app_command_t envelope = {0};
+        (void)sample;
+        (void)status;
+
+        latest_get(&sample, &fusion, &status);
+        const bool has_command = latest_command_take(&envelope);
+
+        if (err != ESP_OK) {
+            if (has_command) {
+                mqtt_app_publish_command_ack(&envelope, "rejected", "actuator disabled");
+            }
+            vTaskDelay(pdMS_TO_TICKS(500));
+            continue;
+        }
+
+        s_status.last_command_result = actuator_apply(has_command ? &envelope.command : NULL, &fusion);
+        if (has_command) {
+            const char *ack_status = s_status.last_command_result == ESP_OK ? "executed" :
+                                     s_status.last_command_result == ESP_ERR_NOT_SUPPORTED ? "rejected" : "failed";
+            mqtt_app_publish_command_ack(&envelope, ack_status, esp_err_to_name(s_status.last_command_result));
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+}
+
+static void display_task(void *arg)
+{
+    (void)arg;
+
+    esp_err_t err = display_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "display init skipped: %s", esp_err_to_name(err));
+        vTaskDelete(NULL);
+        return;
+    }
+
+    while (true) {
+        sensor_sample_t sample;
+        fusion_state_t fusion;
+        app_status_t status;
+        latest_get(&sample, &fusion, &status);
+        display_render(&sample, &fusion, &status);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
+static void camera_upload_task(void *arg)
+{
+    (void)arg;
+
+    int capture_failures = 0;
+    int upload_failures = 0;
+
+    while (camera_app_init() != ESP_OK) {
+        ESP_LOGW(TAG, "camera init failed, retrying");
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+
+    while (true) {
+        camera_fb_t *frame = camera_app_capture();
+        if (!frame) {
+            capture_failures++;
+            if (capture_failures == 5) {
+                ESP_LOGI(TAG, "camera capture failed repeatedly, reinitializing");
+                esp_camera_deinit();
+                while (camera_app_init() != ESP_OK) {
+                    vTaskDelay(pdMS_TO_TICKS(10000));
+                }
+                capture_failures = 0;
+            }
+            vTaskDelay(pdMS_TO_TICKS(10000));
+            continue;
+        }
+
+        capture_failures = 0;
+        esp_err_t err = backend_upload_jpeg(s_config.image_upload_url, frame->buf, frame->len);
+        if (err == ESP_OK) {
+            upload_failures = 0;
+            ESP_LOGI(TAG, "image uploaded");
+        } else if (err != ESP_ERR_INVALID_STATE && err != ESP_ERR_INVALID_ARG) {
+            upload_failures++;
+            if (upload_failures == 1 || upload_failures % 30 == 0) {
+                ESP_LOGW(TAG, "image upload failed %d times: %s", upload_failures, esp_err_to_name(err));
+            }
+        }
+
+        if (s_config.pose_upload_url[0] != '\0') {
+            err = backend_upload_jpeg(s_config.pose_upload_url, frame->buf, frame->len);
+            if (err == ESP_OK) {
+                ESP_LOGI(TAG, "pose upload succeeded");
+            } else if (err != ESP_ERR_INVALID_STATE && err != ESP_ERR_INVALID_ARG) {
+                ESP_LOGW(TAG, "pose upload failed: %s", esp_err_to_name(err));
+            }
+        }
+
+        camera_app_return_frame(frame);
+        vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
 
 void app_main(void)
 {
-    app_config_load(&s_config);
+    memset(&s_status, 0, sizeof(s_status));
+    memset(&s_latest_sample, 0, sizeof(s_latest_sample));
+    memset(&s_latest_fusion, 0, sizeof(s_latest_fusion));
+    memset(&s_latest_command, 0, sizeof(s_latest_command));
+    command_clear(&s_latest_command.command);
+    s_status.wifi = APP_STATUS_LINK_DISABLED;
+    s_status.cloud = APP_STATUS_LINK_DISABLED;
+
+    ESP_ERROR_CHECK(app_config_load(&s_config));
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -105,12 +345,29 @@ void app_main(void)
         err = nvs_flash_init();
     }
     ESP_ERROR_CHECK(err);
+    ESP_ERROR_CHECK(control_state_init());
 
-    err = wifi_start();
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-        ESP_LOGW(TAG, "Wi-Fi not ready: %s", esp_err_to_name(err));
+    s_latest_mutex = xSemaphoreCreateMutex();
+    s_command_mutex = xSemaphoreCreateMutex();
+    if (!s_latest_mutex || !s_command_mutex) {
+        ESP_LOGE(TAG, "failed to create application mutexes");
+        return;
     }
 
+    err = sensors_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "sensor layer degraded: %s", esp_err_to_name(err));
+    }
+    s_status.last_sensor_result = err;
+
+    err = wifi_start();
+    if (err == ESP_ERR_INVALID_STATE) {
+        s_status.wifi = APP_STATUS_LINK_DISABLED;
+    } else {
+        s_status.wifi = link_status_from_result(err);
+    }
+
+    ESP_ERROR_CHECK(backend_upload_init(&s_config));
     ESP_ERROR_CHECK(mqtt_app_set_command_handler(on_command));
     err = mqtt_app_init(&s_config);
     if (err == ESP_OK && s_config.wifi_enabled && s_config.mqtt_enabled) {
@@ -119,7 +376,36 @@ void app_main(void)
             ESP_LOGW(TAG, "MQTT start failed: %s", esp_err_to_name(err));
         }
     }
+    s_status.cloud = s_config.mqtt_enabled ? link_status_from_result(err) : APP_STATUS_LINK_DISABLED;
 
-    xTaskCreate(telemetry_task, "telemetry", 4096, NULL, 5, NULL);
-    ESP_LOGI(TAG, "AIoT firmware shell started device_id=%s", s_config.device_id);
+    err = inputs_start();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "input task failed: %s", esp_err_to_name(err));
+    }
+
+    BaseType_t ok = xTaskCreate(telemetry_task, "telemetry", 8192, NULL, 5, NULL);
+    if (ok != pdPASS) {
+        ESP_LOGE(TAG, "failed to start telemetry task");
+    }
+
+    ok = xTaskCreate(actuator_task, "actuator_task", 4096, NULL, 4, NULL);
+    if (ok != pdPASS) {
+        ESP_LOGE(TAG, "failed to start actuator task");
+    }
+
+    if (CONFIG_APP_DISPLAY_ENABLED) {
+        ok = xTaskCreate(display_task, "display_task", 4096, NULL, 4, NULL);
+        if (ok != pdPASS) {
+            ESP_LOGE(TAG, "failed to start display task");
+        }
+    }
+
+    if (CONFIG_APP_CAMERA_ENABLED) {
+        ok = xTaskCreate(camera_upload_task, "camera_task", 4096, NULL, 2, NULL);
+        if (ok != pdPASS) {
+            ESP_LOGE(TAG, "failed to start camera task");
+        }
+    }
+
+    ESP_LOGI(TAG, "AIoT firmware mainline started device_id=%s", s_config.device_id);
 }

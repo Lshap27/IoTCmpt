@@ -3,13 +3,27 @@ idf_component_register(
         "main.c"
         "app_config.c"
         "mqtt_app.c"
+        "sensors/sensors.c"
+        "fusion/fusion.c"
+        "commands/commands.c"
+        "backend/backend_upload.c"
+        "camera/camera_app.c"
+        "display/display.c"
+        "actuators/actuators.c"
+        "inputs/inputs.c"
+        "state/control_state.c"
     INCLUDE_DIRS
         "include"
     REQUIRES
+        driver
+        esp_http_client
+        esp_timer
         esp_event
+        esp_lcd
         esp_netif
         esp_wifi
+        json
         mqtt
         nvs_flash
+        esp32-camera
 )
-

@@ -40,7 +40,18 @@ export type LatestState = {
   };
   telemetry: TelemetryPoint | null;
   image: { id: number; url: string; created_at: string } | null;
-  command: Record<string, unknown> | null;
+  command: {
+    command_id: string;
+    type: string;
+    parameter: Record<string, unknown>;
+    source: string;
+    confidence: number;
+    reason: string;
+    status: string;
+    created_at: string;
+    published_at: string | null;
+    executed_at: string | null;
+  } | null;
   ai_result: Record<string, unknown> | null;
 };
 
@@ -79,4 +90,3 @@ export async function requestAiAnalysis(deviceId: string) {
   }
   return response.json();
 }
-

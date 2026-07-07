@@ -1,16 +1,20 @@
-menu "AIoT MQTT 固件壳"
+menu "AIoT MQTT 固件主线"
 
     config APP_DEVICE_ID
         string "设备 ID"
         default "esp32s3-001"
 
+    config APP_SENSOR_MOCK_ENABLED
+        bool "使用模拟传感器数据"
+        default y
+
     config APP_SENSOR_INTERVAL_MS
-        int "模拟 telemetry 发布间隔（毫秒）"
+        int "传感器循环间隔（毫秒）"
         default 5000
         range 1000 60000
 
     config APP_WIFI_ENABLED
-        bool "启用 Wi-Fi"
+        bool "启用 Wi-Fi 连接"
         default n
 
     config APP_WIFI_SSID
@@ -29,5 +33,200 @@ menu "AIoT MQTT 固件壳"
         string "MQTT Broker URI"
         default "mqtt://192.168.1.10:1883"
 
-endmenu
+    config APP_CLOUD_ENABLED
+        bool "启用云端大模型调试路径"
+        default n
 
+    config APP_CLOUD_ENDPOINT
+        string "云端大模型接口地址"
+        default ""
+
+    config APP_CLOUD_MODEL
+        string "云端大模型名称"
+        default "demo-model"
+
+    config APP_CLOUD_TOKEN
+        string "云端大模型访问令牌"
+        default ""
+
+    menu "后端上传"
+        config APP_BACKEND_ENABLED
+            bool "启用 HTTP 图片上传"
+            default n
+
+        config APP_SENSOR_UPLOAD_URL
+            string "旧传感器 JSON 上传地址（保留兼容，不用于新主线）"
+            default ""
+
+        config APP_IMAGE_UPLOAD_URL
+            string "摄像头图片上传地址"
+            default ""
+            help
+                新架构默认格式为：
+                http://<server-host>:8000/api/devices/esp32s3-001/images
+
+        config APP_POSE_UPLOAD_URL
+            string "姿态检测上传地址（可选调试）"
+            default ""
+
+        config APP_BACKEND_COMMAND_ENABLED
+            bool "启用旧普通后端指令轮询（调试兼容）"
+            default n
+
+        config APP_BACKEND_COMMAND_BASE_URL
+            string "旧普通后端指令基础地址"
+            default ""
+
+        config APP_BACKEND_COMMAND_POLL_MS
+            int "旧普通后端指令轮询间隔（毫秒）"
+            default 5000
+            range 1000 60000
+    endmenu
+
+    menu "功能模块"
+        config APP_CAMERA_ENABLED
+            bool "启用 OV2640 摄像头任务"
+            default n
+
+        config APP_DISPLAY_ENABLED
+            bool "启用 ST7735 显示屏任务"
+            default n
+
+        config APP_ACTUATOR_ENABLED
+            bool "启用舵机和蜂鸣器执行任务"
+            default n
+
+        config APP_BUTTON_ENABLED
+            bool "启用手动按键任务"
+            default n
+    endmenu
+
+    menu "传感器引脚"
+        config APP_SHT30_SDA_GPIO
+            int "SHT30 软件 I2C SDA 引脚"
+            default 1
+
+        config APP_SHT30_SCL_GPIO
+            int "SHT30 软件 I2C SCL 引脚"
+            default 2
+
+        config APP_TVOC_UART_NUM
+            int "TVOC301 使用的 UART 编号"
+            default 2
+
+        config APP_TVOC_TX_GPIO
+            int "TVOC301 UART TX 引脚"
+            default 19
+
+        config APP_TVOC_RX_GPIO
+            int "TVOC301 UART RX 引脚"
+            default 20
+
+        config APP_LM393_DO_GPIO
+            int "LM393 数字输出引脚"
+            default 4
+    endmenu
+
+    menu "执行器和输入引脚"
+        config APP_SERVO_GPIO
+            int "SG90 舵机信号引脚"
+            default 36
+
+        config APP_BUTTON_GPIO
+            int "手动切换按键引脚"
+            default 21
+
+        config APP_BEEP_GPIO
+            int "有源蜂鸣器引脚"
+            default 35
+
+        config APP_BEEP_ACTIVE_LOW
+            bool "蜂鸣器低电平触发"
+            default y
+    endmenu
+
+    menu "显示屏引脚"
+        config APP_TFT_MOSI_GPIO
+            int "ST7735 MOSI 引脚"
+            default 6
+
+        config APP_TFT_SCLK_GPIO
+            int "ST7735 SCLK 引脚"
+            default 8
+
+        config APP_TFT_CS_GPIO
+            int "ST7735 CS 片选引脚"
+            default 10
+
+        config APP_TFT_DC_GPIO
+            int "ST7735 DC 引脚"
+            default 9
+
+        config APP_TFT_RST_GPIO
+            int "ST7735 复位引脚"
+            default 46
+
+        config APP_TFT_BLK_GPIO
+            int "ST7735 背光引脚"
+            default 7
+    endmenu
+
+    menu "摄像头引脚"
+        config APP_CAMERA_PWDN_GPIO
+            int "OV2640 PWDN 引脚"
+            default 42
+
+        config APP_CAMERA_SIOD_GPIO
+            int "OV2640 SIOD 引脚"
+            default 40
+
+        config APP_CAMERA_SIOC_GPIO
+            int "OV2640 SIOC 引脚"
+            default 39
+
+        config APP_CAMERA_D0_GPIO
+            int "OV2640 D0 引脚"
+            default 15
+
+        config APP_CAMERA_D1_GPIO
+            int "OV2640 D1 引脚"
+            default 17
+
+        config APP_CAMERA_D2_GPIO
+            int "OV2640 D2 引脚"
+            default 18
+
+        config APP_CAMERA_D3_GPIO
+            int "OV2640 D3 引脚"
+            default 16
+
+        config APP_CAMERA_D4_GPIO
+            int "OV2640 D4 引脚"
+            default 14
+
+        config APP_CAMERA_D5_GPIO
+            int "OV2640 D5 引脚"
+            default 12
+
+        config APP_CAMERA_D6_GPIO
+            int "OV2640 D6 引脚"
+            default 11
+
+        config APP_CAMERA_D7_GPIO
+            int "OV2640 D7 引脚"
+            default 48
+
+        config APP_CAMERA_VSYNC_GPIO
+            int "OV2640 VSYNC 引脚"
+            default 38
+
+        config APP_CAMERA_HREF_GPIO
+            int "OV2640 HREF 引脚"
+            default 47
+
+        config APP_CAMERA_PCLK_GPIO
+            int "OV2640 PCLK 引脚"
+            default 13
+    endmenu
+
+endmenu
