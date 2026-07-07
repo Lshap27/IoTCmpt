@@ -16,7 +16,7 @@ services:
       retries: 20
 
   emqx:
-    image: emqx/emqx:5
+    image: emqx/emqx:5.8.8
     environment:
       EMQX_NAME: aiot-emqx
       EMQX_DASHBOARD__DEFAULT_USERNAME: admin
@@ -65,4 +65,3 @@ volumes:
   aiot_emqx_data:
   aiot_emqx_log:
   aiot_uploads:
-

@@ -47,7 +47,22 @@ export default function Dashboard() {
     socket.onclose = () => setSocketState("offline");
     socket.onerror = () => setSocketState("error");
     socket.onmessage = (message) => {
-      const envelope = JSON.parse(message.data);
+      let envelope;
+      try {
+        envelope = JSON.parse(message.data);
+      } catch {
+        setEvents((current) =>
+          [
+            {
+              type: "error",
+              text: "WebSocket message is not valid JSON",
+              occurred_at: new Date().toISOString()
+            },
+            ...current
+          ].slice(0, 12)
+        );
+        return;
+      }
       setEvents((current) =>
         [
           {
@@ -80,6 +95,14 @@ export default function Dashboard() {
   );
 
   const telemetry = latest?.telemetry;
+  const hasTelemetry = Boolean(telemetry);
+  const deviceStatus = latest?.device.status ?? "unknown";
+  const liveStatusText =
+    socketState === "live"
+      ? "实时通道已连接"
+      : socketState === "connecting"
+        ? "正在连接实时通道"
+        : "实时通道不可用，页面保留最后一次 HTTP 数据";
 
   async function command(type: string) {
     setError("");
@@ -114,14 +137,17 @@ export default function Dashboard() {
       </header>
 
       {error ? <div className="mb-4 border border-danger bg-white px-3 py-2 text-sm text-danger">{error}</div> : null}
+      {socketState !== "live" ? (
+        <div className="mb-4 border border-warn bg-white px-3 py-2 text-sm text-warn">{liveStatusText}</div>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_340px]">
         <aside className="space-y-4">
           <Panel title="设备状态" icon={<PanelRightOpen size={18} />}>
-            <Metric label="在线状态" value={latest?.device.status ?? "unknown"} />
+            <Metric label="在线状态" value={deviceStatus} />
             <Metric label="最近上报" value={latest?.device.last_seen_at ? new Date(latest.device.last_seen_at).toLocaleString() : "--"} />
             <Metric label="空气质量" value={telemetry?.fusion.air_quality ?? "--"} />
-            <Metric label="开窗建议" value={telemetry?.fusion.recommend_open_window ? "建议开窗" : "无需开窗"} />
+            <Metric label="开窗建议" value={hasTelemetry ? (telemetry?.fusion.recommend_open_window ? "建议开窗" : "无需开窗") : "--"} />
           </Panel>
 
           <Panel title="传感器" icon={<Wind size={18} />}>
@@ -146,17 +172,23 @@ export default function Dashboard() {
 
           <Panel title="传感器曲线" icon={<Activity size={18} />}>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
-                  <CartesianGrid stroke="#D9E2EC" />
-                  <XAxis dataKey="time" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="temperature" stroke="#0E7C86" dot={false} strokeWidth={2} />
-                  <Line type="monotone" dataKey="humidity" stroke="#5B8DEF" dot={false} strokeWidth={2} />
-                  <Line type="monotone" dataKey="tvoc" stroke="#C77D12" dot={false} strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid stroke="#D9E2EC" />
+                    <XAxis dataKey="time" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="temperature" stroke="#0E7C86" dot={false} strokeWidth={2} />
+                    <Line type="monotone" dataKey="humidity" stroke="#5B8DEF" dot={false} strokeWidth={2} />
+                    <Line type="monotone" dataKey="tvoc" stroke="#C77D12" dot={false} strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center border border-line bg-panel text-sm text-slate-500">
+                  等待 telemetry 数据
+                </div>
+              )}
             </div>
           </Panel>
         </section>
@@ -215,8 +247,8 @@ function Panel({ title, icon, children }: { title: string; icon: React.ReactNode
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-3 border-b border-line py-2 last:border-b-0">
-      <span className="text-sm text-slate-500">{label}</span>
-      <span className="max-w-[160px] text-right text-sm font-semibold text-ink">{value}</span>
+      <span className="shrink-0 text-sm text-slate-500">{label}</span>
+      <span className="min-w-0 max-w-[170px] break-words text-right text-sm font-semibold text-ink">{value}</span>
     </div>
   );
 }
@@ -241,4 +273,3 @@ function Action({ label, onClick }: { label: string; onClick: () => void }) {
 function formatValue(value: number | null | undefined, unit: string) {
   return typeof value === "number" ? `${value.toFixed(1)} ${unit}` : "--";
 }
-

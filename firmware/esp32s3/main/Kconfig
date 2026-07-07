@@ -1,0 +1,33 @@
+menu "AIoT MQTT 固件壳"
+
+    config APP_DEVICE_ID
+        string "设备 ID"
+        default "esp32s3-001"
+
+    config APP_SENSOR_INTERVAL_MS
+        int "模拟 telemetry 发布间隔（毫秒）"
+        default 5000
+        range 1000 60000
+
+    config APP_WIFI_ENABLED
+        bool "启用 Wi-Fi"
+        default n
+
+    config APP_WIFI_SSID
+        string "Wi-Fi 名称（SSID）"
+        default ""
+
+    config APP_WIFI_PASSWORD
+        string "Wi-Fi 密码"
+        default ""
+
+    config APP_MQTT_ENABLED
+        bool "启用 MQTT"
+        default n
+
+    config APP_MQTT_BROKER_URI
+        string "MQTT Broker URI"
+        default "mqtt://192.168.1.10:1883"
+
+endmenu
+
