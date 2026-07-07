@@ -32,12 +32,28 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "demo-model"
     llm_timeout_seconds: float = 12.0
+    llm_vision_enabled: bool = True
+    llm_image_max_age_seconds: float = 600.0
+    llm_response_format: str = "json_object"
 
-    @field_validator("cors_origins", mode="before")
+    autopilot_enabled: bool = True
+    autopilot_cooldown_seconds: float = 120.0
+    autopilot_min_confidence: float = 0.6
+    autopilot_trigger_levels: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["alert"])
+
+    @field_validator("cors_origins", "autopilot_trigger_levels", mode="before")
     @classmethod
-    def split_cors_origins(cls, value):
+    def split_comma_list(cls, value):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("llm_response_format")
+    @classmethod
+    def check_response_format(cls, value: str) -> str:
+        allowed = {"json_object", "json_schema", "none"}
+        if value not in allowed:
+            raise ValueError(f"llm_response_format must be one of {sorted(allowed)}")
         return value
 
     @field_validator("base_url")

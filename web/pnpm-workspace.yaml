@@ -1,0 +1,5 @@
+# sharp / unrs-resolver 的原生构建脚本本项目用不到（未使用 next/image 优化），
+# 置 false 以免 install 因待审批构建脚本而失败。
+allowBuilds:
+  sharp: false
+  unrs-resolver: false

@@ -78,6 +78,20 @@ class AiAnalyzeResponse(CommandMessage):
     pass
 
 
+RiskLevel = Literal["low", "medium", "high", "unknown"]
+
+
+class AiDecision(BaseModel):
+    command: CommandMessage
+    risk_level: RiskLevel = "unknown"
+    summary: str = ""
+    model: str = ""
+
+
+class AutopilotIn(BaseModel):
+    enabled: bool
+
+
 class ImageAssetOut(BaseModel):
     id: int
     device_id: str

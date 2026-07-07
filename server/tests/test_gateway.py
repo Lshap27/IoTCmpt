@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from app.core import config
 from app.db import models
 from app.schemas import TelemetryIn
@@ -69,10 +71,14 @@ def test_llm_invalid_command_falls_back_to_none(client, monkeypatch):
     settings.llm_endpoint = "http://example.invalid/v1/chat/completions"
     settings.llm_api_key = "test"
     service = LLMService(settings)
-    monkeypatch.setattr(service, "_call_openai_compatible", lambda state: {"type": "door.unlock", "confidence": 1})
-    command = service.analyze({"device_id": "esp32s3-001"})
-    assert command.type == "none"
-    assert "不允许" in command.reason
+
+    async def fake_call(state, *, image_path=None):
+        return {"type": "door.unlock", "confidence": 1}
+
+    monkeypatch.setattr(service, "_call_openai_compatible", fake_call)
+    decision = asyncio.run(service.analyze({"device_id": "esp32s3-001"}))
+    assert decision.command.type == "none"
+    assert "不可执行" in decision.command.reason
 
 
 def test_command_validation_rejects_unknown():

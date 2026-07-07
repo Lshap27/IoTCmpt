@@ -8,16 +8,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router as api_router
-from app.api.routes import set_mqtt_service
+from app.api.routes import set_autopilot, set_mqtt_service
 from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.db.session import init_db
+from app.services.autopilot import AutoPilot
+from app.services.llm import LLMService
 from app.services.mqtt_ingest import ingest_mqtt_message
 from app.services.mqtt import MqttService
 from app.services.websocket import manager
 
 
-def _build_mqtt_handler(loop: asyncio.AbstractEventLoop):
+def _build_mqtt_handler(loop: asyncio.AbstractEventLoop, autopilot: AutoPilot):
     def handle(topic: str, payload: dict) -> None:
         db = SessionLocal()
         try:
@@ -27,6 +29,8 @@ def _build_mqtt_handler(loop: asyncio.AbstractEventLoop):
         finally:
             db.close()
         asyncio.run_coroutine_threadsafe(manager.broadcast(envelope.device_id, envelope.model_dump(mode="json")), loop)
+        if envelope.type == "telemetry":
+            autopilot.maybe_trigger(envelope.device_id, envelope.payload, loop)
 
     return handle
 
@@ -38,11 +42,16 @@ async def lifespan(app: FastAPI):
     if settings.auto_create_tables:
         init_db()
     loop = asyncio.get_running_loop()
-    mqtt_service = MqttService(settings, _build_mqtt_handler(loop))
+    autopilot = AutoPilot(settings, LLMService(settings))
+    mqtt_service = MqttService(settings, _build_mqtt_handler(loop, autopilot))
     mqtt_service.start()
+    autopilot.mqtt_service = mqtt_service
     app.state.mqtt_service = mqtt_service
+    app.state.autopilot = autopilot
     set_mqtt_service(mqtt_service)
+    set_autopilot(autopilot)
     yield
+    set_autopilot(None)
     set_mqtt_service(None)
     mqtt_service.stop()
 

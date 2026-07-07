@@ -34,13 +34,27 @@ console for demonstration and debugging.
 2. Firmware publishes periodic telemetry to `devices/{device_id}/telemetry`.
 3. Server stores telemetry and broadcasts a WebSocket `telemetry` event.
 4. Firmware uploads images to `POST /api/devices/{device_id}/images`.
-5. Frontend or server asks for AI analysis through
-   `POST /api/devices/{device_id}/ai/analyze`.
-6. Server calls the LLM provider, validates the result, stores an `ai_result`,
-   creates a command, and publishes it to `devices/{device_id}/command`.
-7. Firmware executes the command and publishes `command_ack`.
-8. Server stores the acknowledgement and broadcasts a WebSocket `command_ack`
+5. An AI analysis starts in one of two ways:
+   - automatically ("autopilot"): incoming telemetry matches the trigger rules
+     (`fusion.air_quality` in the configured levels, or `fusion.alarm_enabled`),
+     the per-device switch is on, and the cooldown has expired; or
+   - manually: the frontend calls `POST /api/devices/{device_id}/ai/analyze`.
+6. Server broadcasts `ai_analyzing`, then calls the LLM provider with the
+   device snapshot, a recent telemetry trend, and — when fresh — the latest
+   JPEG as an OpenAI-compatible vision message. The validated decision is
+   stored as an `ai_result` plus a command.
+7. If the command type is executable and its confidence passes the configured
+   gate, the server publishes it to `devices/{device_id}/command`; otherwise it
+   is kept as a pending suggestion. Either way an `ai_result` WebSocket event
+   is broadcast.
+8. Firmware executes the command and publishes `command_ack`.
+9. Server stores the acknowledgement and broadcasts a WebSocket `command_ack`
    event.
+
+The LLM integration is OpenAI-compatible (any provider exposing
+`chat/completions`), supports optional strict `json_schema` response formats,
+and offers a deterministic `mock` mode so the full closed loop can be
+demonstrated without network access or API keys.
 
 ## Deployment Topology
 

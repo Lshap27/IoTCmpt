@@ -33,7 +33,8 @@ Returns known devices with latest online state.
 GET /api/devices/{device_id}/latest
 ```
 
-Returns latest telemetry, status, image, AI result, and command for one device.
+Returns latest telemetry, status, image, AI result, command, and the autopilot
+switch state (`autopilot.enabled`) for one device.
 
 ## History
 
@@ -71,23 +72,81 @@ Response:
 POST /api/devices/{device_id}/ai/analyze
 ```
 
-The server builds an LLM request from latest telemetry and optional image
-metadata. The LLM must return a JSON command. Invalid commands are downgraded to
-`none`.
+The server builds an LLM request from the latest device snapshot, a compact
+recent-telemetry trend, and — when the newest uploaded image is fresh enough —
+the JPEG itself (OpenAI-compatible vision message with a base64 data URL). The
+LLM must return a JSON decision. Commands outside the executable set
+(`none`, `window.open`, `window.close`, `alarm.on`, `alarm.off`) are downgraded
+to `none`.
+
+The generated command is always persisted. It is published to MQTT only when
+`type != "none"` and `confidence >= AIOT_AUTOPILOT_MIN_CONFIDENCE`; otherwise it
+stays `pending` as a suggestion.
+
+Setting `AIOT_LLM_ENDPOINT=mock` enables a deterministic offline decision mode
+for demos and tests.
 
 Response:
 
 ```json
 {
-  "command_id": "cmd-20260706-0001",
-  "type": "window.open",
-  "parameter": {},
-  "source": "llm",
+  "command": {
+    "command_id": "cmd-1a2b3c4d5e6f7a8b",
+    "type": "window.open",
+    "parameter": {},
+    "source": "llm",
+    "confidence": 0.86,
+    "reason": "室内空气质量较差，建议开窗",
+    "status": "published",
+    "created_at": "2026-07-06T12:00:03Z",
+    "published_at": "2026-07-06T12:00:03Z",
+    "executed_at": null
+  },
+  "risk_level": "medium",
   "confidence": 0.86,
   "reason": "室内空气质量较差，建议开窗",
-  "created_at": "2026-07-06T12:00:03Z"
+  "model": "qwen-vl-plus",
+  "trigger": "manual",
+  "published": true,
+  "image_attached": true
 }
 ```
+
+The same pipeline runs automatically when telemetry matches the autopilot
+trigger rules (see below); those results carry `trigger = "auto:<rule>"`.
+
+## Autopilot
+
+```text
+GET /api/devices/{device_id}/autopilot
+PUT /api/devices/{device_id}/autopilot
+```
+
+`PUT` request:
+
+```json
+{
+  "enabled": true
+}
+```
+
+Response (both methods):
+
+```json
+{
+  "device_id": "esp32s3-001",
+  "enabled": true,
+  "cooldown_seconds": 120,
+  "min_confidence": 0.6,
+  "trigger_levels": ["alert"]
+}
+```
+
+When enabled, telemetry whose `fusion.air_quality` is in `trigger_levels` (or
+whose `fusion.alarm_enabled` is true) starts an AI analysis automatically,
+subject to the per-device cooldown. Toggling broadcasts an `autopilot`
+WebSocket event. The switch is in-memory; it resets to
+`AIOT_AUTOPILOT_ENABLED` on server restart.
 
 ## Manual Command
 

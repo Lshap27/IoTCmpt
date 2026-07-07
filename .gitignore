@@ -6,6 +6,7 @@
 .venv/
 __pycache__/
 .pytest_cache/
+server/.pytest-tmp/
 .pnpm-store/
 
 # Build outputs and local ESP-IDF config

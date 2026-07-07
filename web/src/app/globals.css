@@ -2,21 +2,117 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 设计 token：浅色为基准值，.dark 覆盖为暗色科技控制台。
+   数据系列色与状态色均已通过 dataviz 色板校验器（CVD/对比度/亮度带）。 */
 :root {
   color-scheme: light;
-  background: #edf2f7;
-  color: #17202a;
+
+  --bg: #f4f7fb;
+  --surface: #ffffff;
+  --surface-solid: #ffffff;
+  --raised: #f8fafc;
+  --line: #e2e8f0;
+
+  --ink: #0f172a;
+  --ink-2: #475569;
+  --ink-3: #94a3b8;
+
+  --accent: #0e7490;
+  --accent-strong: #155e75;
+  --accent-soft: rgba(14, 116, 144, 0.12);
+  --accent-glow: rgba(14, 116, 144, 0.16);
+
+  --good: #15803d;
+  --warn: #b45309;
+  --alert: #b91c1c;
+  --good-soft: rgba(21, 128, 61, 0.12);
+  --warn-soft: rgba(180, 83, 9, 0.12);
+  --alert-soft: rgba(185, 28, 28, 0.1);
+
+  --grid: rgba(15, 23, 42, 0.08);
+  --axis: rgba(15, 23, 42, 0.32);
+  --spark: #cbd5e1;
+
+  --m-temp: #c2410c;
+  --m-hum: #0369a1;
+  --m-tvoc: #047857;
+  --m-eco2: #6d28d9;
+
+  --shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 28px -16px rgba(15, 23, 42, 0.16);
+  --page-glow-1: rgba(14, 116, 144, 0.05);
+  --page-glow-2: rgba(109, 40, 217, 0.04);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --bg: #0b1220;
+  --surface: rgba(17, 26, 44, 0.68);
+  --surface-solid: #111a2c;
+  --raised: rgba(30, 41, 59, 0.5);
+  --line: rgba(148, 163, 184, 0.16);
+
+  --ink: #e6edf7;
+  --ink-2: #9fb0c7;
+  --ink-3: #64748b;
+
+  --accent: #22d3ee;
+  --accent-strong: #67e8f9;
+  --accent-soft: rgba(34, 211, 238, 0.13);
+  --accent-glow: rgba(34, 211, 238, 0.24);
+
+  --good: #22c55e;
+  --warn: #fbbf24;
+  --alert: #f87171;
+  --good-soft: rgba(34, 197, 94, 0.14);
+  --warn-soft: rgba(251, 191, 36, 0.14);
+  --alert-soft: rgba(248, 113, 113, 0.13);
+
+  --grid: rgba(148, 163, 184, 0.1);
+  --axis: rgba(148, 163, 184, 0.4);
+  --spark: #334155;
+
+  --m-temp: #ea580c;
+  --m-hum: #0284c7;
+  --m-tvoc: #059669;
+  --m-eco2: #8b5cf6;
+
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 32px -18px rgba(0, 0, 0, 0.55);
+  --page-glow-1: rgba(34, 211, 238, 0.07);
+  --page-glow-2: rgba(139, 92, 246, 0.07);
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
-  background: #edf2f7;
-  color: #17202a;
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(1100px 480px at 88% -12%, var(--page-glow-2), transparent 60%),
+    radial-gradient(900px 560px at -8% 108%, var(--page-glow-1), transparent 55%),
+    var(--bg);
+  background-attachment: fixed;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI Variable Text",
+    "Segoe UI",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "MiSans",
+    "Microsoft YaHei UI",
+    "Microsoft YaHei",
+    system-ui,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 button,
@@ -25,3 +121,41 @@ select {
   font: inherit;
 }
 
+/* 玻璃拟态面板（浅色模式退化为白卡 + 软阴影） */
+.glass-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-panel);
+}
+
+.dark .glass-panel {
+  backdrop-filter: blur(14px) saturate(1.35);
+  -webkit-backdrop-filter: blur(14px) saturate(1.35);
+}
+
+/* 数字列对齐（坐标轴刻度、表格） */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 细滚动条 */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-3) transparent;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
+}
+
+/* AI 分析中的流光条 */
+.shimmer-bar {
+  background: linear-gradient(90deg, transparent, var(--accent-soft), var(--accent-glow), var(--accent-soft), transparent);
+  background-size: 200% 100%;
+}
