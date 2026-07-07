@@ -77,7 +77,7 @@ export function DeviceHeader({
           <select
             value={deviceId}
             onChange={(event) => onDeviceChange(event.target.value)}
-            className="appearance-none rounded-lg border border-line bg-raised py-1.5 pl-3 pr-8 text-xs font-medium text-ink2 outline-none transition-colors hover:border-accent focus:border-accent"
+            className="appearance-none rounded-lg border border-line bg-raised py-1.5 pl-3 pr-8 text-xs font-medium text-ink2 outline-hidden transition-colors hover:border-accent focus:border-accent"
           >
             {options.map((device) => (
               <option key={device.device_id} value={device.device_id}>
