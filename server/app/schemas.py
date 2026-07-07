@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Literal, Optional
+from datetime import UTC, datetime
+from typing import Annotated, Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
-
 
 CommandType = Literal[
     "none",
@@ -19,18 +18,18 @@ CommandSource = Literal["frontend", "llm", "rule"]
 
 
 class SensorPayload(BaseModel):
-    temperature_c: Optional[float] = None
-    humidity_percent: Optional[float] = None
-    tvoc_ppb: Optional[float] = None
-    hcho_ug_m3: Optional[float] = None
-    eco2_ppm: Optional[float] = None
-    light_is_dark: Optional[bool] = None
+    temperature_c: float | None = None
+    humidity_percent: float | None = None
+    tvoc_ppb: float | None = None
+    hcho_ug_m3: float | None = None
+    eco2_ppm: float | None = None
+    light_is_dark: bool | None = None
 
 
 class DeviceStatePayload(BaseModel):
-    window_open: Optional[bool] = None
-    alarm_on: Optional[bool] = None
-    manual_override: Optional[bool] = None
+    window_open: bool | None = None
+    alarm_on: bool | None = None
+    manual_override: bool | None = None
 
 
 class FusionPayload(BaseModel):
@@ -44,7 +43,7 @@ class TelemetryIn(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     device_id: str
-    sampled_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    sampled_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     sensors: SensorPayload = Field(default_factory=SensorPayload)
     state: DeviceStatePayload = Field(default_factory=DeviceStatePayload)
     fusion: FusionPayload = Field(default_factory=FusionPayload)
@@ -63,7 +62,7 @@ class CommandMessage(BaseModel):
     source: CommandSource = "frontend"
     confidence: float = Field(default=0.0, ge=0, le=1)
     reason: str = ""
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class CommandAckIn(BaseModel):
@@ -71,7 +70,7 @@ class CommandAckIn(BaseModel):
     command_id: str
     status: Literal["executed", "rejected", "failed"]
     message: str = ""
-    executed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    executed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class AiAnalyzeResponse(CommandMessage):
@@ -102,6 +101,227 @@ class ImageAssetOut(BaseModel):
 class WebSocketEnvelope(BaseModel):
     type: str
     device_id: str
-    occurred_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     payload: dict[str, Any] = Field(default_factory=dict)
 
+
+# ---- HTTP 响应模型（OpenAPI 单一事实来源）----
+# 字段与 services 层的 serialize_* 输出逐一对应；时间字段凡是序列化器手工
+# isoformat 的地方声明为 str，保持线上格式不变。
+
+
+class HealthOut(BaseModel):
+    status: str
+    service: str
+
+
+class DeviceSummary(BaseModel):
+    device_id: str
+    display_name: str
+    status: str
+    last_seen_at: str | None = None
+
+
+class FusionSnapshot(BaseModel):
+    air_quality: str | None = None
+    recommend_open_window: bool | None = None
+    alarm_enabled: bool | None = None
+    reason: str | None = None
+
+
+class TelemetryPoint(BaseModel):
+    device_id: str
+    sampled_at: str
+    sensors: SensorPayload
+    state: DeviceStatePayload
+    fusion: FusionSnapshot
+
+
+class TelemetryBucketPoint(BaseModel):
+    """time_bucket 降采样后的遥测聚合点（数值取均值，布尔取或，air_quality 取最差档）。"""
+
+    bucket: str
+    temperature_c: float | None = None
+    humidity_percent: float | None = None
+    tvoc_ppb: float | None = None
+    hcho_ug_m3: float | None = None
+    eco2_ppm: float | None = None
+    window_open: bool | None = None
+    alarm_on: bool | None = None
+    air_quality: str | None = None
+    sample_count: int
+
+
+class CommandOut(BaseModel):
+    command_id: str
+    type: str
+    parameter: dict[str, Any] = Field(default_factory=dict)
+    source: str
+    confidence: float
+    reason: str
+    status: str
+    created_at: str
+    published_at: str | None = None
+    executed_at: str | None = None
+
+
+class ImageSnapshot(BaseModel):
+    id: int
+    url: str
+    created_at: str
+
+
+class AiResultInfo(BaseModel):
+    command_id: str
+    risk_level: str
+    confidence: float
+    reason: str
+    summary: str
+    model: str
+
+
+class AutopilotEnabled(BaseModel):
+    enabled: bool
+
+
+class AutopilotState(BaseModel):
+    device_id: str
+    enabled: bool
+    cooldown_seconds: float
+    min_confidence: float
+    trigger_levels: list[str]
+
+
+class LatestState(BaseModel):
+    device: DeviceSummary
+    telemetry: TelemetryPoint | None = None
+    image: ImageSnapshot | None = None
+    command: CommandOut | None = None
+    ai_result: AiResultInfo | None = None
+    autopilot: AutopilotEnabled | None = None
+
+
+class AiDecisionOut(BaseModel):
+    command: CommandOut
+    risk_level: RiskLevel
+    confidence: float
+    reason: str
+    model: str
+    trigger: str
+    published: bool
+    image_attached: bool
+
+
+# ---- WebSocket envelope 判别联合 ----
+# 仅用于协议契约（导出到 openapi.json 供前端 codegen），运行时广播仍走
+# WebSocketEnvelope；type 字段是判别键，前端 switch 后 payload 自动窄化。
+
+
+class _EnvelopeBase(BaseModel):
+    device_id: str
+    occurred_at: datetime
+
+
+class TelemetryEnvelope(_EnvelopeBase):
+    type: Literal["telemetry"]
+    payload: TelemetryPoint
+
+
+class StatusPayload(BaseModel):
+    device_id: str
+    status: str
+    last_seen_at: str | None = None
+
+
+class StatusEnvelope(_EnvelopeBase):
+    type: Literal["status"]
+    payload: StatusPayload
+
+
+class ImageEnvelope(_EnvelopeBase):
+    type: Literal["image"]
+    payload: ImageSnapshot
+
+
+class CommandEnvelope(_EnvelopeBase):
+    type: Literal["command"]
+    payload: CommandOut
+
+
+class CommandAckPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    command_id: str
+    status: str
+    message: str = ""
+    executed_at: str | None = None
+    known_command: bool = False
+
+
+class CommandAckEnvelope(_EnvelopeBase):
+    type: Literal["command_ack"]
+    payload: CommandAckPayload
+
+
+class EventPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    type: str | None = None
+    severity: str | None = None
+    message: str | None = None
+
+
+class EventEnvelope(_EnvelopeBase):
+    type: Literal["event"]
+    payload: EventPayload
+
+
+class LogEnvelope(_EnvelopeBase):
+    type: Literal["log"]
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class ErrorPayload(BaseModel):
+    topic: str
+    error: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class ErrorEnvelope(_EnvelopeBase):
+    type: Literal["error"]
+    payload: ErrorPayload
+
+
+class AiAnalyzingPayload(BaseModel):
+    trigger: str
+
+
+class AiAnalyzingEnvelope(_EnvelopeBase):
+    type: Literal["ai_analyzing"]
+    payload: AiAnalyzingPayload
+
+
+class AiResultEnvelope(_EnvelopeBase):
+    type: Literal["ai_result"]
+    payload: AiDecisionOut
+
+
+class AutopilotEnvelope(_EnvelopeBase):
+    type: Literal["autopilot"]
+    payload: AutopilotState
+
+
+WsMessage = Annotated[
+    TelemetryEnvelope
+    | StatusEnvelope
+    | ImageEnvelope
+    | CommandEnvelope
+    | CommandAckEnvelope
+    | EventEnvelope
+    | LogEnvelope
+    | ErrorEnvelope
+    | AiAnalyzingEnvelope
+    | AiResultEnvelope
+    | AutopilotEnvelope,
+    Field(discriminator="type"),
+]

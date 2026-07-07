@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +11,7 @@ from app.db import models
 from app.schemas import WebSocketEnvelope
 from app.services.commands import create_command, mark_published, serialize_command
 from app.services.llm import LLMService
-from app.services.mqtt import MqttService
+from app.services.mqtt import MqttGateway
 from app.services.telemetry import serialize_telemetry
 from app.services.websocket import manager
 
@@ -31,7 +31,7 @@ def resolve_recent_image(settings: Settings, asset: models.ImageAsset | None) ->
         return None
     if asset.created_at is None:
         return None
-    age = datetime.now(timezone.utc).replace(tzinfo=None) - asset.created_at
+    age = datetime.now(UTC).replace(tzinfo=None) - asset.created_at
     if age.total_seconds() > settings.llm_image_max_age_seconds:
         return None
     path = Path(settings.uploads_dir) / asset.device_id / asset.filename
@@ -111,7 +111,7 @@ async def run_ai_analysis(
     db: Session,
     device_id: str,
     llm: LLMService,
-    mqtt_service: MqttService | None,
+    mqtt_service: MqttGateway | None,
     *,
     trigger: str = "manual",
 ) -> dict[str, Any]:
@@ -157,12 +157,8 @@ async def run_ai_analysis(
     db.commit()
 
     published = False
-    if (
-        message.type != "none"
-        and message.confidence >= settings.autopilot_min_confidence
-        and mqtt_service is not None
-    ):
-        mqtt_service.publish_json(f"devices/{device_id}/command", serialize_command(command), qos=1)
+    if message.type != "none" and message.confidence >= settings.autopilot_min_confidence and mqtt_service is not None:
+        await mqtt_service.publish_json(f"devices/{device_id}/command", serialize_command(command), qos=1)
         mark_published(db, command)
         published = True
 

@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     mqtt_client_id: str = "aiot-gateway"
     mqtt_username: str = ""
     mqtt_password: str = ""
+    mqtt_reconnect_seconds: float = 3.0
 
     cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["http://localhost:3000"])
 
