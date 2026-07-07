@@ -33,4 +33,3 @@ def client(tmp_path, monkeypatch):
 
     with TestClient(create_app()) as test_client:
         yield test_client
-

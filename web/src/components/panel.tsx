@@ -6,7 +6,7 @@ export function Panel({
   icon,
   actions,
   children,
-  className
+  className,
 }: {
   title?: string;
   icon?: ReactNode;

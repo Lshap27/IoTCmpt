@@ -32,7 +32,7 @@ export function DeviceHeader({
   onDeviceChange,
   deviceStatus,
   airQuality,
-  socketState
+  socketState,
 }: {
   devices: DeviceSummary[];
   deviceId: string;

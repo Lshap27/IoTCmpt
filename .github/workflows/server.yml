@@ -1,0 +1,64 @@
+name: server
+
+on:
+  push:
+    branches: [main]
+    paths: ["server/**", "web/**", ".github/workflows/server.yml"]
+  pull_request:
+    paths: ["server/**", "web/**", ".github/workflows/server.yml"]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: server/uv.lock
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: Ruff format check
+        run: uv run ruff format --check .
+      - name: Mypy
+        run: uv run mypy app
+      - name: Pytest
+        run: uv run pytest
+
+  codegen-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: server/uv.lock
+      - name: Install server dependencies
+        run: uv sync --frozen
+        working-directory: server
+      - name: Export OpenAPI schema
+        run: uv run python scripts/export_openapi.py
+        working-directory: server
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: web
+      - name: Regenerate API client
+        run: pnpm codegen
+        working-directory: web
+      - name: Fail if generated code is stale
+        run: |
+          git diff --exit-code server/openapi.json web/src/lib/api-client \
+            || (echo "::error::openapi.json / api-client is stale. Run: (server) python scripts/export_openapi.py && (web) pnpm codegen" && exit 1)

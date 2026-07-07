@@ -4,8 +4,7 @@
 #include <stddef.h>
 #include <string.h>
 
-static inline void app_string_copy(char *dest, size_t dest_size, const char *source)
-{
+static inline void app_string_copy(char *dest, size_t dest_size, const char *source) {
     if (!dest || dest_size == 0) {
         return;
     }
@@ -21,8 +20,7 @@ static inline void app_string_copy(char *dest, size_t dest_size, const char *sou
     dest[copy_len] = '\0';
 }
 
-static inline bool app_string_append(char *dest, size_t dest_size, const char *source)
-{
+static inline bool app_string_append(char *dest, size_t dest_size, const char *source) {
     if (!dest || dest_size == 0 || !source) {
         return false;
     }

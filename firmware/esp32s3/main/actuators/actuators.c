@@ -10,27 +10,25 @@
 
 static const char *TAG = "ACTUATOR";
 
-#define SERVO_LEDC_CH LEDC_CHANNEL_1
-#define SERVO_TIMER LEDC_TIMER_1
-#define SERVO_FREQ 50
-#define SERVO_MIN_US 500
-#define SERVO_MAX_US 2500
-#define SERVO_CLOSE_US 600
-#define SERVO_OPEN_US 2200
-#define SERVO_STEP_US 20
+#define SERVO_LEDC_CH          LEDC_CHANNEL_1
+#define SERVO_TIMER            LEDC_TIMER_1
+#define SERVO_FREQ             50
+#define SERVO_MIN_US           500
+#define SERVO_MAX_US           2500
+#define SERVO_CLOSE_US         600
+#define SERVO_OPEN_US          2200
+#define SERVO_STEP_US          20
 #define SERVO_STEP_DELAY_TICKS pdMS_TO_TICKS(15)
 
 static uint16_t s_servo_current_us = SERVO_CLOSE_US;
 
-static void beep_set(bool on)
-{
+static void beep_set(bool on) {
     const int active = CONFIG_APP_BEEP_ACTIVE_LOW ? 0 : 1;
     gpio_set_level(CONFIG_APP_BEEP_GPIO, on ? active : !active);
     control_state_set_alarm(on);
 }
 
-static void beep_alarm_loop(uint32_t total_ms)
-{
+static void beep_alarm_loop(uint32_t total_ms) {
     const int loops = (int)(total_ms / 200);
     for (int i = 0; i < loops; i++) {
         beep_set(true);
@@ -40,8 +38,7 @@ static void beep_alarm_loop(uint32_t total_ms)
     }
 }
 
-static void servo_set_pulse(uint16_t pulse_us)
-{
+static void servo_set_pulse(uint16_t pulse_us) {
     if (pulse_us < SERVO_MIN_US) {
         pulse_us = SERVO_MIN_US;
     }
@@ -54,8 +51,7 @@ static void servo_set_pulse(uint16_t pulse_us)
     ledc_update_duty(LEDC_LOW_SPEED_MODE, SERVO_LEDC_CH);
 }
 
-static void servo_smooth_turn(uint16_t target_us)
-{
+static void servo_smooth_turn(uint16_t target_us) {
     const uint16_t current_us = s_servo_current_us;
     if (target_us > current_us) {
         for (uint16_t pulse = current_us; pulse <= target_us; pulse += SERVO_STEP_US) {
@@ -76,8 +72,7 @@ static void servo_smooth_turn(uint16_t target_us)
     s_servo_current_us = target_us;
 }
 
-static esp_err_t set_window(bool open)
-{
+static esp_err_t set_window(bool open) {
     control_state_t current;
     control_state_get(&current);
     if (current.window_open == open) {
@@ -90,8 +85,7 @@ static esp_err_t set_window(bool open)
     return ESP_OK;
 }
 
-esp_err_t actuator_init(void)
-{
+esp_err_t actuator_init(void) {
     if (!CONFIG_APP_ACTUATOR_ENABLED) {
         ESP_LOGW(TAG, "执行器模块已禁用");
         return ESP_ERR_INVALID_STATE;
@@ -134,8 +128,7 @@ esp_err_t actuator_init(void)
     return ESP_OK;
 }
 
-esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *state)
-{
+esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *state) {
     if (!CONFIG_APP_ACTUATOR_ENABLED) {
         return ESP_ERR_INVALID_STATE;
     }

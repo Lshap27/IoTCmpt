@@ -21,7 +21,14 @@ function Sparkline({ points, color }: { points: number[]; color: string }) {
   return (
     <svg viewBox="0 0 100 28" className="h-7 w-full" preserveAspectRatio="none" aria-hidden>
       {/* 趋势线用弱化色，只有端点戴系列色 + 表面色描边环 */}
-      <polyline points={path} fill="none" stroke="var(--spark)" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+      <polyline
+        points={path}
+        fill="none"
+        stroke="var(--spark)"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
       <circle cx={last.x} cy={last.y} r="3" fill={color} stroke="var(--surface-solid)" strokeWidth="2" />
     </svg>
   );
@@ -33,7 +40,7 @@ export function StatCard({
   value,
   digits,
   color,
-  points
+  points,
 }: {
   label: string;
   unit: string;
@@ -51,7 +58,11 @@ export function StatCard({
         {label}
       </div>
       <div className="mt-2 flex items-baseline gap-1.5">
-        <AnimatedNumber value={value} digits={digits} className="text-3xl font-semibold tracking-tight text-ink" />
+        <AnimatedNumber
+          value={value}
+          digits={digits}
+          className="text-3xl font-semibold tracking-tight text-ink"
+        />
         <span className="text-xs text-ink3">{unit}</span>
       </div>
       <div className="mt-2">

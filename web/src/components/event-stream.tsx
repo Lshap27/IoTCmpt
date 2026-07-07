@@ -14,7 +14,7 @@ import {
   Wifi,
   WifiOff,
   XCircle,
-  type LucideIcon
+  type LucideIcon,
 } from "lucide-react";
 import { Panel } from "@/components/panel";
 import type { UiEvent } from "@/hooks/use-device-live";
@@ -38,15 +38,17 @@ function describeEvent(event: UiEvent): EventView {
       const fusion = (payload.fusion ?? {}) as Record<string, unknown>;
       const parts = [
         num(sensors.temperature_c) !== null ? `${(sensors.temperature_c as number).toFixed(1)}°C` : null,
-        num(sensors.humidity_percent) !== null ? `${(sensors.humidity_percent as number).toFixed(0)}%RH` : null,
+        num(sensors.humidity_percent) !== null
+          ? `${(sensors.humidity_percent as number).toFixed(0)}%RH`
+          : null,
         num(sensors.tvoc_ppb) !== null ? `TVOC ${(sensors.tvoc_ppb as number).toFixed(0)}` : null,
-        num(sensors.eco2_ppm) !== null ? `eCO₂ ${(sensors.eco2_ppm as number).toFixed(0)}` : null
+        num(sensors.eco2_ppm) !== null ? `eCO₂ ${(sensors.eco2_ppm as number).toFixed(0)}` : null,
       ].filter(Boolean);
       return {
         Icon: Activity,
         color: "var(--accent)",
         title: "遥测更新",
-        detail: parts.join(" · ") || str(fusion.reason)
+        detail: parts.join(" · ") || str(fusion.reason),
       };
     }
     case "status": {
@@ -55,7 +57,7 @@ function describeEvent(event: UiEvent): EventView {
         Icon: online ? Wifi : WifiOff,
         color: online ? "var(--good)" : "var(--ink-3)",
         title: online ? "设备上线" : "设备离线",
-        detail: ""
+        detail: "",
       };
     }
     case "image":
@@ -65,7 +67,7 @@ function describeEvent(event: UiEvent): EventView {
         Icon: BrainCircuit,
         color: "var(--m-eco2)",
         title: "AI 分析开始",
-        detail: describeTrigger(str(payload.trigger))
+        detail: describeTrigger(str(payload.trigger)),
       };
     case "ai_result": {
       const command = (payload.command ?? {}) as Record<string, unknown>;
@@ -74,7 +76,7 @@ function describeEvent(event: UiEvent): EventView {
         Icon: Sparkles,
         color: "var(--m-eco2)",
         title: `AI 决策：${commandLabel(str(command.type) || "none")}`,
-        detail: `置信 ${Math.round(confidence * 100)}% · ${payload.published ? "已下发" : "仅建议"}`
+        detail: `置信 ${Math.round(confidence * 100)}% · ${payload.published ? "已下发" : "仅建议"}`,
       };
     }
     case "command": {
@@ -84,7 +86,7 @@ function describeEvent(event: UiEvent): EventView {
         Icon: Send,
         color: "var(--accent)",
         title: `下发指令：${commandLabel(str(payload.type))}`,
-        detail: `来源 ${sourceLabel}`
+        detail: `来源 ${sourceLabel}`,
       };
     }
     case "command_ack": {
@@ -102,23 +104,28 @@ function describeEvent(event: UiEvent): EventView {
         Icon: Bot,
         color: payload.enabled ? "var(--good)" : "var(--warn)",
         title: `自动决策已${payload.enabled ? "开启" : "暂停"}`,
-        detail: ""
+        detail: "",
       };
     case "event":
       return {
         Icon: str(payload.type) === "autopilot" ? Bot : Radio,
         color: "var(--warn)",
         title: str(payload.type) === "autopilot" ? "自动决策触发" : "设备事件",
-        detail: str(payload.message)
+        detail: str(payload.message),
       };
     case "log":
-      return { Icon: Terminal, color: "var(--ink-3)", title: "设备日志", detail: str(payload.message ?? payload.raw) };
+      return {
+        Icon: Terminal,
+        color: "var(--ink-3)",
+        title: "设备日志",
+        detail: str(payload.message ?? payload.raw),
+      };
     case "error":
       return {
         Icon: AlertTriangle,
         color: "var(--alert)",
         title: "异常",
-        detail: str(payload.error ?? payload.reason ?? payload.topic)
+        detail: str(payload.error ?? payload.reason ?? payload.topic),
       };
     default:
       return { Icon: Radio, color: "var(--ink-3)", title: event.type, detail: "" };
@@ -148,9 +155,13 @@ export function EventStream({ events, className }: { events: UiEvent[]; classNam
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
                     <p className="truncate text-xs font-medium text-ink">{view.title}</p>
-                    <span className="tnum shrink-0 text-[10px] text-ink3">{formatClock(event.occurred_at)}</span>
+                    <span className="tnum shrink-0 text-[10px] text-ink3">
+                      {formatClock(event.occurred_at)}
+                    </span>
                   </div>
-                  {view.detail ? <p className="mt-0.5 truncate text-[11px] text-ink3">{view.detail}</p> : null}
+                  {view.detail ? (
+                    <p className="mt-0.5 truncate text-[11px] text-ink3">{view.detail}</p>
+                  ) : null}
                 </div>
               </div>
             );

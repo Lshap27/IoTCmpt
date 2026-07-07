@@ -7,7 +7,7 @@ const COMMANDS: { type: string; label: string; Icon: typeof DoorOpen }[] = [
   { type: "window.open", label: "开窗", Icon: DoorOpen },
   { type: "window.close", label: "关窗", Icon: DoorClosed },
   { type: "alarm.on", label: "报警开", Icon: BellRing },
-  { type: "alarm.off", label: "报警关", Icon: BellOff }
+  { type: "alarm.off", label: "报警关", Icon: BellOff },
 ];
 
 function StateChip({ label, active }: { label: string; active: boolean | null | undefined }) {
@@ -29,7 +29,7 @@ export function CommandPad({
   pendingCommands,
   windowOpen,
   alarmOn,
-  className
+  className,
 }: {
   onCommand: (type: string) => void;
   pendingCommands: Record<string, string>;

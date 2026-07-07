@@ -7,7 +7,7 @@ export function AnimatedNumber({
   value,
   digits = 1,
   className,
-  placeholder = "--"
+  placeholder = "--",
 }: {
   value: number | null | undefined;
   digits?: number;

@@ -4,7 +4,7 @@
 
 #include "esp_err.h"
 
-#define CLOUD_COMMAND_RAW_MAX_LEN 192
+#define CLOUD_COMMAND_RAW_MAX_LEN   192
 #define CLOUD_COMMAND_PARAM_MAX_LEN 64
 
 typedef enum {

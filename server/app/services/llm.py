@@ -54,9 +54,7 @@ def extract_json_object(content: Any) -> dict[str, Any]:
     if isinstance(content, dict):
         return content
     if isinstance(content, list):
-        content = "".join(
-            str(part.get("text", "")) for part in content if isinstance(part, dict)
-        )
+        content = "".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
     text = str(content).strip()
     if text.startswith("```"):
         text = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", text)
@@ -95,7 +93,7 @@ class LLMService:
     def _none_decision(self, reason: str, *, risk_level: str = "unknown") -> AiDecision:
         return AiDecision(
             command=CommandMessage(type="none", source="llm", reason=reason),
-            risk_level=risk_level,  # type: ignore[arg-type]
+            risk_level=risk_level,
             summary=reason,
             model=self.settings.llm_model,
         )
@@ -122,13 +120,13 @@ class LLMService:
         reason = str(parsed.get("reason") or parsed.get("summary") or "")
         return AiDecision(
             command=CommandMessage(
-                type=raw_type,  # type: ignore[arg-type]
+                type=raw_type,
                 parameter=parameter,
                 source="llm",
                 confidence=confidence,
                 reason=reason,
             ),
-            risk_level=risk_level,  # type: ignore[arg-type]
+            risk_level=risk_level,
             summary=str(parsed.get("summary") or reason),
             model=self.settings.llm_model,
         )
@@ -173,20 +171,19 @@ class LLMService:
 
         return AiDecision(
             command=CommandMessage(
-                type=command_type,  # type: ignore[arg-type]
+                type=command_type,
                 source="llm",
                 confidence=confidence,
                 reason=reason,
             ),
-            risk_level=risk,  # type: ignore[arg-type]
+            risk_level=risk,
             summary=reason,
             model="mock",
         )
 
     def _build_messages(self, device_state: dict[str, Any], image_bytes: bytes | None) -> list[dict[str, Any]]:
-        user_text = (
-            "当前设备状态快照与近期遥测趋势如下，请给出决策 JSON：\n"
-            + json.dumps(device_state, ensure_ascii=False, default=str)
+        user_text = "当前设备状态快照与近期遥测趋势如下，请给出决策 JSON：\n" + json.dumps(
+            device_state, ensure_ascii=False, default=str
         )
         if image_bytes is None:
             user_content: Any = user_text

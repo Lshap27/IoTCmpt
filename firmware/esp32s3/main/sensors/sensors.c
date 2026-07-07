@@ -13,70 +13,59 @@
 
 static const char *TAG = "SENSORS";
 
-#define SHT30_ADDR 0x44
-#define SHT30_CMD 0x2400
+#define SHT30_ADDR         0x44
+#define SHT30_CMD          0x2400
 #define SHT30_I2C_DELAY_US 5
 
-#define TVOC_BAUDRATE 9600
-#define TVOC_BUF_SIZE 128
+#define TVOC_BAUDRATE  9600
+#define TVOC_BUF_SIZE  128
 #define TVOC_FRAME_LEN 9
-#define TVOC_HEADER_0 0x2C
-#define TVOC_HEADER_1 0xE4
+#define TVOC_HEADER_0  0x2C
+#define TVOC_HEADER_1  0xE4
 
 static uint32_t s_mock_counter;
 
-static int sda_gpio(void)
-{
+static int sda_gpio(void) {
     return CONFIG_APP_SHT30_SDA_GPIO;
 }
 
-static int scl_gpio(void)
-{
+static int scl_gpio(void) {
     return CONFIG_APP_SHT30_SCL_GPIO;
 }
 
-static uart_port_t tvoc_uart(void)
-{
+static uart_port_t tvoc_uart(void) {
     return (uart_port_t)CONFIG_APP_TVOC_UART_NUM;
 }
 
-static void sht30_sda_out(void)
-{
+static void sht30_sda_out(void) {
     gpio_set_direction(sda_gpio(), GPIO_MODE_OUTPUT_OD);
 }
 
-static void sht30_sda_in(void)
-{
+static void sht30_sda_in(void) {
     gpio_set_direction(sda_gpio(), GPIO_MODE_INPUT);
 }
 
-static void sht30_scl_low(void)
-{
+static void sht30_scl_low(void) {
     gpio_set_level(scl_gpio(), 0);
 }
 
-static void sht30_scl_high(void)
-{
+static void sht30_scl_high(void) {
     gpio_set_level(scl_gpio(), 1);
 }
 
-static void sht30_sda_low(void)
-{
+static void sht30_sda_low(void) {
     gpio_set_level(sda_gpio(), 0);
 }
 
-static void sht30_sda_high(void)
-{
+static void sht30_sda_high(void) {
     gpio_set_level(sda_gpio(), 1);
 }
 
-static int sht30_sda_read(void)
-{
+static int sht30_sda_read(void) {
     return gpio_get_level(sda_gpio());
 }
 
-static void sht30_i2c_start(void)
-{
+static void sht30_i2c_start(void) {
     sht30_sda_out();
     sht30_sda_high();
     sht30_scl_high();
@@ -86,8 +75,7 @@ static void sht30_i2c_start(void)
     sht30_scl_low();
 }
 
-static void sht30_i2c_stop(void)
-{
+static void sht30_i2c_stop(void) {
     sht30_sda_out();
     sht30_sda_low();
     sht30_scl_high();
@@ -96,8 +84,7 @@ static void sht30_i2c_stop(void)
     esp_rom_delay_us(SHT30_I2C_DELAY_US);
 }
 
-static bool sht30_i2c_write_byte(uint8_t byte)
-{
+static bool sht30_i2c_write_byte(uint8_t byte) {
     sht30_sda_out();
     for (int i = 7; i >= 0; i--) {
         if (byte & (1 << i)) {
@@ -124,8 +111,7 @@ static bool sht30_i2c_write_byte(uint8_t byte)
     return ack;
 }
 
-static uint8_t sht30_i2c_read_byte(bool send_ack)
-{
+static uint8_t sht30_i2c_read_byte(bool send_ack) {
     uint8_t byte = 0;
     sht30_sda_in();
     sht30_sda_high();
@@ -155,8 +141,7 @@ static uint8_t sht30_i2c_read_byte(bool send_ack)
     return byte;
 }
 
-static void sht30_init(void)
-{
+static void sht30_init(void) {
     gpio_config_t io_cfg = {
         .pin_bit_mask = (1ULL << sda_gpio()) | (1ULL << scl_gpio()),
         .mode = GPIO_MODE_OUTPUT_OD,
@@ -170,8 +155,7 @@ static void sht30_init(void)
     ESP_LOGI(TAG, "SHT30 软件 I2C 初始化完成（SCL=GPIO%d SDA=GPIO%d）", scl_gpio(), sda_gpio());
 }
 
-static bool sht30_read(float *temp, float *hum)
-{
+static bool sht30_read(float *temp, float *hum) {
     sht30_i2c_start();
     if (!sht30_i2c_write_byte((SHT30_ADDR << 1) | 0)) {
         sht30_i2c_stop();
@@ -204,8 +188,7 @@ static bool sht30_read(float *temp, float *hum)
     return true;
 }
 
-static void tvoc_init(void)
-{
+static void tvoc_init(void) {
     gpio_config_t rx_pullup = {
         .pin_bit_mask = 1ULL << CONFIG_APP_TVOC_RX_GPIO,
         .mode = GPIO_MODE_INPUT,
@@ -225,18 +208,12 @@ static void tvoc_init(void)
     };
     ESP_ERROR_CHECK(uart_driver_install(tvoc_uart(), TVOC_BUF_SIZE * 2, 0, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_param_config(tvoc_uart(), &uart_config));
-    ESP_ERROR_CHECK(uart_set_pin(
-        tvoc_uart(),
-        CONFIG_APP_TVOC_TX_GPIO,
-        CONFIG_APP_TVOC_RX_GPIO,
-        UART_PIN_NO_CHANGE,
-        UART_PIN_NO_CHANGE
-    ));
+    ESP_ERROR_CHECK(uart_set_pin(tvoc_uart(), CONFIG_APP_TVOC_TX_GPIO, CONFIG_APP_TVOC_RX_GPIO, UART_PIN_NO_CHANGE,
+                                 UART_PIN_NO_CHANGE));
     ESP_LOGI(TAG, "TVOC301 UART%d 初始化完成", CONFIG_APP_TVOC_UART_NUM);
 }
 
-static bool tvoc_read(uint16_t *tvoc, uint16_t *hcho, uint16_t *eco2)
-{
+static bool tvoc_read(uint16_t *tvoc, uint16_t *hcho, uint16_t *eco2) {
     uint8_t data[64];
     uart_flush_input(tvoc_uart());
     const int len = uart_read_bytes(tvoc_uart(), data, sizeof(data), pdMS_TO_TICKS(1000));
@@ -262,8 +239,7 @@ static bool tvoc_read(uint16_t *tvoc, uint16_t *hcho, uint16_t *eco2)
     return false;
 }
 
-static void lm393_init(void)
-{
+static void lm393_init(void) {
     gpio_config_t cfg = {
         .pin_bit_mask = 1ULL << CONFIG_APP_LM393_DO_GPIO,
         .mode = GPIO_MODE_INPUT,
@@ -275,8 +251,7 @@ static void lm393_init(void)
     ESP_LOGI(TAG, "LM393 GPIO%d 初始化完成", CONFIG_APP_LM393_DO_GPIO);
 }
 
-esp_err_t sensors_init(void)
-{
+esp_err_t sensors_init(void) {
     if (CONFIG_APP_SENSOR_MOCK_ENABLED) {
         ESP_LOGW(TAG, "当前使用模拟传感器数据");
         return ESP_OK;
@@ -289,8 +264,7 @@ esp_err_t sensors_init(void)
     return ESP_OK;
 }
 
-esp_err_t sensors_read(sensor_sample_t *out_sample)
-{
+esp_err_t sensors_read(sensor_sample_t *out_sample) {
     if (!out_sample) {
         return ESP_ERR_INVALID_ARG;
     }

@@ -13,7 +13,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   ShieldQuestion,
-  Sparkles
+  Sparkles,
 } from "lucide-react";
 import { Panel } from "@/components/panel";
 import type { AiDecisionPayload } from "@/lib/api";
@@ -25,19 +25,19 @@ const COMMAND_ICONS: Record<string, typeof DoorOpen> = {
   "alarm.on": BellRing,
   "alarm.off": BellOff,
   "display.message": MessageSquare,
-  none: CircleSlash
+  none: CircleSlash,
 };
 
 const RISK: Record<string, { label: string; color: string; soft: string; Icon: typeof ShieldCheck }> = {
   low: { label: "低风险", color: "var(--good)", soft: "var(--good-soft)", Icon: ShieldCheck },
   medium: { label: "中风险", color: "var(--warn)", soft: "var(--warn-soft)", Icon: ShieldAlert },
   high: { label: "高风险", color: "var(--alert)", soft: "var(--alert-soft)", Icon: ShieldAlert },
-  unknown: { label: "风险未知", color: "var(--ink-3)", soft: "transparent", Icon: ShieldQuestion }
+  unknown: { label: "风险未知", color: "var(--ink-3)", soft: "transparent", Icon: ShieldQuestion },
 };
 
 function AutopilotSwitch({
   enabled,
-  onChange
+  onChange,
 }: {
   enabled: boolean | null;
   onChange: (enabled: boolean) => void;
@@ -56,13 +56,16 @@ function AutopilotSwitch({
       <Bot size={14} className={on ? "text-accent" : "text-ink3"} />
       自动决策
       <span
-        className={cn("relative h-5 w-9 rounded-full border transition-colors", on ? "border-accent" : "border-line bg-raised")}
+        className={cn(
+          "relative h-5 w-9 rounded-full border transition-colors",
+          on ? "border-accent" : "border-line bg-raised",
+        )}
         style={on ? { background: "var(--accent-soft)" } : undefined}
       >
         <span
           className={cn(
             "absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all",
-            on ? "left-[18px]" : "left-0.5"
+            on ? "left-[18px]" : "left-0.5",
           )}
           style={{ background: on ? "var(--accent)" : "var(--ink-3)" }}
         />
@@ -77,7 +80,7 @@ export function AiPanel({
   autopilotEnabled,
   onToggleAutopilot,
   onAnalyze,
-  className
+  className,
 }: {
   analyzing: string | null;
   decision: AiDecisionPayload | null;
@@ -86,8 +89,8 @@ export function AiPanel({
   onAnalyze: () => void;
   className?: string;
 }) {
-  const risk = decision ? RISK[decision.risk_level] ?? RISK.unknown : RISK.unknown;
-  const CommandIcon = decision ? COMMAND_ICONS[decision.command?.type] ?? CircleSlash : CircleSlash;
+  const risk = decision ? (RISK[decision.risk_level] ?? RISK.unknown) : RISK.unknown;
+  const CommandIcon = decision ? (COMMAND_ICONS[decision.command?.type] ?? CircleSlash) : CircleSlash;
   const confidencePercent = decision ? Math.round((decision.confidence ?? 0) * 100) : 0;
 
   return (
@@ -150,7 +153,10 @@ export function AiPanel({
                 <span>置信度</span>
                 <span className="tnum font-medium text-ink2">{confidencePercent}%</span>
               </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--accent-soft)" }}>
+              <div
+                className="mt-1 h-1.5 overflow-hidden rounded-full"
+                style={{ background: "var(--accent-soft)" }}
+              >
                 <div
                   className="h-full rounded-full transition-all duration-500"
                   style={{ width: `${confidencePercent}%`, background: "var(--accent)" }}

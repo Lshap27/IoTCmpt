@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -19,13 +21,13 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 def init_db() -> None:
+    # Test/dev-only bootstrap; production schema is managed by Alembic (alembic upgrade head).
     Base.metadata.create_all(bind=engine)
 
 
-def get_db() -> Session:
+def get_db() -> Iterator[Session]:
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-

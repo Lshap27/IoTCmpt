@@ -1,2 +1,1 @@
 """AIoT Gateway application package."""
-
