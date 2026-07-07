@@ -1,6 +1,9 @@
 services:
   postgres:
-    image: postgres:16
+    image: timescale/timescaledb:2.20.0-pg16
+    # Explicit preload keeps timescaledb loadable even when reusing a volume
+    # initialized by the plain postgres image.
+    command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
     environment:
       POSTGRES_DB: aiot
       POSTGRES_USER: aiot
@@ -34,6 +37,7 @@ services:
       context: ./server
     environment:
       AIOT_DATABASE_URL: postgresql+psycopg://aiot:aiot@postgres:5432/aiot
+      AIOT_AUTO_CREATE_TABLES: "false"
       AIOT_BASE_URL: http://localhost:8000
       AIOT_UPLOADS_DIR: /app/uploads
       AIOT_MQTT_ENABLED: "true"
