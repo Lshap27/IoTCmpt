@@ -9,7 +9,8 @@ import { EventStream } from "@/components/event-stream";
 import { StatCard } from "@/components/stat-card";
 import { METRICS, TelemetryChart } from "@/components/telemetry-chart";
 import { useDeviceLive } from "@/hooks/use-device-live";
-import { AiDecisionPayload, DeviceSummary, fetchDevices } from "@/lib/api";
+import type { AiDecisionPayload, DeviceSummary } from "@/lib/api";
+import { fetchDevices } from "@/lib/api";
 
 const DEFAULT_DEVICE_ID = "esp32s3-001";
 
@@ -34,11 +35,13 @@ export default function Dashboard() {
     if (latest.ai_result.command_id !== latest.command.command_id) return null;
     return {
       command: latest.command,
-      risk_level: latest.ai_result.risk_level,
+      risk_level: latest.ai_result.risk_level as AiDecisionPayload["risk_level"],
       confidence: latest.ai_result.confidence ?? latest.command.confidence,
       reason: latest.ai_result.reason || latest.command.reason,
       model: latest.ai_result.model ?? "",
-      published: latest.command.status !== "pending"
+      trigger: "restored",
+      published: latest.command.status !== "pending",
+      image_attached: false,
     };
   }, [live.decision, live.latest]);
 
@@ -47,9 +50,9 @@ export default function Dashboard() {
       METRICS.map((metric) => ({
         metric,
         value: telemetry?.sensors[metric.key] ?? null,
-        points: live.history.map((row) => row.sensors[metric.key])
+        points: live.history.map((row) => row.sensors[metric.key] ?? null),
       })),
-    [telemetry, live.history]
+    [telemetry, live.history],
   );
 
   return (

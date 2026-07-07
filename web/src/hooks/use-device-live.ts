@@ -1,19 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  AiDecisionPayload,
-  CommandInfo,
-  Envelope,
-  LatestState,
-  TelemetryPoint,
-  fetchHistory,
-  fetchLatest,
-  requestAiAnalysis,
-  sendCommand,
-  updateAutopilot,
-  wsUrl
-} from "@/lib/api";
+import type { AiDecisionPayload, CommandInfo, Envelope, LatestState, TelemetryPoint } from "@/lib/api";
+import { fetchHistory, fetchLatest, requestAiAnalysis, sendCommand, updateAutopilot, wsUrl } from "@/lib/api";
 
 export type SocketState = "connecting" | "live" | "offline";
 
@@ -67,7 +56,7 @@ export function useDeviceLive(deviceId: string) {
     const { type, payload, occurred_at } = envelope;
     eventSeq.current += 1;
     setEvents((current) =>
-      [{ id: eventSeq.current, type, payload, occurred_at }, ...current].slice(0, EVENT_CAP)
+      [{ id: eventSeq.current, type, payload, occurred_at }, ...current].slice(0, EVENT_CAP),
     );
 
     switch (type) {
@@ -76,8 +65,12 @@ export function useDeviceLive(deviceId: string) {
         setHistory((current) => [...current.slice(-(HISTORY_CAP - 1)), point]);
         setLatest((current) =>
           current
-            ? { ...current, telemetry: point, device: { ...current.device, status: "online", last_seen_at: occurred_at } }
-            : current
+            ? {
+                ...current,
+                telemetry: point,
+                device: { ...current.device, status: "online", last_seen_at: occurred_at },
+              }
+            : current,
         );
         break;
       }
@@ -86,13 +79,13 @@ export function useDeviceLive(deviceId: string) {
         setLatest((current) =>
           current && status
             ? { ...current, device: { ...current.device, status, last_seen_at: occurred_at } }
-            : current
+            : current,
         );
         break;
       }
       case "image": {
         setLatest((current) =>
-          current ? { ...current, image: payload as unknown as LatestState["image"] } : current
+          current ? { ...current, image: payload as unknown as LatestState["image"] } : current,
         );
         break;
       }
@@ -110,7 +103,9 @@ export function useDeviceLive(deviceId: string) {
         break;
       }
       case "command": {
-        setLatest((current) => (current ? { ...current, command: payload as unknown as CommandInfo } : current));
+        setLatest((current) =>
+          current ? { ...current, command: payload as unknown as CommandInfo } : current,
+        );
         break;
       }
       case "command_ack": {
@@ -130,10 +125,12 @@ export function useDeviceLive(deviceId: string) {
                     ...current.command,
                     status: typeof payload.status === "string" ? payload.status : current.command.status,
                     executed_at:
-                      typeof payload.executed_at === "string" ? payload.executed_at : current.command.executed_at
-                  }
+                      typeof payload.executed_at === "string"
+                        ? payload.executed_at
+                        : current.command.executed_at,
+                  },
                 }
-              : current
+              : current,
           );
         }
         break;
@@ -219,7 +216,7 @@ export function useDeviceLive(deviceId: string) {
         setError(err instanceof Error ? err.message : "指令下发失败");
       }
     },
-    [deviceId]
+    [deviceId],
   );
 
   const toggleAutopilot = useCallback(
@@ -235,7 +232,7 @@ export function useDeviceLive(deviceId: string) {
         setError(err instanceof Error ? err.message : "自动决策开关设置失败");
       }
     },
-    [deviceId, autopilotEnabled]
+    [deviceId, autopilotEnabled],
   );
 
   return {
@@ -250,6 +247,6 @@ export function useDeviceLive(deviceId: string) {
     error,
     triggerAnalysis,
     dispatchCommand,
-    toggleAutopilot
+    toggleAutopilot,
   };
 }
