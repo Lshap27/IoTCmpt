@@ -69,4 +69,3 @@ The server sends JSON envelopes. Every envelope has:
 - After that, the WebSocket stream updates the visible dashboard state.
 - If the socket disconnects, the UI shows a degraded live state and retries.
 - The frontend never connects directly to PostgreSQL or MQTT.
-

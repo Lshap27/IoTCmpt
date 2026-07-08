@@ -81,4 +81,3 @@ for debugging.
 - `content_type`
 - `size_bytes`
 - `created_at`
-

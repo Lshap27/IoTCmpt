@@ -166,4 +166,3 @@ Request:
 
 The server stores the command and publishes it to
 `devices/{device_id}/command`.
-
