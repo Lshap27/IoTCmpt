@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.core import config
 from app.db import models
@@ -18,14 +18,14 @@ def make_settings(**overrides) -> config.Settings:
 
 
 def naive_utc_now() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class FakeMqtt:
     def __init__(self):
         self.published = []
 
-    def publish_json(self, topic, payload, qos=1, retain=False):
+    async def publish_json(self, topic, payload, qos=1, retain=False):
         self.published.append((topic, payload, qos, retain))
 
 
@@ -163,9 +163,7 @@ def test_run_ai_analysis_publishes_high_confidence(client):
     db = SessionLocal()
     try:
         payload = asyncio.run(run_ai_analysis(db, "esp32s3-001", llm, fake_mqtt, trigger="test"))
-        command = (
-            db.query(models.Command).filter(models.Command.command_id == payload["command"]["command_id"]).one()
-        )
+        command = db.query(models.Command).filter(models.Command.command_id == payload["command"]["command_id"]).one()
         ai_result = db.query(models.AiResult).order_by(models.AiResult.id.desc()).first()
     finally:
         db.close()
@@ -185,9 +183,7 @@ def test_run_ai_analysis_low_confidence_stays_pending(client):
     db = SessionLocal()
     try:
         payload = asyncio.run(run_ai_analysis(db, "esp32s3-001", llm, fake_mqtt, trigger="test"))
-        command = (
-            db.query(models.Command).filter(models.Command.command_id == payload["command"]["command_id"]).one()
-        )
+        command = db.query(models.Command).filter(models.Command.command_id == payload["command"]["command_id"]).one()
     finally:
         db.close()
 

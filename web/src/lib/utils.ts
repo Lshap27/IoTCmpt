@@ -11,7 +11,7 @@ export const COMMAND_LABELS: Record<string, string> = {
   "window.close": "关窗",
   "alarm.on": "开启报警",
   "alarm.off": "关闭报警",
-  "display.message": "屏显消息"
+  "display.message": "屏显消息",
 };
 
 export function commandLabel(type: string | null | undefined): string {
@@ -43,7 +43,13 @@ export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "--";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "--";
-  return date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 export function formatRelative(iso: string | null | undefined): string {

@@ -13,7 +13,7 @@ export const METRICS: { key: MetricKey; label: string; unit: string; cssVar: str
   { key: "temperature_c", label: "温度", unit: "°C", cssVar: "--m-temp", digits: 1 },
   { key: "humidity_percent", label: "湿度", unit: "%", cssVar: "--m-hum", digits: 1 },
   { key: "tvoc_ppb", label: "TVOC", unit: "ppb", cssVar: "--m-tvoc", digits: 0 },
-  { key: "eco2_ppm", label: "eCO₂", unit: "ppm", cssVar: "--m-eco2", digits: 0 }
+  { key: "eco2_ppm", label: "eCO₂", unit: "ppm", cssVar: "--m-eco2", digits: 0 },
 ];
 
 type ChartTooltipProps = {
@@ -58,10 +58,14 @@ export function TelemetryChart({ history, className }: { history: TelemetryPoint
   const data = useMemo(
     () =>
       history.map((item) => ({
-        time: new Date(item.sampled_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-        value: item.sensors[metric.key]
+        time: new Date(item.sampled_at).toLocaleTimeString("zh-CN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+        value: item.sensors[metric.key],
       })),
-    [history, metric.key]
+    [history, metric.key],
   );
   const current = history.length > 0 ? history[history.length - 1].sensors[metric.key] : null;
 
@@ -85,7 +89,7 @@ export function TelemetryChart({ history, className }: { history: TelemetryPoint
                 onClick={() => setMetricKey(item.key)}
                 className={cn(
                   "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                  item.key === metric.key ? "bg-surface text-ink shadow-panel" : "text-ink3 hover:text-ink2"
+                  item.key === metric.key ? "bg-surface text-ink shadow-panel" : "text-ink3 hover:text-ink2",
                 )}
               >
                 {item.label}
@@ -123,7 +127,12 @@ export function TelemetryChart({ history, className }: { history: TelemetryPoint
               <Tooltip
                 cursor={{ stroke: "var(--axis)", strokeWidth: 1 }}
                 content={
-                  <ChartTooltip unit={metric.unit} color={color} digits={metric.digits} metricLabel={metric.label} />
+                  <ChartTooltip
+                    unit={metric.unit}
+                    color={color}
+                    digits={metric.digits}
+                    metricLabel={metric.label}
+                  />
                 }
               />
               <Area

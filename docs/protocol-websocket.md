@@ -17,6 +17,11 @@ The server sends JSON envelopes. Every envelope has:
 }
 ```
 
+The envelope types are defined as the `WsMessage` discriminated union in
+`server/app/schemas.py` and embedded into `server/openapi.json` by the export
+script, so the frontend consumes generated types and narrows the payload by
+switching on `type` (`web/src/lib/ws-dispatcher.ts`).
+
 ## Event Types
 
 - `status`: device online/offline and broker state.
@@ -69,4 +74,3 @@ The server sends JSON envelopes. Every envelope has:
 - After that, the WebSocket stream updates the visible dashboard state.
 - If the socket disconnects, the UI shows a degraded live state and retries.
 - The frontend never connects directly to PostgreSQL or MQTT.
-

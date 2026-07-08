@@ -1,4 +1,49 @@
+import { client } from "./api-client/client.gen";
+import {
+  analyzeDevice,
+  getAutopilotState,
+  latestDeviceState,
+  listDevices,
+  sendCommand as sendCommandSdk,
+  telemetryHistory,
+  telemetryHistoryBucketed,
+  updateAutopilotState,
+} from "./api-client/sdk.gen";
+
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
+client.setConfig({ baseUrl: API_BASE_URL });
+
+// 所有类型均由 `pnpm codegen` 从 server/openapi.json 生成——不要手写协议类型。
+export type {
+  AiDecisionOut as AiDecisionPayload,
+  AiResultInfo,
+  AutopilotState,
+  CommandOut as CommandInfo,
+  DeviceSummary,
+  LatestState,
+  TelemetryBucketPoint,
+  TelemetryPoint,
+  WsMessage,
+} from "./api-client/types.gen";
+
+import type {
+  AiDecisionOut,
+  AutopilotState as AutopilotStateT,
+  CommandOut,
+  DeviceSummary as DeviceSummaryT,
+  LatestState as LatestStateT,
+  TelemetryBucketPoint as TelemetryBucketPointT,
+  TelemetryPoint as TelemetryPointT,
+} from "./api-client/types.gen";
+
+/** WebSocket 信封的宽松视图；WF5 将切换到判别联合 WsMessage。 */
+export type Envelope = {
+  type: string;
+  device_id: string;
+  occurred_at: string;
+  payload: Record<string, unknown>;
+};
 
 export function wsUrl(deviceId: string) {
   const base = new URL(API_BASE_URL);
@@ -8,138 +53,76 @@ export function wsUrl(deviceId: string) {
   return base.toString();
 }
 
-export type TelemetryPoint = {
-  sampled_at: string;
-  sensors: {
-    temperature_c: number | null;
-    humidity_percent: number | null;
-    tvoc_ppb: number | null;
-    hcho_ug_m3: number | null;
-    eco2_ppm: number | null;
-    light_is_dark: boolean | null;
-  };
-  state: {
-    window_open: boolean | null;
-    alarm_on: boolean | null;
-    manual_override: boolean | null;
-  };
-  fusion: {
-    air_quality: string | null;
-    recommend_open_window: boolean | null;
-    alarm_enabled: boolean | null;
-    reason: string | null;
-  };
-};
-
-export type CommandInfo = {
-  command_id: string;
-  type: string;
-  parameter: Record<string, unknown>;
-  source: string;
-  confidence: number;
-  reason: string;
-  status: string;
-  created_at: string;
-  published_at: string | null;
-  executed_at: string | null;
-};
-
-export type AiResultInfo = {
-  command_id: string;
-  risk_level: string;
-  confidence: number;
-  reason: string;
-  summary?: string;
-  model?: string;
-};
-
-export type AiDecisionPayload = {
-  command: CommandInfo;
-  risk_level: string;
-  confidence: number;
-  reason: string;
-  model: string;
-  trigger?: string;
-  published: boolean;
-  image_attached?: boolean;
-};
-
-export type DeviceSummary = {
-  device_id: string;
-  display_name: string;
-  status: string;
-  last_seen_at: string | null;
-};
-
-export type AutopilotState = {
-  device_id: string;
-  enabled: boolean;
-  cooldown_seconds: number;
-  min_confidence: number;
-  trigger_levels: string[];
-};
-
-export type LatestState = {
-  device: {
-    device_id: string;
-    display_name: string;
-    status: string;
-    last_seen_at: string | null;
-  };
-  telemetry: TelemetryPoint | null;
-  image: { id: number; url: string; created_at: string } | null;
-  command: CommandInfo | null;
-  ai_result: AiResultInfo | null;
-  autopilot?: { enabled: boolean } | null;
-};
-
-export type Envelope = {
-  type: string;
-  device_id: string;
-  occurred_at: string;
-  payload: Record<string, unknown>;
-};
-
-async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, init);
-  if (!response.ok) {
-    throw new Error(`${init?.method ?? "GET"} ${input} failed: ${response.status}`);
-  }
-  return response.json() as Promise<T>;
+export async function fetchDevices(): Promise<DeviceSummaryT[]> {
+  const { data } = await listDevices({ cache: "no-store", throwOnError: true });
+  return data;
 }
 
-export function fetchDevices(): Promise<DeviceSummary[]> {
-  return requestJson(`${API_BASE_URL}/api/devices`, { cache: "no-store" });
-}
-
-export function fetchLatest(deviceId: string): Promise<LatestState> {
-  return requestJson(`${API_BASE_URL}/api/devices/${deviceId}/latest`, { cache: "no-store" });
-}
-
-export function fetchHistory(deviceId: string, limit = 120): Promise<TelemetryPoint[]> {
-  return requestJson(`${API_BASE_URL}/api/devices/${deviceId}/history?limit=${limit}`, { cache: "no-store" });
-}
-
-export function sendCommand(deviceId: string, type: string): Promise<CommandInfo> {
-  return requestJson(`${API_BASE_URL}/api/devices/${deviceId}/commands`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type, parameter: {}, reason: "dashboard command" })
+export async function fetchLatest(deviceId: string): Promise<LatestStateT> {
+  const { data } = await latestDeviceState({
+    path: { device_id: deviceId },
+    cache: "no-store",
+    throwOnError: true,
   });
+  return data;
 }
 
-export function requestAiAnalysis(deviceId: string): Promise<AiDecisionPayload> {
-  return requestJson(`${API_BASE_URL}/api/devices/${deviceId}/ai/analyze`, { method: "POST" });
-}
-
-export function fetchAutopilot(deviceId: string): Promise<AutopilotState> {
-  return requestJson(`${API_BASE_URL}/api/devices/${deviceId}/autopilot`, { cache: "no-store" });
-}
-
-export function updateAutopilot(deviceId: string, enabled: boolean): Promise<AutopilotState> {
-  return requestJson(`${API_BASE_URL}/api/devices/${deviceId}/autopilot`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled })
+export async function fetchHistory(deviceId: string, limit = 120): Promise<TelemetryPointT[]> {
+  const { data } = await telemetryHistory({
+    path: { device_id: deviceId },
+    query: { limit },
+    cache: "no-store",
+    throwOnError: true,
   });
+  return data;
+}
+
+export async function fetchHistoryBucketed(
+  deviceId: string,
+  bucket = 60,
+  limit = 200,
+): Promise<TelemetryBucketPointT[]> {
+  const { data } = await telemetryHistoryBucketed({
+    path: { device_id: deviceId },
+    query: { bucket, limit },
+    cache: "no-store",
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function sendCommand(deviceId: string, type: string): Promise<CommandOut> {
+  const { data } = await sendCommandSdk({
+    path: { device_id: deviceId },
+    body: {
+      type: type as "none" | "window.open" | "window.close" | "alarm.on" | "alarm.off" | "display.message",
+      parameter: {},
+      reason: "dashboard command",
+    },
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function requestAiAnalysis(deviceId: string): Promise<AiDecisionOut> {
+  const { data } = await analyzeDevice({ path: { device_id: deviceId }, throwOnError: true });
+  return data;
+}
+
+export async function fetchAutopilot(deviceId: string): Promise<AutopilotStateT> {
+  const { data } = await getAutopilotState({
+    path: { device_id: deviceId },
+    cache: "no-store",
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function updateAutopilot(deviceId: string, enabled: boolean): Promise<AutopilotStateT> {
+  const { data } = await updateAutopilotState({
+    path: { device_id: deviceId },
+    body: { enabled },
+    throwOnError: true,
+  });
+  return data;
 }

@@ -13,46 +13,43 @@
 static const char *TAG = "DISPLAY";
 
 #define TFT_SPI_HOST SPI2_HOST
-#define TFT_W 128
-#define TFT_H 128
+#define TFT_W        128
+#define TFT_H        128
 
 #define ST7735_SWRESET 0x01
-#define ST7735_SLPOUT 0x11
-#define ST7735_NORON 0x13
-#define ST7735_INVON 0x21
-#define ST7735_DISPON 0x29
-#define ST7735_CASET 0x2A
-#define ST7735_RASET 0x2B
-#define ST7735_RAMWR 0x2C
-#define ST7735_MADCTL 0x36
-#define ST7735_COLMOD 0x3A
+#define ST7735_SLPOUT  0x11
+#define ST7735_NORON   0x13
+#define ST7735_INVON   0x21
+#define ST7735_DISPON  0x29
+#define ST7735_CASET   0x2A
+#define ST7735_RASET   0x2B
+#define ST7735_RAMWR   0x2C
+#define ST7735_MADCTL  0x36
+#define ST7735_COLMOD  0x3A
 
 #define RGB565(r, g, b) ((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
-#define COLOR_BLACK RGB565(0, 0, 0)
-#define COLOR_GREEN RGB565(40, 220, 80)
-#define COLOR_YELLOW RGB565(250, 210, 40)
-#define COLOR_RED RGB565(240, 50, 50)
-#define COLOR_BLUE RGB565(40, 120, 240)
-#define COLOR_CYAN RGB565(40, 210, 210)
-#define COLOR_GRAY RGB565(90, 90, 110)
-#define COLOR_DARK RGB565(8, 10, 18)
-#define COLOR_PANEL RGB565(24, 28, 42)
+#define COLOR_BLACK     RGB565(0, 0, 0)
+#define COLOR_GREEN     RGB565(40, 220, 80)
+#define COLOR_YELLOW    RGB565(250, 210, 40)
+#define COLOR_RED       RGB565(240, 50, 50)
+#define COLOR_BLUE      RGB565(40, 120, 240)
+#define COLOR_CYAN      RGB565(40, 210, 210)
+#define COLOR_GRAY      RGB565(90, 90, 110)
+#define COLOR_DARK      RGB565(8, 10, 18)
+#define COLOR_PANEL     RGB565(24, 28, 42)
 
 static spi_device_handle_t s_tft_spi;
 static uint16_t s_fb[TFT_H][TFT_W];
 
-static void tft_cs(int level)
-{
+static void tft_cs(int level) {
     gpio_set_level(CONFIG_APP_TFT_CS_GPIO, level);
 }
 
-static void tft_dc(int level)
-{
+static void tft_dc(int level) {
     gpio_set_level(CONFIG_APP_TFT_DC_GPIO, level);
 }
 
-static void tft_spi_send(const uint8_t *data, size_t len)
-{
+static void tft_spi_send(const uint8_t *data, size_t len) {
     spi_transaction_t transaction = {
         .length = len * 8,
         .tx_buffer = data,
@@ -60,24 +57,21 @@ static void tft_spi_send(const uint8_t *data, size_t len)
     spi_device_transmit(s_tft_spi, &transaction);
 }
 
-static void tft_cmd(uint8_t cmd)
-{
+static void tft_cmd(uint8_t cmd) {
     tft_dc(0);
     tft_cs(0);
     tft_spi_send(&cmd, 1);
     tft_cs(1);
 }
 
-static void tft_data(const uint8_t *data, size_t len)
-{
+static void tft_data(const uint8_t *data, size_t len) {
     tft_dc(1);
     tft_cs(0);
     tft_spi_send(data, len);
     tft_cs(1);
 }
 
-static void fb_fill(uint16_t color)
-{
+static void fb_fill(uint16_t color) {
     for (int y = 0; y < TFT_H; y++) {
         for (int x = 0; x < TFT_W; x++) {
             s_fb[y][x] = color;
@@ -85,8 +79,7 @@ static void fb_fill(uint16_t color)
     }
 }
 
-static void fb_rect(int x, int y, int w, int h, uint16_t color)
-{
+static void fb_rect(int x, int y, int w, int h, uint16_t color) {
     if (x < 0) {
         w += x;
         x = 0;
@@ -112,8 +105,7 @@ static void fb_rect(int x, int y, int w, int h, uint16_t color)
     }
 }
 
-static int clamp_int(int value, int min, int max)
-{
+static int clamp_int(int value, int min, int max) {
     if (value < min) {
         return min;
     }
@@ -123,15 +115,13 @@ static int clamp_int(int value, int min, int max)
     return value;
 }
 
-static void draw_bar(int y, int value, int max_value, uint16_t color)
-{
+static void draw_bar(int y, int value, int max_value, uint16_t color) {
     fb_rect(8, y, 112, 9, COLOR_PANEL);
     const int width = clamp_int(value * 112 / max_value, 0, 112);
     fb_rect(8, y, width, 9, color);
 }
 
-static void tft_flush(void)
-{
+static void tft_flush(void) {
     uint8_t data[4];
     data[0] = 0x00;
     data[1] = 0x02;
@@ -154,8 +144,7 @@ static void tft_flush(void)
     tft_cs(1);
 }
 
-esp_err_t display_init(void)
-{
+esp_err_t display_init(void) {
     if (!CONFIG_APP_DISPLAY_ENABLED) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -218,8 +207,7 @@ esp_err_t display_init(void)
     return ESP_OK;
 }
 
-esp_err_t display_render(const sensor_sample_t *sample, const fusion_state_t *state, const app_status_t *status)
-{
+esp_err_t display_render(const sensor_sample_t *sample, const fusion_state_t *state, const app_status_t *status) {
     if (!CONFIG_APP_DISPLAY_ENABLED) {
         return ESP_ERR_INVALID_STATE;
     }

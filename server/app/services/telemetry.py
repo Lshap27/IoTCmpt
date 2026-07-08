@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import models
@@ -12,13 +13,13 @@ from app.services.commands import ensure_device
 def naive_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value
-    return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value.astimezone(UTC).replace(tzinfo=None)
 
 
 def record_status(db: Session, device_id: str, status: str, raw_payload: dict | None = None) -> models.Device:
     device = ensure_device(db, device_id)
     device.status = status
-    device.last_seen_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    device.last_seen_at = datetime.now(UTC).replace(tzinfo=None)
     device.meta = raw_payload or device.meta
     db.add(device)
     db.commit()
@@ -89,3 +90,49 @@ def serialize_telemetry(sample: models.Telemetry) -> dict:
         },
     }
 
+
+BUCKETED_HISTORY_SQL = text(
+    """
+    SELECT
+        time_bucket(make_interval(secs => :bucket), sampled_at) AS bucket,
+        avg(temperature_c) AS temperature_c,
+        avg(humidity_percent) AS humidity_percent,
+        avg(tvoc_ppb) AS tvoc_ppb,
+        avg(hcho_ug_m3) AS hcho_ug_m3,
+        avg(eco2_ppm) AS eco2_ppm,
+        bool_or(window_open) AS window_open,
+        bool_or(alarm_on) AS alarm_on,
+        CASE max(CASE air_quality WHEN 'alert' THEN 3 WHEN 'watch' THEN 2 WHEN 'good' THEN 1 ELSE 0 END)
+            WHEN 3 THEN 'alert' WHEN 2 THEN 'watch' WHEN 1 THEN 'good' ELSE 'unknown'
+        END AS air_quality,
+        count(*) AS sample_count
+    FROM telemetry
+    WHERE device_id = :device_id
+    GROUP BY bucket
+    ORDER BY bucket DESC
+    LIMIT :limit
+    """
+)
+
+
+def fetch_history_bucketed(db: Session, device_id: str, bucket_seconds: int, limit: int) -> list[dict]:
+    """time_bucket 降采样查询；仅在 PostgreSQL/TimescaleDB 上可用。"""
+    rows = db.execute(
+        BUCKETED_HISTORY_SQL,
+        {"bucket": bucket_seconds, "device_id": device_id, "limit": limit},
+    ).mappings()
+    return [
+        {
+            "bucket": row["bucket"].isoformat(),
+            "temperature_c": row["temperature_c"],
+            "humidity_percent": row["humidity_percent"],
+            "tvoc_ppb": row["tvoc_ppb"],
+            "hcho_ug_m3": row["hcho_ug_m3"],
+            "eco2_ppm": row["eco2_ppm"],
+            "window_open": row["window_open"],
+            "alarm_on": row["alarm_on"],
+            "air_quality": row["air_quality"],
+            "sample_count": row["sample_count"],
+        }
+        for row in rows
+    ]

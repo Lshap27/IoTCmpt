@@ -11,7 +11,7 @@ from app.db.session import SessionLocal
 from app.schemas import WebSocketEnvelope
 from app.services.analysis import run_ai_analysis
 from app.services.llm import LLMService
-from app.services.mqtt import MqttService
+from app.services.mqtt import MqttGateway
 from app.services.websocket import manager
 
 LOGGER = logging.getLogger(__name__)
@@ -24,13 +24,14 @@ class AutoPilot:
     manual_override，若据此跳过，首次自动动作之后闭环就会自锁。
     """
 
-    def __init__(self, settings: Settings, llm: LLMService, mqtt_service: MqttService | None = None) -> None:
+    def __init__(self, settings: Settings, llm: LLMService, mqtt_service: MqttGateway | None = None) -> None:
         self.settings = settings
         self.llm = llm
         self.mqtt_service = mqtt_service
         self._enabled: dict[str, bool] = {}
         self._last_run: dict[str, float] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        self._tasks: set[asyncio.Task[None]] = set()
 
     def is_enabled(self, device_id: str) -> bool:
         return self._enabled.get(device_id, self.settings.autopilot_enabled)
@@ -70,14 +71,14 @@ class AutoPilot:
         self._last_run[device_id] = now
         return trigger
 
-    def maybe_trigger(
-        self, device_id: str, telemetry_payload: dict[str, Any], loop: asyncio.AbstractEventLoop
-    ) -> None:
-        """在 MQTT 回调线程中调用：命中触发条件时把分析任务调度到事件循环。"""
+    def maybe_trigger(self, device_id: str, telemetry_payload: dict[str, Any]) -> None:
+        """在事件循环内调用：命中触发条件时调度后台分析任务。"""
         trigger = self.should_run(device_id, telemetry_payload)
         if trigger is None:
             return
-        asyncio.run_coroutine_threadsafe(self.run_once(device_id, trigger), loop)
+        task = asyncio.create_task(self.run_once(device_id, trigger))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
     async def run_once(self, device_id: str, trigger: str) -> None:
         lock = self._locks.setdefault(device_id, asyncio.Lock())

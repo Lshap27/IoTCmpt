@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -72,7 +72,7 @@ def create_command(
 
 def mark_published(db: Session, command: models.Command) -> models.Command:
     command.status = "published"
-    command.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    command.published_at = datetime.now(UTC).replace(tzinfo=None)
     db.add(command)
     db.commit()
     db.refresh(command)

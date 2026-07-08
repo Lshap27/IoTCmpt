@@ -1,69 +1,96 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import logging
-from typing import Any, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+import aiomqtt
 
 from app.core.config import Settings
 
 LOGGER = logging.getLogger(__name__)
 
+MessageHandler = Callable[[str, dict[str, Any]], Awaitable[None]]
 
-class MqttService:
-    def __init__(self, settings: Settings, message_handler: Callable[[str, dict[str, Any]], None] | None = None) -> None:
+SUBSCRIPTIONS: tuple[tuple[str, int], ...] = (
+    ("devices/+/status", 1),
+    ("devices/+/telemetry", 0),
+    ("devices/+/event", 1),
+    ("devices/+/command_ack", 1),
+    ("devices/+/log", 0),
+)
+
+
+def _decode_payload(raw: bytes | bytearray | str | Any) -> dict[str, Any]:
+    text = bytes(raw).decode("utf-8", errors="replace") if isinstance(raw, (bytes, bytearray)) else str(raw)
+    try:
+        payload = json.loads(text)
+        if not isinstance(payload, dict):
+            payload = {"value": payload}
+    except Exception:
+        payload = {"raw": text}
+    return payload
+
+
+class MqttGateway:
+    """asyncio 原生的 MQTT 接入：单事件循环内订阅、发布与自动重连。"""
+
+    def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.message_handler = message_handler
-        self.client = None
+        self._client: aiomqtt.Client | None = None
+        self._task: asyncio.Task[None] | None = None
 
-    def start(self) -> None:
+    def start(self, handler: MessageHandler) -> None:
         if not self.settings.mqtt_enabled:
             LOGGER.info("MQTT disabled")
             return
-        try:
-            import paho.mqtt.client as mqtt
-        except ImportError:
-            LOGGER.warning("paho-mqtt is not installed; MQTT disabled")
-            return
+        self._task = asyncio.create_task(self.run(handler), name="mqtt-gateway")
 
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=self.settings.mqtt_client_id)
-        if self.settings.mqtt_username:
-            client.username_pw_set(self.settings.mqtt_username, self.settings.mqtt_password)
-
-        def on_connect(client, userdata, flags, reason_code, properties):
-            if reason_code == 0:
-                client.subscribe("devices/+/status", qos=1)
-                client.subscribe("devices/+/telemetry", qos=0)
-                client.subscribe("devices/+/event", qos=1)
-                client.subscribe("devices/+/command_ack", qos=1)
-                client.subscribe("devices/+/log", qos=0)
-            else:
-                LOGGER.warning("MQTT connect failed: %s", reason_code)
-
-        def on_message(client, userdata, message):
-            if self.message_handler is None:
-                return
+    async def run(self, handler: MessageHandler) -> None:
+        while True:
             try:
-                payload = json.loads(message.payload.decode("utf-8"))
-                if not isinstance(payload, dict):
-                    payload = {"value": payload}
-            except Exception:
-                payload = {"raw": message.payload.decode("utf-8", errors="replace")}
-            self.message_handler(message.topic, payload)
+                async with aiomqtt.Client(
+                    hostname=self.settings.mqtt_host,
+                    port=self.settings.mqtt_port,
+                    identifier=self.settings.mqtt_client_id,
+                    username=self.settings.mqtt_username or None,
+                    password=self.settings.mqtt_password or None,
+                ) as client:
+                    self._client = client
+                    LOGGER.info("MQTT connected to %s:%s", self.settings.mqtt_host, self.settings.mqtt_port)
+                    for topic, qos in SUBSCRIPTIONS:
+                        await client.subscribe(topic, qos=qos)
+                    async for message in client.messages:
+                        payload = _decode_payload(message.payload)
+                        try:
+                            await handler(str(message.topic), payload)
+                        except Exception:
+                            LOGGER.exception("MQTT message handler failed for %s", message.topic)
+            except aiomqtt.MqttError as exc:
+                LOGGER.warning(
+                    "MQTT connection lost (%s); reconnecting in %.1fs", exc, self.settings.mqtt_reconnect_seconds
+                )
+            finally:
+                self._client = None
+            await asyncio.sleep(self.settings.mqtt_reconnect_seconds)
 
-        client.on_connect = on_connect
-        client.on_message = on_message
-        client.connect_async(self.settings.mqtt_host, self.settings.mqtt_port)
-        client.loop_start()
-        self.client = client
+    async def stop(self) -> None:
+        if self._task is not None:
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
+            self._task = None
+        self._client = None
 
-    def stop(self) -> None:
-        if self.client is not None:
-            self.client.loop_stop()
-            self.client.disconnect()
-            self.client = None
-
-    def publish_json(self, topic: str, payload: dict[str, Any], qos: int = 1, retain: bool = False) -> None:
-        if self.client is None:
+    async def publish_json(self, topic: str, payload: dict[str, Any], qos: int = 1, retain: bool = False) -> None:
+        client = self._client
+        if client is None:
             LOGGER.info("MQTT publish skipped because client is not connected: %s", topic)
             return
-        self.client.publish(topic, json.dumps(payload, ensure_ascii=False), qos=qos, retain=retain)
+        try:
+            await client.publish(topic, json.dumps(payload, ensure_ascii=False), qos=qos, retain=retain)
+        except aiomqtt.MqttError:
+            LOGGER.warning("MQTT publish failed: %s", topic)

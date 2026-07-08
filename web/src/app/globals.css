@@ -1,6 +1,101 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* next-themes 的 class 暗色模式 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Tailwind v4 主题：把运行时 CSS 变量映射为工具类（inline 引用，不重复发射变量） */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink-2);
+  --color-ink3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-alert: var(--alert);
+
+  --shadow-panel: var(--shadow-panel);
+  --shadow-glow: 0 0 0 1px var(--accent-soft), 0 0 24px var(--accent-glow);
+
+  --animate-fade-slide: fade-slide 0.35s ease-out both;
+  --animate-pulse-soft: pulse-soft 1.6s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.8s linear infinite;
+  --animate-flash-ring: flash-ring 0.9s ease-out 1;
+
+  /* shadcn/ui 语义变量 → 现有设计 token 的桥接 */
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--surface-solid);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-contrast);
+  --color-secondary: var(--raised);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--raised);
+  --color-muted-foreground: var(--ink-2);
+  --color-destructive: var(--alert);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--accent);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  @keyframes fade-slide {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes pulse-soft {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+  @keyframes flash-ring {
+    from {
+      box-shadow: 0 0 0 0 var(--accent-glow);
+    }
+    to {
+      box-shadow: 0 0 0 14px rgba(0, 0, 0, 0);
+    }
+  }
+}
+
+/* v4 起默认 border 色为 currentColor；恢复 v3 的浅灰缺省，避免裸 border 视觉回归 */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--line);
+  }
+}
 
 /* 设计 token：浅色为基准值，.dark 覆盖为暗色科技控制台。
    数据系列色与状态色均已通过 dataviz 色板校验器（CVD/对比度/亮度带）。 */
@@ -41,6 +136,10 @@
   --shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 28px -16px rgba(15, 23, 42, 0.16);
   --page-glow-1: rgba(14, 116, 144, 0.05);
   --page-glow-2: rgba(109, 40, 217, 0.04);
+
+  /* shadcn 桥接用：主按钮前景色与圆角基准 */
+  --accent-contrast: #ffffff;
+  --radius: 0.75rem;
 }
 
 .dark {
@@ -80,6 +179,9 @@
   --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 32px -18px rgba(0, 0, 0, 0.55);
   --page-glow-1: rgba(34, 211, 238, 0.07);
   --page-glow-2: rgba(139, 92, 246, 0.07);
+
+  /* 暗色下青色主按钮用深色前景保证对比度 */
+  --accent-contrast: #083344;
 }
 
 * {
@@ -95,24 +197,16 @@ body {
   color: var(--ink);
   background:
     radial-gradient(1100px 480px at 88% -12%, var(--page-glow-2), transparent 60%),
-    radial-gradient(900px 560px at -8% 108%, var(--page-glow-1), transparent 55%),
-    var(--bg);
+    radial-gradient(900px 560px at -8% 108%, var(--page-glow-1), transparent 55%), var(--bg);
   background-attachment: fixed;
   font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI Variable Text",
-    "Segoe UI",
-    "PingFang SC",
-    "Hiragino Sans GB",
-    "MiSans",
-    "Microsoft YaHei UI",
-    "Microsoft YaHei",
-    system-ui,
-    sans-serif;
+    -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "MiSans", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  transition: background-color 0.25s ease, color 0.25s ease;
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease;
 }
 
 button,
@@ -156,6 +250,68 @@ select {
 
 /* AI 分析中的流光条 */
 .shimmer-bar {
-  background: linear-gradient(90deg, transparent, var(--accent-soft), var(--accent-glow), var(--accent-soft), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent-soft),
+    var(--accent-glow),
+    var(--accent-soft),
+    transparent
+  );
   background-size: 200% 100%;
+}
+
+/* Bento 网格：子项错峰上浮入场 + hover 微抬升。
+   入场用 backwards（不保留末帧），动画结束后 transform 交还给 hover 过渡。 */
+@keyframes bento-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.99);
+  }
+}
+
+.bento-grid > * {
+  animation: bento-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.bento-grid > *:hover {
+  transform: translateY(-2px);
+}
+
+.bento-grid > :nth-child(2) {
+  animation-delay: 45ms;
+}
+.bento-grid > :nth-child(3) {
+  animation-delay: 90ms;
+}
+.bento-grid > :nth-child(4) {
+  animation-delay: 135ms;
+}
+.bento-grid > :nth-child(5) {
+  animation-delay: 180ms;
+}
+.bento-grid > :nth-child(6) {
+  animation-delay: 225ms;
+}
+.bento-grid > :nth-child(7) {
+  animation-delay: 270ms;
+}
+.bento-grid > :nth-child(8) {
+  animation-delay: 315ms;
+}
+.bento-grid > :nth-child(9) {
+  animation-delay: 360ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bento-grid > * {
+    animation: none;
+    transition: none;
+  }
+  .bento-grid > *:hover {
+    transform: none;
+  }
 }

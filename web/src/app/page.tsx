@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AiPanel } from "@/components/ai-panel";
 import { CameraPanel } from "@/components/camera-panel";
 import { CommandPad } from "@/components/command-pad";
@@ -9,20 +10,16 @@ import { EventStream } from "@/components/event-stream";
 import { StatCard } from "@/components/stat-card";
 import { METRICS, TelemetryChart } from "@/components/telemetry-chart";
 import { useDeviceLive } from "@/hooks/use-device-live";
-import { AiDecisionPayload, DeviceSummary, fetchDevices } from "@/lib/api";
+import type { AiDecisionPayload } from "@/lib/api";
+import { fetchDevices } from "@/lib/api";
+import { devicesKey } from "@/lib/query-keys";
 
 const DEFAULT_DEVICE_ID = "esp32s3-001";
 
 export default function Dashboard() {
-  const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [deviceId, setDeviceId] = useState(DEFAULT_DEVICE_ID);
   const live = useDeviceLive(deviceId);
-
-  useEffect(() => {
-    fetchDevices()
-      .then(setDevices)
-      .catch(() => undefined);
-  }, []);
+  const { data: devices = [] } = useQuery({ queryKey: devicesKey, queryFn: fetchDevices });
 
   const telemetry = live.latest?.telemetry ?? null;
 
@@ -34,11 +31,13 @@ export default function Dashboard() {
     if (latest.ai_result.command_id !== latest.command.command_id) return null;
     return {
       command: latest.command,
-      risk_level: latest.ai_result.risk_level,
+      risk_level: latest.ai_result.risk_level as AiDecisionPayload["risk_level"],
       confidence: latest.ai_result.confidence ?? latest.command.confidence,
       reason: latest.ai_result.reason || latest.command.reason,
       model: latest.ai_result.model ?? "",
-      published: latest.command.status !== "pending"
+      trigger: "restored",
+      published: latest.command.status !== "pending",
+      image_attached: false,
     };
   }, [live.decision, live.latest]);
 
@@ -47,9 +46,9 @@ export default function Dashboard() {
       METRICS.map((metric) => ({
         metric,
         value: telemetry?.sensors[metric.key] ?? null,
-        points: live.history.map((row) => row.sensors[metric.key])
+        points: live.history.map((row) => row.sensors[metric.key] ?? null),
       })),
-    [telemetry, live.history]
+    [telemetry, live.history],
   );
 
   return (
@@ -81,7 +80,8 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <section className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Bento 网格：12 列不等跨度，入场错峰上浮（见 globals.css .bento-grid） */}
+      <section className="bento-grid mt-5 grid grid-cols-12 gap-4">
         {stats.map(({ metric, value, points }) => (
           <StatCard
             key={metric.key}
@@ -91,30 +91,29 @@ export default function Dashboard() {
             color={`var(${metric.cssVar})`}
             value={value}
             points={points}
+            className="col-span-12 sm:col-span-6 xl:col-span-3"
           />
         ))}
-      </section>
 
-      <section className="mt-4 grid gap-4 xl:grid-cols-3">
-        <TelemetryChart history={live.history} className="xl:col-span-2" />
+        <TelemetryChart history={live.history} className="col-span-12 xl:col-span-8" />
         <AiPanel
           analyzing={live.analyzing}
           decision={decision}
           autopilotEnabled={live.autopilotEnabled}
           onToggleAutopilot={live.toggleAutopilot}
           onAnalyze={live.triggerAnalysis}
+          className="col-span-12 xl:col-span-4"
         />
-      </section>
 
-      <section className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        <CameraPanel image={live.latest?.image} />
+        <CameraPanel image={live.latest?.image} className="col-span-12 md:col-span-6 xl:col-span-3" />
         <CommandPad
           onCommand={live.dispatchCommand}
           pendingCommands={live.pendingCommands}
           windowOpen={telemetry?.state.window_open}
           alarmOn={telemetry?.state.alarm_on}
+          className="col-span-12 md:col-span-6 xl:col-span-5"
         />
-        <EventStream events={live.events} className="lg:col-span-2 xl:col-span-1" />
+        <EventStream events={live.events} className="col-span-12 xl:col-span-4" />
       </section>
 
       <footer className="mt-6 pb-4 text-center text-[11px] text-ink3">

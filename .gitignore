@@ -30,6 +30,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 .python-version
+# Pin the server toolchain Python (matches the Docker image) for uv + CI.
+!server/.python-version
 .venv/
 venv/
 env/
@@ -67,6 +69,8 @@ build-*/
 **/build-*/
 **/managed_components/
 **/dependencies.lock
+# Pin the firmware component versions for CI reproducibility.
+!firmware/esp32s3/dependencies.lock
 **/sdkconfig
 **/sdkconfig.old
 **/sdkconfig.bak

@@ -6,8 +6,7 @@
 
 #include "app_string.h"
 
-static void append_reason(char *dest, size_t dest_size, const char *format, ...)
-{
+static void append_reason(char *dest, size_t dest_size, const char *format, ...) {
     if (!dest || dest_size == 0) {
         return;
     }
@@ -23,8 +22,7 @@ static void append_reason(char *dest, size_t dest_size, const char *format, ...)
     va_end(args);
 }
 
-esp_err_t fusion_evaluate(const sensor_sample_t *sample, fusion_state_t *out_state)
-{
+esp_err_t fusion_evaluate(const sensor_sample_t *sample, fusion_state_t *out_state) {
     if (!sample || !out_state) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -107,8 +105,7 @@ esp_err_t fusion_evaluate(const sensor_sample_t *sample, fusion_state_t *out_sta
     return ESP_OK;
 }
 
-const char *fusion_air_quality_name(fusion_air_quality_t quality)
-{
+const char *fusion_air_quality_name(fusion_air_quality_t quality) {
     switch (quality) {
     case FUSION_AIR_QUALITY_GOOD:
         return "good";

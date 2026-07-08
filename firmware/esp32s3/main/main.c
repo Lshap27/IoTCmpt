@@ -1,7 +1,7 @@
+#include "actuators.h"
 #include "app_config.h"
 #include "app_config_defaults.h"
 #include "app_status.h"
-#include "actuators.h"
 #include "camera_app.h"
 #include "control_state.h"
 #include "display.h"
@@ -38,13 +38,11 @@ static SemaphoreHandle_t s_latest_mutex;
 static SemaphoreHandle_t s_command_mutex;
 static EventGroupHandle_t s_wifi_events;
 
-static app_status_link_t link_status_from_result(esp_err_t result)
-{
+static app_status_link_t link_status_from_result(esp_err_t result) {
     return result == ESP_OK ? APP_STATUS_LINK_READY : APP_STATUS_LINK_DEGRADED;
 }
 
-static void latest_update(const sensor_sample_t *sample, const fusion_state_t *fusion)
-{
+static void latest_update(const sensor_sample_t *sample, const fusion_state_t *fusion) {
     if (s_latest_mutex && xSemaphoreTake(s_latest_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         s_latest_sample = *sample;
         s_latest_fusion = *fusion;
@@ -55,8 +53,7 @@ static void latest_update(const sensor_sample_t *sample, const fusion_state_t *f
     }
 }
 
-static void latest_get(sensor_sample_t *sample, fusion_state_t *fusion, app_status_t *status)
-{
+static void latest_get(sensor_sample_t *sample, fusion_state_t *fusion, app_status_t *status) {
     if (s_latest_mutex && xSemaphoreTake(s_latest_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         *sample = s_latest_sample;
         *fusion = s_latest_fusion;
@@ -69,8 +66,7 @@ static void latest_get(sensor_sample_t *sample, fusion_state_t *fusion, app_stat
     }
 }
 
-static void latest_command_set(const mqtt_app_command_t *command)
-{
+static void latest_command_set(const mqtt_app_command_t *command) {
     if (!command) {
         return;
     }
@@ -85,8 +81,7 @@ static void latest_command_set(const mqtt_app_command_t *command)
     }
 }
 
-static bool latest_command_take(mqtt_app_command_t *command)
-{
+static bool latest_command_take(mqtt_app_command_t *command) {
     bool has_command = false;
     if (!command) {
         return false;
@@ -112,8 +107,7 @@ static bool latest_command_take(mqtt_app_command_t *command)
     return has_command;
 }
 
-static void on_command(const mqtt_app_command_t *command)
-{
+static void on_command(const mqtt_app_command_t *command) {
     if (!command) {
         return;
     }
@@ -121,8 +115,7 @@ static void on_command(const mqtt_app_command_t *command)
     latest_command_set(command);
 }
 
-static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
-{
+static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
     (void)arg;
     (void)event_data;
 
@@ -137,8 +130,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     }
 }
 
-static esp_err_t wifi_start(void)
-{
+static esp_err_t wifi_start(void) {
     if (!s_config.wifi_enabled) {
         ESP_LOGW(TAG, "Wi-Fi disabled");
         return ESP_ERR_INVALID_STATE;
@@ -176,8 +168,7 @@ static esp_err_t wifi_start(void)
     return (bits & WIFI_CONNECTED_BIT) ? ESP_OK : ESP_ERR_TIMEOUT;
 }
 
-static void telemetry_task(void *arg)
-{
+static void telemetry_task(void *arg) {
     (void)arg;
 
     while (true) {
@@ -213,8 +204,7 @@ static void telemetry_task(void *arg)
     }
 }
 
-static void actuator_task(void *arg)
-{
+static void actuator_task(void *arg) {
     (void)arg;
 
     esp_err_t err = actuator_init();
@@ -243,8 +233,9 @@ static void actuator_task(void *arg)
 
         s_status.last_command_result = actuator_apply(has_command ? &envelope.command : NULL, &fusion);
         if (has_command) {
-            const char *ack_status = s_status.last_command_result == ESP_OK ? "executed" :
-                                     s_status.last_command_result == ESP_ERR_NOT_SUPPORTED ? "rejected" : "failed";
+            const char *ack_status = s_status.last_command_result == ESP_OK                  ? "executed"
+                                     : s_status.last_command_result == ESP_ERR_NOT_SUPPORTED ? "rejected"
+                                                                                             : "failed";
             mqtt_app_publish_command_ack(&envelope, ack_status, esp_err_to_name(s_status.last_command_result));
         }
 
@@ -252,8 +243,7 @@ static void actuator_task(void *arg)
     }
 }
 
-static void display_task(void *arg)
-{
+static void display_task(void *arg) {
     (void)arg;
 
     esp_err_t err = display_init();
@@ -273,8 +263,7 @@ static void display_task(void *arg)
     }
 }
 
-static void camera_upload_task(void *arg)
-{
+static void camera_upload_task(void *arg) {
     (void)arg;
 
     int capture_failures = 0;
@@ -318,8 +307,7 @@ static void camera_upload_task(void *arg)
     }
 }
 
-void app_main(void)
-{
+void app_main(void) {
     memset(&s_status, 0, sizeof(s_status));
     memset(&s_latest_sample, 0, sizeof(s_latest_sample));
     memset(&s_latest_fusion, 0, sizeof(s_latest_fusion));

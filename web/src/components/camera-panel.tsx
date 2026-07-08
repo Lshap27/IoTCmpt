@@ -6,7 +6,7 @@ import { formatRelative } from "@/lib/utils";
 
 export function CameraPanel({
   image,
-  className
+  className,
 }: {
   image: { url: string; created_at: string } | null | undefined;
   className?: string;

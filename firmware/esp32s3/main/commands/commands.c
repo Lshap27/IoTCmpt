@@ -7,16 +7,14 @@
 
 static const char *TAG = "COMMANDS";
 
-void command_clear(cloud_command_t *command)
-{
+void command_clear(cloud_command_t *command) {
     if (command) {
         memset(command, 0, sizeof(*command));
         command->type = CLOUD_COMMAND_NONE;
     }
 }
 
-esp_err_t command_from_name(const char *name, cloud_command_t *out_command)
-{
+esp_err_t command_from_name(const char *name, cloud_command_t *out_command) {
     if (!name || !out_command) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -42,8 +40,7 @@ esp_err_t command_from_name(const char *name, cloud_command_t *out_command)
     return ESP_OK;
 }
 
-esp_err_t command_apply(const cloud_command_t *command)
-{
+esp_err_t command_apply(const cloud_command_t *command) {
     if (!command) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -71,8 +68,7 @@ esp_err_t command_apply(const cloud_command_t *command)
     }
 }
 
-const char *command_type_name(cloud_command_type_t type)
-{
+const char *command_type_name(cloud_command_type_t type) {
     switch (type) {
     case CLOUD_COMMAND_NONE:
         return "none";

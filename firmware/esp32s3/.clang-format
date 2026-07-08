@@ -1,0 +1,10 @@
+# Firmware C code style; run: clang-format -i main/**/*.c main/include/*.h
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 120
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+PointerAlignment: Right
+SortIncludes: CaseSensitive
+IncludeBlocks: Preserve
+AlignConsecutiveMacros: Consecutive

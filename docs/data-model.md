@@ -1,7 +1,9 @@
 # Data Model
 
-The new gateway stores normalized records while preserving the raw JSON payload
-for debugging.
+The gateway stores normalized records while preserving the raw JSON payload
+for debugging. The schema is managed by Alembic migrations
+(`server/alembic/versions/`); `AIOT_AUTO_CREATE_TABLES` stays `false` when
+migrations own the schema.
 
 ## device
 
@@ -13,6 +15,13 @@ for debugging.
 - `metadata`: JSON.
 
 ## telemetry
+
+On PostgreSQL, `telemetry` is a TimescaleDB hypertable partitioned on
+`sampled_at` (migration `0002`), with primary key `(id, sampled_at)` as the
+hypertable requires. The ORM keeps the single-column `id` so SQLite test
+databases still autoincrement. Time-bucketed aggregates for the dashboard are
+served by `GET /api/devices/{device_id}/history/bucketed` using
+`time_bucket`.
 
 - `id`
 - `device_id`
@@ -81,4 +90,3 @@ for debugging.
 - `content_type`
 - `size_bytes`
 - `created_at`
-

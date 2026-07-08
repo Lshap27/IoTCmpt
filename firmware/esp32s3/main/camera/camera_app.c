@@ -8,8 +8,7 @@
 
 static const char *TAG = "CAMERA";
 
-static esp_err_t camera_init_once(void)
-{
+static esp_err_t camera_init_once(void) {
     gpio_config_t sccb_conf = {
         .pin_bit_mask = (1ULL << CONFIG_APP_CAMERA_SIOD_GPIO) | (1ULL << CONFIG_APP_CAMERA_SIOC_GPIO),
         .mode = GPIO_MODE_INPUT_OUTPUT_OD,
@@ -67,8 +66,7 @@ static esp_err_t camera_init_once(void)
     return ESP_OK;
 }
 
-esp_err_t camera_app_init(void)
-{
+esp_err_t camera_app_init(void) {
     if (!CONFIG_APP_CAMERA_ENABLED) {
         ESP_LOGW(TAG, "摄像头已禁用");
         return ESP_ERR_INVALID_STATE;
@@ -91,27 +89,19 @@ esp_err_t camera_app_init(void)
     return err;
 }
 
-camera_fb_t *camera_app_capture(void)
-{
+camera_fb_t *camera_app_capture(void) {
     camera_fb_t *frame = esp_camera_fb_get();
     if (!frame) {
         ESP_LOGW(TAG, "摄像头采集失败");
         return NULL;
     }
 
-    ESP_LOGI(
-        TAG,
-        "已采集图像：长度=%u 宽=%u 高=%u 格式=%u",
-        (unsigned int)frame->len,
-        (unsigned int)frame->width,
-        (unsigned int)frame->height,
-        (unsigned int)frame->format
-    );
+    ESP_LOGI(TAG, "已采集图像：长度=%u 宽=%u 高=%u 格式=%u", (unsigned int)frame->len, (unsigned int)frame->width,
+             (unsigned int)frame->height, (unsigned int)frame->format);
     return frame;
 }
 
-void camera_app_return_frame(camera_fb_t *frame)
-{
+void camera_app_return_frame(camera_fb_t *frame) {
     if (frame) {
         esp_camera_fb_return(frame);
     }

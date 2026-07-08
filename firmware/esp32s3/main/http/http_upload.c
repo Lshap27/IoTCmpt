@@ -10,13 +10,11 @@
 static const char *TAG = "HTTP_UPLOAD";
 static app_config_t s_config;
 
-static bool string_is_empty(const char *value)
-{
+static bool string_is_empty(const char *value) {
     return !value || value[0] == '\0';
 }
 
-esp_err_t http_upload_init(const app_config_t *config)
-{
+esp_err_t http_upload_init(const app_config_t *config) {
     if (!config) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -29,8 +27,7 @@ esp_err_t http_upload_init(const app_config_t *config)
     return ESP_OK;
 }
 
-esp_err_t http_upload_jpeg(const char *url, const uint8_t *data, size_t len)
-{
+esp_err_t http_upload_jpeg(const char *url, const uint8_t *data, size_t len) {
     if (string_is_empty(url) || !data || len == 0) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -43,21 +40,16 @@ esp_err_t http_upload_jpeg(const char *url, const uint8_t *data, size_t len)
     char header[256] = {0};
     char footer[64] = {0};
 
-    const bool header_ok =
-        app_string_append(header, sizeof(header), "--") &&
-        app_string_append(header, sizeof(header), boundary) &&
-        app_string_append(
-            header,
-            sizeof(header),
-            "\r\n"
-            "Content-Disposition: form-data; name=\"file\"; filename=\"image.jpg\"\r\n"
-            "Content-Type: image/jpeg\r\n"
-            "\r\n"
-        );
-    const bool footer_ok =
-        app_string_append(footer, sizeof(footer), "\r\n--") &&
-        app_string_append(footer, sizeof(footer), boundary) &&
-        app_string_append(footer, sizeof(footer), "--\r\n");
+    const bool header_ok = app_string_append(header, sizeof(header), "--") &&
+                           app_string_append(header, sizeof(header), boundary) &&
+                           app_string_append(header, sizeof(header),
+                                             "\r\n"
+                                             "Content-Disposition: form-data; name=\"file\"; filename=\"image.jpg\"\r\n"
+                                             "Content-Type: image/jpeg\r\n"
+                                             "\r\n");
+    const bool footer_ok = app_string_append(footer, sizeof(footer), "\r\n--") &&
+                           app_string_append(footer, sizeof(footer), boundary) &&
+                           app_string_append(footer, sizeof(footer), "--\r\n");
     if (!header_ok || !footer_ok) {
         return ESP_FAIL;
     }

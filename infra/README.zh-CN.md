@@ -4,7 +4,7 @@
 
 服务：
 
-- PostgreSQL：`localhost:5432`。
+- TimescaleDB（PostgreSQL 16）：`localhost:5432`。
 - EMQX MQTT Broker：`localhost:1883`。
 - EMQX Dashboard：`http://localhost:18083`。
 - FastAPI 网关：`http://localhost:8000`。

@@ -2,37 +2,29 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router as api_router
-from app.api.routes import set_autopilot, set_mqtt_service
 from app.core.config import get_settings
-from app.db.session import SessionLocal
-from app.db.session import init_db
+from app.db.session import SessionLocal, init_db
+from app.schemas import HealthOut, WebSocketEnvelope
 from app.services.autopilot import AutoPilot
 from app.services.llm import LLMService
+from app.services.mqtt import MqttGateway
 from app.services.mqtt_ingest import ingest_mqtt_message
-from app.services.mqtt import MqttService
 from app.services.websocket import manager
 
 
-def _build_mqtt_handler(loop: asyncio.AbstractEventLoop, autopilot: AutoPilot):
-    def handle(topic: str, payload: dict) -> None:
-        db = SessionLocal()
-        try:
-            envelope = ingest_mqtt_message(db, topic, payload)
-            if envelope is None:
-                return
-        finally:
-            db.close()
-        asyncio.run_coroutine_threadsafe(manager.broadcast(envelope.device_id, envelope.model_dump(mode="json")), loop)
-        if envelope.type == "telemetry":
-            autopilot.maybe_trigger(envelope.device_id, envelope.payload, loop)
-
-    return handle
+def _ingest_sync(topic: str, payload: dict[str, Any]) -> WebSocketEnvelope | None:
+    db = SessionLocal()
+    try:
+        return ingest_mqtt_message(db, topic, payload)
+    finally:
+        db.close()
 
 
 @asynccontextmanager
@@ -41,24 +33,36 @@ async def lifespan(app: FastAPI):
     settings.uploads_dir.mkdir(parents=True, exist_ok=True)
     if settings.auto_create_tables:
         init_db()
-    loop = asyncio.get_running_loop()
+
     autopilot = AutoPilot(settings, LLMService(settings))
-    mqtt_service = MqttService(settings, _build_mqtt_handler(loop, autopilot))
-    mqtt_service.start()
+    mqtt_service = MqttGateway(settings)
     autopilot.mqtt_service = mqtt_service
+
+    async def handle_mqtt_message(topic: str, payload: dict[str, Any]) -> None:
+        # DB writes stay on a worker thread; broadcast and autopilot run on the event loop.
+        envelope = await asyncio.to_thread(_ingest_sync, topic, payload)
+        if envelope is None:
+            return
+        await manager.broadcast(envelope.device_id, envelope.model_dump(mode="json"))
+        if envelope.type == "telemetry":
+            autopilot.maybe_trigger(envelope.device_id, envelope.payload)
+
+    mqtt_service.start(handle_mqtt_message)
     app.state.mqtt_service = mqtt_service
     app.state.autopilot = autopilot
-    set_mqtt_service(mqtt_service)
-    set_autopilot(autopilot)
     yield
-    set_autopilot(None)
-    set_mqtt_service(None)
-    mqtt_service.stop()
+    await mqtt_service.stop()
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="AIoT Gateway", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(
+        title="AIoT Gateway",
+        version="0.1.0",
+        lifespan=lifespan,
+        # Clean operation ids (route function names) -> clean generated SDK names.
+        generate_unique_id_function=lambda route: route.name,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -69,7 +73,7 @@ def create_app() -> FastAPI:
     settings.uploads_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/uploads", StaticFiles(directory=str(settings.uploads_dir)), name="uploads")
 
-    @app.get("/health")
+    @app.get("/health", response_model=HealthOut)
     def health():
         return {"status": "ok", "service": "aiot-gateway"}
 

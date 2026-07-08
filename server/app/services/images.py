@@ -42,4 +42,3 @@ def save_image(db: Session, settings: Settings, device_id: str, file: UploadFile
     db.commit()
     db.refresh(asset)
     return asset
-

@@ -1,0 +1,36 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+        exclude: ^web/src/lib/api-client/
+      - id: trailing-whitespace
+        exclude: ^web/src/lib/api-client/
+      - id: check-yaml
+      - id: check-merge-conflict
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.20
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^server/
+      - id: ruff-format
+        files: ^server/
+
+  # Use the project-local prettier so the hook and `pnpm format` agree on output.
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        language: system
+        entry: node web/node_modules/prettier/bin/prettier.cjs --write
+        files: ^web/
+        exclude: ^web/(src/lib/api-client/|pnpm-lock\.yaml|node_modules/|\.next/)
+        types_or: [ts, tsx, javascript, jsx, css, json, yaml, markdown]
+
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v19.1.4
+    hooks:
+      - id: clang-format
+        files: ^firmware/esp32s3/main/.*\.(c|h)$

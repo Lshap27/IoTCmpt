@@ -9,8 +9,7 @@
 
 static const char *TAG = "INPUTS";
 
-static void button_task(void *arg)
-{
+static void button_task(void *arg) {
     (void)arg;
 
     bool last_pressed = false;
@@ -28,8 +27,7 @@ static void button_task(void *arg)
     }
 }
 
-esp_err_t inputs_start(void)
-{
+esp_err_t inputs_start(void) {
     if (!CONFIG_APP_BUTTON_ENABLED) {
         ESP_LOGW(TAG, "按键输入已禁用");
         return ESP_ERR_INVALID_STATE;

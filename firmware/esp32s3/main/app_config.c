@@ -5,8 +5,7 @@
 #include "app_config_defaults.h"
 #include "app_string.h"
 
-static void copy_config_string(char *dest, size_t dest_size, const char *source)
-{
+static void copy_config_string(char *dest, size_t dest_size, const char *source) {
     if (dest_size == 0) {
         return;
     }
@@ -19,8 +18,7 @@ static void copy_config_string(char *dest, size_t dest_size, const char *source)
     app_string_copy(dest, dest_size, source);
 }
 
-esp_err_t app_config_load(app_config_t *out_config)
-{
+esp_err_t app_config_load(app_config_t *out_config) {
     if (!out_config) {
         return ESP_ERR_INVALID_ARG;
     }

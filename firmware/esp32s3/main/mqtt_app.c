@@ -18,8 +18,7 @@ static mqtt_app_command_handler_t s_command_handler;
 static char s_status_topic[96];
 static char s_status_offline_payload[128];
 
-static esp_err_t make_topic(char *buffer, size_t buffer_size, const char *suffix)
-{
+static esp_err_t make_topic(char *buffer, size_t buffer_size, const char *suffix) {
     if (!buffer || buffer_size == 0 || !suffix || s_config.device_id[0] == '\0') {
         return ESP_ERR_INVALID_ARG;
     }
@@ -31,8 +30,7 @@ static esp_err_t make_topic(char *buffer, size_t buffer_size, const char *suffix
     return ESP_OK;
 }
 
-static void copy_json_string(char *dest, size_t dest_size, const cJSON *root, const char *key)
-{
+static void copy_json_string(char *dest, size_t dest_size, const cJSON *root, const char *key) {
     if (!dest || dest_size == 0) {
         return;
     }
@@ -47,8 +45,7 @@ static void copy_json_string(char *dest, size_t dest_size, const cJSON *root, co
     }
 }
 
-static void handle_command_payload(const char *payload)
-{
+static void handle_command_payload(const char *payload) {
     if (!payload) {
         return;
     }
@@ -93,8 +90,7 @@ static void handle_command_payload(const char *payload)
     cJSON_Delete(root);
 }
 
-static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
-{
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
     (void)handler_args;
     (void)base;
 
@@ -131,8 +127,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
-esp_err_t mqtt_app_init(const app_config_t *config)
-{
+esp_err_t mqtt_app_init(const app_config_t *config) {
     if (!config) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -166,8 +161,7 @@ esp_err_t mqtt_app_init(const app_config_t *config)
     return ESP_OK;
 }
 
-esp_err_t mqtt_app_start(void)
-{
+esp_err_t mqtt_app_start(void) {
     if (!s_config.mqtt_enabled) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -177,8 +171,7 @@ esp_err_t mqtt_app_start(void)
     return esp_mqtt_client_start(s_client);
 }
 
-esp_err_t mqtt_app_publish_status(const char *status)
-{
+esp_err_t mqtt_app_publish_status(const char *status) {
     if (!s_client || !status) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -191,8 +184,7 @@ esp_err_t mqtt_app_publish_status(const char *status)
     return ESP_OK;
 }
 
-static void add_optional_number(cJSON *root, const char *name, bool valid, double value)
-{
+static void add_optional_number(cJSON *root, const char *name, bool valid, double value) {
     if (valid) {
         cJSON_AddNumberToObject(root, name, value);
     } else {
@@ -200,8 +192,7 @@ static void add_optional_number(cJSON *root, const char *name, bool valid, doubl
     }
 }
 
-static char *build_telemetry_json(const sensor_sample_t *sample, const fusion_state_t *fusion)
-{
+static char *build_telemetry_json(const sensor_sample_t *sample, const fusion_state_t *fusion) {
     control_state_t control = {0};
     control_state_get(&control);
 
@@ -244,8 +235,7 @@ static char *build_telemetry_json(const sensor_sample_t *sample, const fusion_st
     return cJSON_PrintUnformatted(root);
 }
 
-esp_err_t mqtt_app_publish_telemetry(const sensor_sample_t *sample, const fusion_state_t *fusion)
-{
+esp_err_t mqtt_app_publish_telemetry(const sensor_sample_t *sample, const fusion_state_t *fusion) {
     if (!s_client || !sample || !fusion) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -263,8 +253,7 @@ esp_err_t mqtt_app_publish_telemetry(const sensor_sample_t *sample, const fusion
     return ESP_OK;
 }
 
-esp_err_t mqtt_app_publish_command_ack(const mqtt_app_command_t *command, const char *status, const char *message)
-{
+esp_err_t mqtt_app_publish_command_ack(const mqtt_app_command_t *command, const char *status, const char *message) {
     if (!s_client || !command || !status) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -291,8 +280,7 @@ esp_err_t mqtt_app_publish_command_ack(const mqtt_app_command_t *command, const 
     return ESP_OK;
 }
 
-esp_err_t mqtt_app_set_command_handler(mqtt_app_command_handler_t handler)
-{
+esp_err_t mqtt_app_set_command_handler(mqtt_app_command_handler_t handler) {
     s_command_handler = handler;
     return ESP_OK;
 }
