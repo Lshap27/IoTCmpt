@@ -1,5 +1,5 @@
 {
-  "cmake.sourceDirectory": "${workspaceFolder}/s3-sensor-cloud",
+  "cmake.sourceDirectory": "${workspaceFolder}/firmware/esp32s3",
   "cmake.configureOnOpen": false,
   "idf.customExtraVars": {},
   "idf.currentSetup": "C:\\esp\\v5.5.2\\esp-idf",
@@ -7,6 +7,6 @@
   "clangd.arguments": [
     "--background-index",
     "--query-driver=**",
-    "--compile-commands-dir=c:\\Users\\lshap\\Documents\\Code\\IoTCmpt\\build"
+    "--compile-commands-dir=firmware/esp32s3/build-esp32s3"
   ]
 }
