@@ -4,7 +4,7 @@ Root `docker-compose.yml` is the default local deployment entrypoint.
 
 Services:
 
-- PostgreSQL on `localhost:5432`.
+- TimescaleDB (PostgreSQL 16) on `localhost:5432`.
 - EMQX MQTT broker on `localhost:1883`.
 - EMQX dashboard on `http://localhost:18083`.
 - FastAPI gateway on `http://localhost:8000`.

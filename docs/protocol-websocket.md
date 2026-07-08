@@ -17,6 +17,11 @@ The server sends JSON envelopes. Every envelope has:
 }
 ```
 
+The envelope types are defined as the `WsMessage` discriminated union in
+`server/app/schemas.py` and embedded into `server/openapi.json` by the export
+script, so the frontend consumes generated types and narrows the payload by
+switching on `type` (`web/src/lib/ws-dispatcher.ts`).
+
 ## Event Types
 
 - `status`: device online/offline and broker state.

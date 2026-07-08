@@ -31,13 +31,13 @@
 
 - `firmware/esp32s3/` is the ESP-IDF firmware for ESP32-S3-DevKitC-1.
 - `server/` is the FastAPI AIoT gateway. It owns MQTT ingestion, HTTP APIs,
-  PostgreSQL writes, image storage, LLM provider calls, JSON command validation,
-  MQTT command publishing, and WebSocket fanout.
+  TimescaleDB/PostgreSQL writes, image storage, LLM provider calls, JSON
+  command validation, MQTT command publishing, and WebSocket fanout.
 - `web/` is a Next.js real-time control console, not a marketing landing page.
   The first screen should remain the working dashboard.
 - `infra/` documents local deployment targets and service configuration.
-- Root `docker-compose.yml` is the default local stack: PostgreSQL, EMQX,
-  FastAPI server, and Next.js web console.
+- Root `docker-compose.yml` is the default local stack: TimescaleDB
+  (PostgreSQL 16), EMQX, FastAPI server, and Next.js web console.
 
 ## Protocol Contract
 
@@ -53,6 +53,7 @@
   `GET /health`, `GET /api/devices`,
   `GET /api/devices/{device_id}/latest`,
   `GET /api/devices/{device_id}/history`,
+  `GET /api/devices/{device_id}/history/bucketed`,
   `POST /api/devices/{device_id}/images`,
   `POST /api/devices/{device_id}/commands`,
   `POST /api/devices/{device_id}/ai/analyze`,
@@ -108,24 +109,39 @@
 
 ## Server Workflow
 
-- Direct local run:
+- Dependencies are managed with uv (`server/pyproject.toml` + `server/uv.lock`).
+  Direct local run (requires the Docker `postgres` + `emqx` services):
 
   ```powershell
   cd server
-  python -m venv .venv
-  .\.venv\Scripts\python -m pip install -r requirements.txt
-  .\.venv\Scripts\python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+  uv sync
+  Copy-Item .env.example .env   # enables AIOT_MQTT_ENABLED=true
+  uv run alembic upgrade head
+  uv run python run_dev.py
   ```
 
-- Server tests:
+- `run_dev.py` starts uvicorn with the Windows `SelectorEventLoop` policy that
+  aiomqtt requires. Without a `.env`, `AIOT_MQTT_ENABLED` defaults to `false`
+  and the gateway starts silently without MQTT ingestion.
+- Server checks:
 
   ```powershell
   cd server
-  .\.venv\Scripts\python -m pytest tests
+  uv run ruff check .
+  uv run ruff format --check .
+  uv run mypy app
+  uv run pytest
   ```
 
 - Tests must run without PostgreSQL or EMQX. They use SQLite and environment
   overrides from `server/tests/conftest.py`.
+- Schema changes go through Alembic (`server/alembic/versions/`); keep
+  `AIOT_AUTO_CREATE_TABLES=false` wherever migrations own the schema. The
+  `telemetry` table is a TimescaleDB hypertable (migration `0002`).
+- After changing schemas or routes, regenerate the API contract:
+  `uv run python scripts/export_openapi.py`, then `pnpm codegen` in `web/`.
+  CI fails on drift between code, `server/openapi.json`, and
+  `web/src/lib/api-client/`.
 - Configuration uses `AIOT_*` environment variables and `server/.env` for local
   direct runs. Keep real `.env` files untracked.
 
@@ -135,22 +151,40 @@
 
   ```powershell
   cd web
-  pnpm install --ignore-scripts
-  pnpm run dev
+  pnpm install
+  pnpm dev
   ```
 
 - Verification:
 
   ```powershell
   cd web
-  pnpm run build
+  pnpm lint
+  pnpm format:check
+  pnpm typecheck
+  pnpm build
   ```
 
-- The app uses Next.js 15, React 19, TypeScript, Tailwind CSS, Recharts, and
-  lucide-react. Keep UI work dashboard-first and consistent with the existing
-  component structure under `web/src/components/`.
+- The app uses Next.js 15, React 19, TypeScript, Tailwind CSS v4 (CSS-first
+  `@theme` in `src/app/globals.css`), shadcn/ui (`src/components/ui/`),
+  TanStack Query, Recharts, and lucide-react. Keep UI work dashboard-first and
+  consistent with the existing component structure under
+  `web/src/components/`.
+- Data flow: initial reads go through TanStack Query; WebSocket envelopes are
+  applied to the query cache by `src/lib/ws-dispatcher.ts`. Do not reintroduce
+  ad-hoc `useEffect` fetching.
+- `src/lib/api-client/` is generated from `server/openapi.json` by
+  `@hey-api/openapi-ts`. Never edit it by hand; run `pnpm codegen`.
 - Use `NEXT_PUBLIC_API_BASE_URL` when the FastAPI server is not on
   `http://localhost:8000`.
+
+## Quality Gates
+
+- `pre-commit run --all-files` must pass (end-of-file/whitespace/YAML checks,
+  Ruff lint + format, Prettier, clang-format).
+- GitHub Actions: `.github/workflows/server.yml` (Ruff, mypy, pytest, and an
+  OpenAPI codegen-drift job), `web.yml` (lint, format, typecheck, build), and
+  `firmware.yml` (ESP-IDF build).
 
 ## Local Stack
 
@@ -161,8 +195,8 @@
   ```
 
 - Default local services:
-  PostgreSQL `localhost:5432`, EMQX MQTT `localhost:1883`, EMQX dashboard
-  `http://localhost:18083`, FastAPI `http://localhost:8000`, Next.js
+  TimescaleDB/PostgreSQL `localhost:5432`, EMQX MQTT `localhost:1883`, EMQX
+  dashboard `http://localhost:18083`, FastAPI `http://localhost:8000`, Next.js
   `http://localhost:3000`.
 - Default EMQX dashboard credentials are `admin / public`; anonymous MQTT is
   only acceptable for the first local demo stack.
@@ -174,10 +208,14 @@
 
 - Do not put LLM API keys, Wi-Fi credentials, MQTT credentials, cloud tokens, or
   non-demo database passwords in firmware, frontend, docs, or committed config.
-- Do not commit build outputs, `managed_components/`, `dependencies.lock`,
-  `sdkconfig*`, binaries, uploaded images, captured images, virtual
-  environments, frontend build output, database files, or local SDK/reference
-  checkouts.
+- Do not commit build outputs, `managed_components/`, `sdkconfig*`, binaries,
+  uploaded images, captured images, virtual environments, frontend build
+  output, database files, or local SDK/reference checkouts.
+- Committed generated artifacts are intentional exceptions: keep
+  `server/openapi.json`, `web/src/lib/api-client/`, and
+  `firmware/esp32s3/dependencies.lock` (pins ESP-IDF component versions)
+  tracked, and refresh them through their generators rather than editing by
+  hand.
 - `references/` is ignored and may contain large local SDK/reference clones.
   Treat it as local support material unless the user explicitly asks otherwise.
 - Keep `.agents/`, `.codex/`, `.claude/`, local `.env` files, logs, and editor

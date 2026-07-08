@@ -4,6 +4,11 @@ The HTTP API is owned by `server/`. It serves dashboard reads, image upload,
 manual command creation, and LLM-triggered analysis. MQTT remains the telemetry
 and command transport for the device.
 
+The machine-readable contract is `server/openapi.json`, exported from the
+FastAPI app by `server/scripts/export_openapi.py`. The frontend client is
+generated from it (`pnpm codegen` in `web/`), and CI fails on drift. This
+document is the human-readable companion.
+
 ## Health
 
 ```text
@@ -43,6 +48,38 @@ GET /api/devices/{device_id}/history?limit=100
 ```
 
 Returns recent telemetry samples ordered newest first.
+
+## Bucketed History
+
+```text
+GET /api/devices/{device_id}/history/bucketed?bucket=60&limit=200
+```
+
+Returns time-bucketed telemetry aggregates (TimescaleDB `time_bucket`),
+ordered newest bucket first. `bucket` is the window size in seconds
+(10–86400, default 60); `limit` caps the number of buckets (1–2000, default
+200). Numeric sensor fields are averaged; boolean state fields are `true`
+when any sample in the bucket is `true` (`bool_or`); `air_quality` is the
+worst level seen in the bucket; `sample_count` reports how many raw samples
+each bucket aggregates. Requires PostgreSQL/TimescaleDB; on other backends
+the endpoint returns `400`.
+
+Response item:
+
+```json
+{
+  "bucket": "2026-07-08T05:47:00",
+  "temperature_c": 27.0,
+  "humidity_percent": 60.0,
+  "tvoc_ppb": 120.0,
+  "hcho_ug_m3": null,
+  "eco2_ppm": 600.0,
+  "window_open": false,
+  "alarm_on": false,
+  "air_quality": "good",
+  "sample_count": 5
+}
+```
 
 ## Image Upload
 

@@ -20,13 +20,28 @@ console for demonstration and debugging.
   command acknowledgements.
 - EMQX: MQTT broker for device-to-server and server-to-device messages. It is
   also useful during demos because its dashboard exposes topic activity.
-- FastAPI AIoT Gateway: subscribes to MQTT, exposes HTTP APIs, stores data in
-  PostgreSQL, saves images, calls the LLM provider, validates generated commands,
-  publishes commands to MQTT, and fans out updates over WebSocket.
-- PostgreSQL: stores devices, telemetry, events, commands, AI decisions, and
-  image metadata.
-- Next.js console: reads initial state through HTTP and receives live updates
-  through WebSocket.
+- FastAPI AIoT Gateway: subscribes to MQTT with an asyncio-native client
+  (aiomqtt, automatic reconnect), exposes HTTP APIs, stores data in
+  TimescaleDB, saves images, calls the LLM provider, validates generated
+  commands, publishes commands to MQTT, and fans out updates over WebSocket.
+  Gateway singletons (MQTT client, autopilot) live on `app.state` and are
+  injected into routes with FastAPI dependencies.
+- TimescaleDB (PostgreSQL 16 + timescaledb): stores devices, telemetry,
+  events, commands, AI decisions, and image metadata. The `telemetry` table is
+  a hypertable partitioned on `sampled_at`; the schema is managed by Alembic
+  migrations.
+- Next.js console: reads initial state through HTTP (TanStack Query) and
+  receives live updates through WebSocket. A pure dispatcher maps each
+  WebSocket envelope onto the query cache.
+
+## Contract Single Source
+
+The HTTP/WebSocket wire contract is exported from the FastAPI app into
+`server/openapi.json` (`server/scripts/export_openapi.py`), which also embeds
+the `WsMessage` discriminated union used by the WebSocket stream. The
+frontend client under `web/src/lib/api-client/` is generated from that file
+with `@hey-api/openapi-ts` (`pnpm codegen`). Both artifacts are committed,
+and CI fails when either drifts from the code.
 
 ## Data Flow
 
@@ -60,7 +75,8 @@ demonstrated without network access or API keys.
 
 Local demo deployment uses root `docker-compose.yml`:
 
-- `postgres`: PostgreSQL database.
+- `postgres`: TimescaleDB (PostgreSQL 16). The server container applies
+  Alembic migrations on start.
 - `emqx`: MQTT broker and dashboard.
 - `server`: FastAPI gateway on port 8000.
 - `web`: Next.js console on port 3000.
