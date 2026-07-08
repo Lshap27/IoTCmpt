@@ -1,252 +1,136 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { AiDecisionPayload, CommandInfo, Envelope, LatestState, TelemetryPoint } from "@/lib/api";
-import { fetchHistory, fetchLatest, requestAiAnalysis, sendCommand, updateAutopilot, wsUrl } from "@/lib/api";
+import { useCallback, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { LatestState } from "@/lib/api";
+import { fetchHistory, fetchLatest, requestAiAnalysis, sendCommand, updateAutopilot } from "@/lib/api";
+import { deviceKeys } from "@/lib/query-keys";
+import type { AiPanelState, UiEvent } from "@/lib/ws-dispatcher";
+import { EMPTY_AI, addPendingCommand, applyEnvelope } from "@/lib/ws-dispatcher";
+import { useDeviceSocket } from "@/hooks/use-device-socket";
 
-export type SocketState = "connecting" | "live" | "offline";
+export type { SocketState } from "@/hooks/use-device-socket";
+export type { UiEvent } from "@/lib/ws-dispatcher";
 
-export type UiEvent = {
-  id: number;
-  type: string;
-  payload: Record<string, unknown>;
-  occurred_at: string;
-};
-
-const HISTORY_CAP = 120;
-const EVENT_CAP = 30;
-
+/** 组合层：HTTP 查询（TanStack Query）+ WebSocket 实时推送（写入 query cache）+ 操作 mutation。 */
 export function useDeviceLive(deviceId: string) {
-  const [latest, setLatest] = useState<LatestState | null>(null);
-  const [history, setHistory] = useState<TelemetryPoint[]>([]);
-  const [events, setEvents] = useState<UiEvent[]>([]);
-  const [socketState, setSocketState] = useState<SocketState>("connecting");
-  const [analyzing, setAnalyzing] = useState<string | null>(null);
-  const [decision, setDecision] = useState<AiDecisionPayload | null>(null);
-  const [autopilotEnabled, setAutopilotEnabled] = useState<boolean | null>(null);
-  const [pendingCommands, setPendingCommands] = useState<Record<string, string>>({});
-  const [error, setError] = useState("");
-  const eventSeq = useRef(0);
+  const queryClient = useQueryClient();
+  const [actionError, setActionError] = useState("");
 
-  const load = useCallback(async () => {
-    const [latestState, historyRows] = await Promise.all([fetchLatest(deviceId), fetchHistory(deviceId)]);
-    setLatest(latestState);
-    setHistory([...historyRows].reverse());
-    setAutopilotEnabled(latestState.autopilot?.enabled ?? null);
-  }, [deviceId]);
+  const latestQuery = useQuery({
+    queryKey: deviceKeys.latest(deviceId),
+    queryFn: () => fetchLatest(deviceId),
+  });
+  const historyQuery = useQuery({
+    queryKey: deviceKeys.history(deviceId),
+    queryFn: async () => [...(await fetchHistory(deviceId))].reverse(),
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    setLatest(null);
-    setHistory([]);
-    setEvents([]);
-    setDecision(null);
-    setAnalyzing(null);
-    setPendingCommands({});
-    setError("");
-    load().catch((err) => {
-      if (!cancelled) setError(err instanceof Error ? err.message : "初始数据加载失败");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+  // 纯客户端状态放 query cache：WS dispatcher 可以在组件树外更新它们。
+  const eventsQuery = useQuery({
+    queryKey: deviceKeys.events(deviceId),
+    queryFn: () => [] as UiEvent[],
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+  const aiQuery = useQuery({
+    queryKey: deviceKeys.ai(deviceId),
+    queryFn: () => EMPTY_AI,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+  const pendingQuery = useQuery({
+    queryKey: deviceKeys.pendingCommands(deviceId),
+    queryFn: () => ({}) as Record<string, string>,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
 
-  const applyEnvelope = useCallback((envelope: Envelope) => {
-    const { type, payload, occurred_at } = envelope;
-    eventSeq.current += 1;
-    setEvents((current) =>
-      [{ id: eventSeq.current, type, payload, occurred_at }, ...current].slice(0, EVENT_CAP),
-    );
-
-    switch (type) {
-      case "telemetry": {
-        const point = payload as unknown as TelemetryPoint;
-        setHistory((current) => [...current.slice(-(HISTORY_CAP - 1)), point]);
-        setLatest((current) =>
-          current
-            ? {
-                ...current,
-                telemetry: point,
-                device: { ...current.device, status: "online", last_seen_at: occurred_at },
-              }
-            : current,
-        );
-        break;
-      }
-      case "status": {
-        const status = typeof payload.status === "string" ? payload.status : undefined;
-        setLatest((current) =>
-          current && status
-            ? { ...current, device: { ...current.device, status, last_seen_at: occurred_at } }
-            : current,
-        );
-        break;
-      }
-      case "image": {
-        setLatest((current) =>
-          current ? { ...current, image: payload as unknown as LatestState["image"] } : current,
-        );
-        break;
-      }
-      case "ai_analyzing": {
-        setAnalyzing(typeof payload.trigger === "string" ? payload.trigger : "manual");
-        break;
-      }
-      case "ai_result": {
-        const result = payload as unknown as AiDecisionPayload;
-        setAnalyzing(null);
-        setDecision(result);
-        if (result.command) {
-          setLatest((current) => (current ? { ...current, command: result.command } : current));
-        }
-        break;
-      }
-      case "command": {
-        setLatest((current) =>
-          current ? { ...current, command: payload as unknown as CommandInfo } : current,
-        );
-        break;
-      }
-      case "command_ack": {
-        const commandId = typeof payload.command_id === "string" ? payload.command_id : "";
-        if (commandId) {
-          setPendingCommands((current) => {
-            if (!(commandId in current)) return current;
-            const next = { ...current };
-            delete next[commandId];
-            return next;
-          });
-          setLatest((current) =>
-            current && current.command && current.command.command_id === commandId
-              ? {
-                  ...current,
-                  command: {
-                    ...current.command,
-                    status: typeof payload.status === "string" ? payload.status : current.command.status,
-                    executed_at:
-                      typeof payload.executed_at === "string"
-                        ? payload.executed_at
-                        : current.command.executed_at,
-                  },
-                }
-              : current,
-          );
-        }
-        break;
-      }
-      case "autopilot": {
-        setAutopilotEnabled(Boolean(payload.enabled));
-        break;
-      }
-      default:
-        break;
-    }
-  }, []);
-
-  useEffect(() => {
-    let socket: WebSocket | null = null;
-    let retries = 0;
-    let closed = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    function connect() {
-      if (closed) return;
-      setSocketState((state) => (state === "live" ? state : "connecting"));
-      socket = new WebSocket(wsUrl(deviceId));
-      socket.onopen = () => {
-        setSocketState("live");
-        if (retries > 0) {
-          load().catch(() => undefined);
-        }
-        retries = 0;
-      };
-      socket.onmessage = (message) => {
-        try {
-          const envelope = JSON.parse(message.data) as Envelope;
-          if (envelope && typeof envelope.type === "string") {
-            applyEnvelope(envelope);
-          }
-        } catch {
-          // 忽略非 JSON 帧
-        }
-      };
-      socket.onclose = () => {
-        if (closed) return;
-        setSocketState("offline");
-        const delay = Math.min(15_000, 1_000 * 2 ** retries);
-        retries += 1;
-        timer = setTimeout(connect, delay);
-      };
-      socket.onerror = () => {
-        socket?.close();
-      };
-    }
-
-    connect();
-    return () => {
-      closed = true;
-      if (timer) clearTimeout(timer);
-      socket?.close();
-    };
-  }, [deviceId, load, applyEnvelope]);
-
-  const triggerAnalysis = useCallback(async () => {
-    setError("");
-    setAnalyzing((current) => current ?? "manual");
-    try {
-      const result = await requestAiAnalysis(deviceId);
-      setDecision(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "AI 分析失败");
-    } finally {
-      setAnalyzing(null);
-    }
-  }, [deviceId]);
-
-  const dispatchCommand = useCallback(
-    async (type: string) => {
-      setError("");
-      try {
-        const command = await sendCommand(deviceId, type);
-        if (command?.command_id) {
-          setPendingCommands((current) => ({ ...current, [command.command_id]: type }));
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "指令下发失败");
-      }
-    },
-    [deviceId],
+  const socketState = useDeviceSocket(
+    deviceId,
+    useCallback((envelope) => applyEnvelope(queryClient, deviceId, envelope), [queryClient, deviceId]),
+    useCallback(() => {
+      // 断线期间可能漏推送：重连成功后拉回权威快照。
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.latest(deviceId) });
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.history(deviceId) });
+    }, [queryClient, deviceId]),
   );
 
-  const toggleAutopilot = useCallback(
-    async (enabled: boolean) => {
-      setError("");
-      const previous = autopilotEnabled;
-      setAutopilotEnabled(enabled);
-      try {
-        const state = await updateAutopilot(deviceId, enabled);
-        setAutopilotEnabled(state.enabled);
-      } catch (err) {
-        setAutopilotEnabled(previous);
-        setError(err instanceof Error ? err.message : "自动决策开关设置失败");
+  const analyzeMutation = useMutation({
+    mutationFn: () => requestAiAnalysis(deviceId),
+    onMutate: () => {
+      setActionError("");
+      queryClient.setQueryData<AiPanelState>(deviceKeys.ai(deviceId), (current = EMPTY_AI) => ({
+        ...current,
+        analyzing: current.analyzing ?? "manual",
+      }));
+    },
+    onSuccess: (result) => {
+      queryClient.setQueryData<AiPanelState>(deviceKeys.ai(deviceId), { analyzing: null, decision: result });
+    },
+    onError: (err) => {
+      setActionError(err instanceof Error ? err.message : "AI 分析失败");
+      queryClient.setQueryData<AiPanelState>(deviceKeys.ai(deviceId), (current = EMPTY_AI) => ({
+        ...current,
+        analyzing: null,
+      }));
+    },
+  });
+
+  const commandMutation = useMutation({
+    mutationFn: (type: string) => sendCommand(deviceId, type),
+    onMutate: () => setActionError(""),
+    onSuccess: (command, type) => {
+      if (command?.command_id) {
+        addPendingCommand(queryClient, deviceId, command.command_id, type);
       }
     },
-    [deviceId, autopilotEnabled],
-  );
+    onError: (err) => setActionError(err instanceof Error ? err.message : "指令下发失败"),
+  });
+
+  const autopilotMutation = useMutation({
+    mutationFn: (enabled: boolean) => updateAutopilot(deviceId, enabled),
+    onMutate: async (enabled) => {
+      setActionError("");
+      await queryClient.cancelQueries({ queryKey: deviceKeys.latest(deviceId) });
+      const previous = queryClient.getQueryData<LatestState>(deviceKeys.latest(deviceId));
+      queryClient.setQueryData<LatestState>(deviceKeys.latest(deviceId), (current) =>
+        current ? { ...current, autopilot: { enabled } } : current,
+      );
+      return { previous };
+    },
+    onSuccess: (state) => {
+      queryClient.setQueryData<LatestState>(deviceKeys.latest(deviceId), (current) =>
+        current ? { ...current, autopilot: { enabled: state.enabled } } : current,
+      );
+    },
+    onError: (err, _enabled, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(deviceKeys.latest(deviceId), context.previous);
+      }
+      setActionError(err instanceof Error ? err.message : "自动决策开关设置失败");
+    },
+  });
+
+  const latest = latestQuery.data ?? null;
+  const ai = aiQuery.data ?? EMPTY_AI;
+  const queryError = latestQuery.error ?? historyQuery.error;
 
   return {
     latest,
-    history,
-    events,
+    history: historyQuery.data ?? [],
+    events: eventsQuery.data ?? [],
     socketState,
-    analyzing,
-    decision,
-    autopilotEnabled,
-    pendingCommands,
-    error,
-    triggerAnalysis,
-    dispatchCommand,
-    toggleAutopilot,
+    analyzing: ai.analyzing,
+    decision: ai.decision,
+    autopilotEnabled: latest?.autopilot?.enabled ?? null,
+    pendingCommands: pendingQuery.data ?? {},
+    error: actionError || (queryError instanceof Error ? queryError.message : ""),
+    triggerAnalysis: useCallback(() => analyzeMutation.mutate(), [analyzeMutation]),
+    dispatchCommand: useCallback((type: string) => commandMutation.mutate(type), [commandMutation]),
+    toggleAutopilot: useCallback(
+      (enabled: boolean) => autopilotMutation.mutate(enabled),
+      [autopilotMutation],
+    ),
   };
 }

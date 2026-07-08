@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AiPanel } from "@/components/ai-panel";
 import { CameraPanel } from "@/components/camera-panel";
 import { CommandPad } from "@/components/command-pad";
@@ -9,21 +10,16 @@ import { EventStream } from "@/components/event-stream";
 import { StatCard } from "@/components/stat-card";
 import { METRICS, TelemetryChart } from "@/components/telemetry-chart";
 import { useDeviceLive } from "@/hooks/use-device-live";
-import type { AiDecisionPayload, DeviceSummary } from "@/lib/api";
+import type { AiDecisionPayload } from "@/lib/api";
 import { fetchDevices } from "@/lib/api";
+import { devicesKey } from "@/lib/query-keys";
 
 const DEFAULT_DEVICE_ID = "esp32s3-001";
 
 export default function Dashboard() {
-  const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [deviceId, setDeviceId] = useState(DEFAULT_DEVICE_ID);
   const live = useDeviceLive(deviceId);
-
-  useEffect(() => {
-    fetchDevices()
-      .then(setDevices)
-      .catch(() => undefined);
-  }, []);
+  const { data: devices = [] } = useQuery({ queryKey: devicesKey, queryFn: fetchDevices });
 
   const telemetry = live.latest?.telemetry ?? null;
 
