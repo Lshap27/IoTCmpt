@@ -32,9 +32,15 @@
 - **`AIOT_MQTT_ENABLED=true` 必须显式设置** — `Settings.mqtt_enabled` 默认 `False` 且 server/ 下没有 .env, 直接 `python run_dev.py` 时 MQTT 网关不会启动 (且 INFO 日志不可见, 无任何报错)。启动命令: `AIOT_MQTT_ENABLED=true python run_dev.py`
 - 冒烟脚本里遥测的 `fusion.air_quality` 只接受 `good | watch | alert | unknown`
 
-## 三、未开始 (WF5 Phase D — 可选视觉迭代)
+## 三、WF5 Phase D — 已完成 (2026-07-08)
 
-> 计划中的 bento grid 布局重构 + 微动效 (page.tsx 改用 CSS grid 不等跨度卡片, 可能加 motion 依赖)。当前 dashboard 视觉已达标，此步纯加分项，不影响功能完整性。
+> bento grid 布局重构 + 微动效,未新增依赖 (纯 CSS,与仓库既有 keyframe 惯用法一致):
+> - `page.tsx` 三个 section 合并为单一 12 列 bento 网格,不等跨度: 指标卡 3×4 / 图表 8 + AI 4 / 相机 3 + 指令 5 + 事件流 4
+> - `globals.css` 新增 `.bento-grid`: 子项错峰上浮入场 (nth-child 45ms 步进) + hover 微抬升,`prefers-reduced-motion` 下全部禁用
+> - `stat-card.tsx` 补 className 透传
+> - 验证: lint/format/typecheck/build 全绿; Playwright 目检 1440px (bento 不等跨度) 与 820px (md 断点 2×2 折叠) 均正常
+>
+> **至此 WF1–WF5 架构升级计划全部完成。**
 
 ## 四、工具版本与环境
 

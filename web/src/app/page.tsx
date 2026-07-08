@@ -80,7 +80,8 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <section className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Bento 网格：12 列不等跨度，入场错峰上浮（见 globals.css .bento-grid） */}
+      <section className="bento-grid mt-5 grid grid-cols-12 gap-4">
         {stats.map(({ metric, value, points }) => (
           <StatCard
             key={metric.key}
@@ -90,30 +91,29 @@ export default function Dashboard() {
             color={`var(${metric.cssVar})`}
             value={value}
             points={points}
+            className="col-span-12 sm:col-span-6 xl:col-span-3"
           />
         ))}
-      </section>
 
-      <section className="mt-4 grid gap-4 xl:grid-cols-3">
-        <TelemetryChart history={live.history} className="xl:col-span-2" />
+        <TelemetryChart history={live.history} className="col-span-12 xl:col-span-8" />
         <AiPanel
           analyzing={live.analyzing}
           decision={decision}
           autopilotEnabled={live.autopilotEnabled}
           onToggleAutopilot={live.toggleAutopilot}
           onAnalyze={live.triggerAnalysis}
+          className="col-span-12 xl:col-span-4"
         />
-      </section>
 
-      <section className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        <CameraPanel image={live.latest?.image} />
+        <CameraPanel image={live.latest?.image} className="col-span-12 md:col-span-6 xl:col-span-3" />
         <CommandPad
           onCommand={live.dispatchCommand}
           pendingCommands={live.pendingCommands}
           windowOpen={telemetry?.state.window_open}
           alarmOn={telemetry?.state.alarm_on}
+          className="col-span-12 md:col-span-6 xl:col-span-5"
         />
-        <EventStream events={live.events} className="lg:col-span-2 xl:col-span-1" />
+        <EventStream events={live.events} className="col-span-12 xl:col-span-4" />
       </section>
 
       <footer className="mt-6 pb-4 text-center text-[11px] text-ink3">

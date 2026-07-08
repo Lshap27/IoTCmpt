@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatedNumber } from "@/components/animated-number";
+import { cn } from "@/lib/utils";
 
 function Sparkline({ points, color }: { points: number[]; color: string }) {
   if (points.length < 2) {
@@ -41,6 +42,7 @@ export function StatCard({
   digits,
   color,
   points,
+  className,
 }: {
   label: string;
   unit: string;
@@ -48,11 +50,12 @@ export function StatCard({
   digits: number;
   color: string;
   points: (number | null)[];
+  className?: string;
 }) {
   const series = points.filter((point): point is number => typeof point === "number").slice(-20);
 
   return (
-    <div className="glass-panel p-4 transition-shadow hover:shadow-glow">
+    <div className={cn("glass-panel p-4 transition-shadow hover:shadow-glow", className)}>
       <div className="flex items-center gap-2 text-xs text-ink3">
         <span className="h-2 w-2 rounded-full" style={{ background: color }} aria-hidden />
         {label}
