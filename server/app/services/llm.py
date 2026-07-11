@@ -15,7 +15,15 @@ from app.schemas import AiDecision, CommandMessage
 LOGGER = logging.getLogger(__name__)
 
 # 固件实际可执行的命令集合（display.message 会被固件 ack rejected，不向模型宣传）。
-EXECUTABLE_COMMANDS: list[str] = ["none", "window.open", "window.close", "alarm.on", "alarm.off"]
+EXECUTABLE_COMMANDS: list[str] = [
+    "none",
+    "window.open",
+    "window.close",
+    "alarm.on",
+    "alarm.off",
+    "led.on",
+    "led.off",
+]
 RISK_LEVELS: set[str] = {"low", "medium", "high"}
 
 DECISION_JSON_SCHEMA: dict[str, Any] = {
@@ -37,12 +45,13 @@ DECISION_JSON_SCHEMA: dict[str, Any] = {
 
 SYSTEM_PROMPT = (
     "你是 ESP32-S3 室内环境设备的云端决策助手。设备位于室内，配有温湿度、TVOC/甲醛/eCO2、"
-    "光照传感器，以及舵机窗户和蜂鸣器报警。你会收到设备最新状态快照（含 fusion 空气质量评估）、"
+    "光照和烟雾传感器，以及舵机窗户、LED 和蜂鸣器报警。你会收到设备最新状态快照（含 fusion 空气质量评估）、"
     "近期遥测趋势，可能还有一张刚拍摄的室内照片。\n"
     f"可执行的命令类型只有：{json.dumps(EXECUTABLE_COMMANDS)}。\n"
     "决策原则：空气质量 alert 且窗户未开时倾向 window.open；环境恢复正常且窗户为自动打开状态时"
     "可以 window.close；出现明显危险（浓烟、明火、有人晕倒等图像异常，或污染物极高）时 alarm.on；"
-    "危险解除时 alarm.off；无需动作时返回 none。若照片与遥测矛盾，以更保守（更安全）的动作为准。\n"
+    "危险解除时 alarm.off；光照不足且有人时可以 led.on；无需动作时返回 none。"
+    "烟雾报警由设备本地独立执行，云端不得用 window.open 替代报警。若照片与遥测矛盾，以更保守（更安全）的动作为准。\n"
     "只返回一个 JSON 对象，不要包含任何其他文字，字段为："
     '{"type": string, "parameter": object, "confidence": number(0-1), '
     '"risk_level": "low"|"medium"|"high", "reason": string}。reason 用简体中文，简明说明依据。'
@@ -136,9 +145,16 @@ class LLMService:
         telemetry = device_state.get("telemetry") or {}
         fusion = telemetry.get("fusion") or {}
         state = telemetry.get("state") or {}
+        sensors = telemetry.get("sensors") or {}
         air_quality = fusion.get("air_quality")
 
-        if air_quality == "alert" and not state.get("window_open"):
+        if sensors.get("smoke_detected"):
+            command_type, confidence, risk, reason = (
+                ("none", 0.99, "high", "MQ-2 烟雾报警已由设备本地持续执行")
+                if state.get("alarm_on")
+                else ("alarm.on", 0.99, "high", "MQ-2 检测到烟雾，保持本地紧急报警")
+            )
+        elif air_quality == "alert" and not state.get("window_open"):
             command_type, confidence, risk, reason = (
                 "window.open",
                 0.9,
@@ -166,6 +182,8 @@ class LLMService:
                 "low",
                 "环境已恢复正常，关闭报警",
             )
+        elif sensors.get("light_is_dark") and state.get("led_on") is False:
+            command_type, confidence, risk, reason = ("led.on", 0.8, "low", "室内光照偏暗，开启照明")
         else:
             command_type, confidence, risk, reason = ("none", 0.95, "low", "环境正常，无需动作")
 

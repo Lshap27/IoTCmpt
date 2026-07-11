@@ -12,6 +12,8 @@ CommandType = Literal[
     "window.close",
     "alarm.on",
     "alarm.off",
+    "led.on",
+    "led.off",
     "display.message",
 ]
 CommandSource = Literal["frontend", "llm", "rule"]
@@ -24,12 +26,14 @@ class SensorPayload(BaseModel):
     hcho_ug_m3: float | None = None
     eco2_ppm: float | None = None
     light_is_dark: bool | None = None
+    smoke_detected: bool | None = None
 
 
 class DeviceStatePayload(BaseModel):
     window_open: bool | None = None
     alarm_on: bool | None = None
     manual_override: bool | None = None
+    led_on: bool | None = None
 
 
 class FusionPayload(BaseModel):
@@ -98,6 +102,32 @@ class ImageAssetOut(BaseModel):
     created_at: datetime
 
 
+class EventOut(BaseModel):
+    id: int
+    device_id: str
+    type: str
+    severity: str
+    message: str
+    acknowledged_at: str | None = None
+    created_at: str
+
+
+class PoseResultOut(BaseModel):
+    id: int
+    device_id: str
+    human_present: bool
+    label: str
+    confidence: float
+    source_image_url: str
+    annotated_image_url: str | None = None
+    created_at: str
+
+
+class PoseAnalyzeAccepted(BaseModel):
+    queued: bool
+    source_image_id: int
+
+
 class WebSocketEnvelope(BaseModel):
     type: str
     device_id: str
@@ -142,12 +172,20 @@ class TelemetryBucketPoint(BaseModel):
 
     bucket: str
     temperature_c: float | None = None
+    temperature_min_c: float | None = None
+    temperature_max_c: float | None = None
     humidity_percent: float | None = None
+    humidity_min_percent: float | None = None
+    humidity_max_percent: float | None = None
     tvoc_ppb: float | None = None
     hcho_ug_m3: float | None = None
     eco2_ppm: float | None = None
+    eco2_max_ppm: float | None = None
+    light_is_dark: bool | None = None
+    smoke_detected: bool | None = None
     window_open: bool | None = None
     alarm_on: bool | None = None
+    led_on: bool | None = None
     air_quality: str | None = None
     sample_count: int
 
@@ -168,6 +206,16 @@ class CommandOut(BaseModel):
 class ImageSnapshot(BaseModel):
     id: int
     url: str
+    created_at: str
+
+
+class PoseSnapshot(BaseModel):
+    id: int
+    human_present: bool
+    label: str
+    confidence: float
+    source_image_url: str
+    annotated_image_url: str | None = None
     created_at: str
 
 
@@ -196,6 +244,7 @@ class LatestState(BaseModel):
     device: DeviceSummary
     telemetry: TelemetryPoint | None = None
     image: ImageSnapshot | None = None
+    pose: PoseSnapshot | None = None
     command: CommandOut | None = None
     ai_result: AiResultInfo | None = None
     autopilot: AutopilotEnabled | None = None
@@ -243,6 +292,11 @@ class ImageEnvelope(_EnvelopeBase):
     payload: ImageSnapshot
 
 
+class PoseEnvelope(_EnvelopeBase):
+    type: Literal["pose_result"]
+    payload: PoseResultOut
+
+
 class CommandEnvelope(_EnvelopeBase):
     type: Literal["command"]
     payload: CommandOut
@@ -269,6 +323,8 @@ class EventPayload(BaseModel):
     type: str | None = None
     severity: str | None = None
     message: str | None = None
+    id: int | None = None
+    acknowledged_at: str | None = None
 
 
 class EventEnvelope(_EnvelopeBase):
@@ -315,6 +371,7 @@ WsMessage = Annotated[
     TelemetryEnvelope
     | StatusEnvelope
     | ImageEnvelope
+    | PoseEnvelope
     | CommandEnvelope
     | CommandAckEnvelope
     | EventEnvelope

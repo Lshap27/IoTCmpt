@@ -14,6 +14,7 @@
     "bradlc.vscode-tailwindcss",
     "redhat.vscode-yaml",
     "humao.rest-client",
-    "ms-azuretools.vscode-docker"
+    "ms-azuretools.vscode-docker",
+    "darthminos.workspace-tasks"
   ]
 }

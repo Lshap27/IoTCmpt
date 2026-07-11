@@ -62,6 +62,14 @@ menu "AIoT MQTT 固件主线"
         config APP_BUTTON_ENABLED
             bool "启用手动按键任务"
             default n
+
+        config APP_MQ2_ENABLED
+            bool "启用 MQ-2 烟雾安全监测"
+            default n
+
+        config APP_VOICE_ENABLED
+            bool "启用 SYN6288 语音播报"
+            default n
     endmenu
 
     menu "传感器引脚"
@@ -88,6 +96,18 @@ menu "AIoT MQTT 固件主线"
         config APP_LM393_DO_GPIO
             int "LM393 数字输出引脚"
             default 4
+
+        config APP_MQ2_DO_GPIO
+            int "MQ-2 数字输出引脚"
+            default 5
+
+        config APP_MQ2_ACTIVE_LOW
+            bool "MQ-2 低电平表示检测到烟雾"
+            default y
+
+        config APP_SYN6288_BY_GPIO
+            int "SYN6288 忙状态 BY 引脚"
+            default 37
     endmenu
 
     menu "执行器和输入引脚"
@@ -106,6 +126,27 @@ menu "AIoT MQTT 固件主线"
         config APP_BEEP_ACTIVE_LOW
             bool "蜂鸣器低电平触发"
             default y
+
+        choice APP_LED_MODE
+            prompt "LED 控制模式"
+            default APP_LED_MODE_LOGICAL
+
+            config APP_LED_MODE_LOGICAL
+                bool "仅维护逻辑状态（未确认 GPIO）"
+
+            config APP_LED_MODE_GPIO
+                bool "驱动物理 GPIO"
+        endchoice
+
+        config APP_LED_GPIO
+            int "LED GPIO 引脚"
+            depends on APP_LED_MODE_GPIO
+            default 41
+
+        config APP_LED_ACTIVE_LOW
+            bool "LED 低电平点亮"
+            depends on APP_LED_MODE_GPIO
+            default n
     endmenu
 
     menu "显示屏引脚"

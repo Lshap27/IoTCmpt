@@ -3,8 +3,8 @@
   "tasks": [
     {
       "label": "配置：本地离线演示（mock AI）",
-      "type": "shell",
-      "command": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "type": "process",
+      "command": "powershell.exe",
       "args": [
         "-NoLogo",
         "-NoProfile",
@@ -26,8 +26,8 @@
     },
     {
       "label": "配置：真实设备演示",
-      "type": "shell",
-      "command": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "type": "process",
+      "command": "powershell.exe",
       "args": [
         "-NoLogo",
         "-NoProfile",
@@ -49,8 +49,8 @@
     },
     {
       "label": "配置：填写 LLM API",
-      "type": "shell",
-      "command": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "type": "process",
+      "command": "powershell.exe",
       "args": [
         "-NoLogo",
         "-NoProfile",
@@ -72,8 +72,8 @@
     },
     {
       "label": "启动：完整 Docker 演示栈",
-      "type": "shell",
-      "command": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "type": "process",
+      "command": "powershell.exe",
       "args": [
         "-NoLogo",
         "-NoProfile",
@@ -95,8 +95,8 @@
     },
     {
       "label": "停止：完整 Docker 演示栈",
-      "type": "shell",
-      "command": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "type": "process",
+      "command": "powershell.exe",
       "args": [
         "-NoLogo",
         "-NoProfile",
@@ -114,8 +114,8 @@
     },
     {
       "label": "启动：后端开发服务",
-      "type": "shell",
-      "command": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "type": "process",
+      "command": "powershell.exe",
       "args": [
         "-NoLogo",
         "-NoProfile",
@@ -133,8 +133,8 @@
     },
     {
       "label": "启动：前端控制台",
-      "type": "shell",
-      "command": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "type": "process",
+      "command": "powershell.exe",
       "args": [
         "-NoLogo",
         "-NoProfile",
@@ -151,14 +151,41 @@
       }
     },
     {
-      "label": "固件：打开图形化配置",
-      "type": "shell",
-      "command": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "label": "固件：安装/修复 ESP-IDF 环境",
+      "type": "process",
+      "command": "powershell.exe",
       "args": [
         "-NoLogo",
         "-NoProfile",
-        "-Command",
-        "idf.py menuconfig"
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\tools\\esp-idf-task.ps1",
+        "-Action",
+        "Install"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "固件：打开图形化配置",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\tools\\esp-idf-task.ps1",
+        "-Action",
+        "Menuconfig"
       ],
       "options": {
         "cwd": "${workspaceFolder}\\firmware\\esp32s3"
@@ -171,13 +198,17 @@
     },
     {
       "label": "固件：构建 ESP32-S3",
-      "type": "shell",
-      "command": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "type": "process",
+      "command": "powershell.exe",
       "args": [
         "-NoLogo",
         "-NoProfile",
-        "-Command",
-        "idf.py -B build-esp32s3 build"
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\tools\\esp-idf-task.ps1",
+        "-Action",
+        "Build"
       ],
       "options": {
         "cwd": "${workspaceFolder}\\firmware\\esp32s3"

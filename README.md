@@ -54,7 +54,9 @@ fails on drift).
 
 ## Local Development
 
-Use PowerShell 7 on Windows.
+Use PowerShell 7 on Windows for manual development commands. VS Code tasks use
+the built-in Windows PowerShell (`powershell.exe`), so teammates do not need to
+install PowerShell 7 just to configure or start the local demo.
 
 Start the full AIoT stack (TimescaleDB, EMQX, server, web):
 
@@ -84,6 +86,11 @@ pnpm dev
 ```
 
 Build the firmware:
+
+For the first firmware task on a machine, or if `idf.py` cannot be found, run
+`固件：安装/修复 ESP-IDF 环境` from VS Code Tasks first. It installs or repairs
+the ESP-IDF tools and Python environment for ESP32-S3. The firmware Tasks then
+load the detected ESP-IDF environment automatically.
 
 ```powershell
 cd firmware\esp32s3

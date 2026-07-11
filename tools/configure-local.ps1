@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [ValidateSet("MockDemo", "DeviceDemo", "LlmDemo")]
     [string] $Preset = "MockDemo",

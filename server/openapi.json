@@ -386,6 +386,8 @@
               "window.close",
               "alarm.on",
               "alarm.off",
+              "led.on",
+              "led.off",
               "display.message"
             ],
             "title": "Type",
@@ -483,6 +485,18 @@
             ],
             "default": null,
             "title": "Alarm On"
+          },
+          "led_on": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Led On"
           },
           "manual_override": {
             "anyOf": [
@@ -627,9 +641,82 @@
         "title": "EventEnvelope",
         "type": "object"
       },
+      "EventOut": {
+        "properties": {
+          "acknowledged_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "device_id",
+          "type",
+          "severity",
+          "message",
+          "created_at"
+        ],
+        "title": "EventOut",
+        "type": "object"
+      },
       "EventPayload": {
         "additionalProperties": true,
         "properties": {
+          "acknowledged_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Acknowledged At"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Id"
+          },
           "message": {
             "anyOf": [
               {
@@ -881,6 +968,16 @@
               }
             ]
           },
+          "pose": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PoseSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "telemetry": {
             "anyOf": [
               {
@@ -926,6 +1023,157 @@
           "type"
         ],
         "title": "LogEnvelope",
+        "type": "object"
+      },
+      "PoseAnalyzeAccepted": {
+        "properties": {
+          "queued": {
+            "title": "Queued",
+            "type": "boolean"
+          },
+          "source_image_id": {
+            "title": "Source Image Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "queued",
+          "source_image_id"
+        ],
+        "title": "PoseAnalyzeAccepted",
+        "type": "object"
+      },
+      "PoseEnvelope": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/PoseResultOut"
+          },
+          "type": {
+            "const": "pose_result",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "occurred_at",
+          "type",
+          "payload"
+        ],
+        "title": "PoseEnvelope",
+        "type": "object"
+      },
+      "PoseResultOut": {
+        "properties": {
+          "annotated_image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Annotated Image Url"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "human_present": {
+            "title": "Human Present",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "source_image_url": {
+            "title": "Source Image Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "device_id",
+          "human_present",
+          "label",
+          "confidence",
+          "source_image_url",
+          "created_at"
+        ],
+        "title": "PoseResultOut",
+        "type": "object"
+      },
+      "PoseSnapshot": {
+        "properties": {
+          "annotated_image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annotated Image Url"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "human_present": {
+            "title": "Human Present",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "source_image_url": {
+            "title": "Source Image Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "human_present",
+          "label",
+          "confidence",
+          "source_image_url",
+          "created_at"
+        ],
+        "title": "PoseSnapshot",
         "type": "object"
       },
       "SensorPayload": {
@@ -977,6 +1225,18 @@
             ],
             "default": null,
             "title": "Light Is Dark"
+          },
+          "smoke_detected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Smoke Detected"
           },
           "temperature_c": {
             "anyOf": [
@@ -1094,6 +1354,17 @@
             "title": "Bucket",
             "type": "string"
           },
+          "eco2_max_ppm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eco2 Max Ppm"
+          },
           "eco2_ppm": {
             "anyOf": [
               {
@@ -1116,6 +1387,28 @@
             ],
             "title": "Hcho Ug M3"
           },
+          "humidity_max_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Humidity Max Percent"
+          },
+          "humidity_min_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Humidity Min Percent"
+          },
           "humidity_percent": {
             "anyOf": [
               {
@@ -1127,9 +1420,42 @@
             ],
             "title": "Humidity Percent"
           },
+          "led_on": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Led On"
+          },
+          "light_is_dark": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Light Is Dark"
+          },
           "sample_count": {
             "title": "Sample Count",
             "type": "integer"
+          },
+          "smoke_detected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smoke Detected"
           },
           "temperature_c": {
             "anyOf": [
@@ -1141,6 +1467,28 @@
               }
             ],
             "title": "Temperature C"
+          },
+          "temperature_max_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Max C"
+          },
+          "temperature_min_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Min C"
           },
           "tvoc_ppb": {
             "anyOf": [
@@ -1283,6 +1631,7 @@
             "event": "#/components/schemas/EventEnvelope",
             "image": "#/components/schemas/ImageEnvelope",
             "log": "#/components/schemas/LogEnvelope",
+            "pose_result": "#/components/schemas/PoseEnvelope",
             "status": "#/components/schemas/StatusEnvelope",
             "telemetry": "#/components/schemas/TelemetryEnvelope"
           },
@@ -1297,6 +1646,9 @@
           },
           {
             "$ref": "#/components/schemas/ImageEnvelope"
+          },
+          {
+            "$ref": "#/components/schemas/PoseEnvelope"
           },
           {
             "$ref": "#/components/schemas/CommandEnvelope"
@@ -1528,6 +1880,125 @@
         "summary": "Send Command"
       }
     },
+    "/api/devices/{device_id}/events": {
+      "get": {
+        "operationId": "device_events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EventOut"
+                  },
+                  "title": "Response Device Events",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Device Events"
+      }
+    },
+    "/api/devices/{device_id}/events/{event_id}/ack": {
+      "post": {
+        "operationId": "ack_device_event",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ack Device Event"
+      }
+    },
     "/api/devices/{device_id}/history": {
       "get": {
         "operationId": "telemetry_history",
@@ -1738,6 +2209,45 @@
           }
         },
         "summary": "Latest Device State"
+      }
+    },
+    "/api/devices/{device_id}/pose/analyze": {
+      "post": {
+        "operationId": "analyze_latest_pose",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoseAnalyzeAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analyze Latest Pose"
       }
     },
     "/health": {

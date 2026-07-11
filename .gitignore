@@ -12,6 +12,7 @@ Thumbs.db
 # Keep project VS Code settings trackable, ignore transient workspace files.
 .vscode/*.log
 .vscode/*.code-workspace
+.vscode/task-history.ndjson
 firmware/esp32s3/.vscode/
 firmware/esp32s3/.clangd
 
@@ -53,6 +54,8 @@ web/node_modules/
 .pnpm-store/
 web/.pnpm-store/
 web/.next/
+web/playwright-report/
+web/test-results/
 web/out/
 web/coverage/
 web/.turbo/

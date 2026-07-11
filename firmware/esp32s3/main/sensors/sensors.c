@@ -9,6 +9,7 @@
 #include "esp_rom_sys.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 
 static const char *TAG = "SENSORS";
@@ -24,6 +25,9 @@ static const char *TAG = "SENSORS";
 #define TVOC_HEADER_1  0xE4
 
 static uint32_t s_mock_counter;
+static SemaphoreHandle_t s_air_uart_mutex;
+static volatile bool s_smoke_detected;
+static volatile bool s_smoke_valid;
 
 static int sda_gpio(void) {
     return CONFIG_APP_SHT30_SDA_GPIO;
@@ -215,6 +219,9 @@ static void tvoc_init(void) {
 
 static bool tvoc_read(uint16_t *tvoc, uint16_t *hcho, uint16_t *eco2) {
     uint8_t data[64];
+    if (!sensors_air_uart_lock(1200)) {
+        return false;
+    }
     uart_flush_input(tvoc_uart());
     const int len = uart_read_bytes(tvoc_uart(), data, sizeof(data), pdMS_TO_TICKS(1000));
 
@@ -232,10 +239,12 @@ static bool tvoc_read(uint16_t *tvoc, uint16_t *hcho, uint16_t *eco2) {
             *tvoc = (data[i + 2] << 8) | data[i + 3];
             *hcho = (data[i + 4] << 8) | data[i + 5];
             *eco2 = (data[i + 6] << 8) | data[i + 7];
+            sensors_air_uart_unlock();
             return true;
         }
     }
 
+    sensors_air_uart_unlock();
     return false;
 }
 
@@ -251,8 +260,29 @@ static void lm393_init(void) {
     ESP_LOGI(TAG, "LM393 GPIO%d 初始化完成", CONFIG_APP_LM393_DO_GPIO);
 }
 
+static void mq2_init(void) {
+    if (!CONFIG_APP_MQ2_ENABLED) {
+        return;
+    }
+    gpio_config_t cfg = {
+        .pin_bit_mask = 1ULL << CONFIG_APP_MQ2_DO_GPIO,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&cfg);
+    s_smoke_valid = true;
+    ESP_LOGI(TAG, "MQ-2 GPIO%d 初始化完成", CONFIG_APP_MQ2_DO_GPIO);
+}
+
 esp_err_t sensors_init(void) {
+    s_air_uart_mutex = xSemaphoreCreateMutex();
+    if (!s_air_uart_mutex) {
+        return ESP_ERR_NO_MEM;
+    }
     if (CONFIG_APP_SENSOR_MOCK_ENABLED) {
+        s_smoke_valid = CONFIG_APP_MQ2_ENABLED;
         ESP_LOGW(TAG, "当前使用模拟传感器数据");
         return ESP_OK;
     }
@@ -260,6 +290,7 @@ esp_err_t sensors_init(void) {
     sht30_init();
     tvoc_init();
     lm393_init();
+    mq2_init();
     vTaskDelay(pdMS_TO_TICKS(1000));
     return ESP_OK;
 }
@@ -283,6 +314,8 @@ esp_err_t sensors_read(sensor_sample_t *out_sample) {
         out_sample->air_valid = true;
         out_sample->light_is_dark = (step % 4) == 0;
         out_sample->light_valid = true;
+        out_sample->smoke_detected = s_smoke_detected;
+        out_sample->smoke_valid = s_smoke_valid;
         return ESP_OK;
     }
 
@@ -306,10 +339,44 @@ esp_err_t sensors_read(sensor_sample_t *out_sample) {
 
     out_sample->light_is_dark = gpio_get_level(CONFIG_APP_LM393_DO_GPIO) == 0;
     out_sample->light_valid = true;
+    out_sample->smoke_detected = s_smoke_detected;
+    out_sample->smoke_valid = s_smoke_valid;
 
     if (!out_sample->climate_valid && !out_sample->air_valid && !out_sample->light_valid) {
         return ESP_ERR_NOT_FOUND;
     }
 
     return ESP_OK;
+}
+
+esp_err_t sensors_read_smoke(bool *detected, bool *valid) {
+    if (!detected || !valid) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!CONFIG_APP_MQ2_ENABLED) {
+        *detected = false;
+        *valid = false;
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (CONFIG_APP_SENSOR_MOCK_ENABLED) {
+        s_smoke_detected = false;
+        s_smoke_valid = true;
+    } else {
+        const int level = gpio_get_level(CONFIG_APP_MQ2_DO_GPIO);
+        s_smoke_detected = CONFIG_APP_MQ2_ACTIVE_LOW ? level == 0 : level != 0;
+        s_smoke_valid = true;
+    }
+    *detected = s_smoke_detected;
+    *valid = s_smoke_valid;
+    return ESP_OK;
+}
+
+bool sensors_air_uart_lock(uint32_t timeout_ms) {
+    return s_air_uart_mutex && xSemaphoreTake(s_air_uart_mutex, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
+}
+
+void sensors_air_uart_unlock(void) {
+    if (s_air_uart_mutex) {
+        xSemaphoreGive(s_air_uart_mutex);
+    }
 }

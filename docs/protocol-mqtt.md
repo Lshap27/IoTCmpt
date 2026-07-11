@@ -44,12 +44,14 @@ devices/{device_id}/log
     "tvoc_ppb": 120,
     "hcho_ug_m3": 30,
     "eco2_ppm": 450,
-    "light_is_dark": false
+    "light_is_dark": false,
+    "smoke_detected": false
   },
   "state": {
     "window_open": false,
     "alarm_on": false,
-    "manual_override": false
+    "manual_override": false,
+    "led_on": false
   },
   "fusion": {
     "air_quality": "good",
@@ -81,7 +83,20 @@ Allowed command types:
 - `window.close`
 - `alarm.on`
 - `alarm.off`
+- `led.on`
+- `led.off`
 - `display.message`
+
+## Safety Events
+
+MQ-2 transitions are published to `devices/{device_id}/event` with QoS 1:
+
+```json
+{"type":"smoke.detected","severity":"critical","message":"MQ-2 检测到烟雾"}
+```
+
+Clearing smoke publishes `smoke.cleared` with severity `info`. Repeated sensor
+samples do not create repeated events; the event represents the transition.
 
 ## Command Ack Payload
 

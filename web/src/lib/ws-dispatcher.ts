@@ -88,6 +88,10 @@ export function applyEnvelope(queryClient: QueryClient, deviceId: string, envelo
       patchLatest(queryClient, deviceId, (current) => ({ ...current, image: envelope.payload }));
       break;
     }
+    case "pose_result": {
+      patchLatest(queryClient, deviceId, (current) => ({ ...current, pose: envelope.payload }));
+      break;
+    }
     case "ai_analyzing": {
       setAi(queryClient, deviceId, (current) => ({ ...current, analyzing: envelope.payload.trigger }));
       break;
@@ -133,6 +137,10 @@ export function applyEnvelope(queryClient: QueryClient, deviceId: string, envelo
         ...current,
         autopilot: { enabled: envelope.payload.enabled },
       }));
+      break;
+    }
+    case "event": {
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.ledger(deviceId) });
       break;
     }
     default:

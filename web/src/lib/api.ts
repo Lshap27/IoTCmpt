@@ -1,6 +1,9 @@
 import { client } from "./api-client/client.gen";
 import {
   analyzeDevice,
+  ackDeviceEvent,
+  analyzeLatestPose,
+  deviceEvents,
   getAutopilotState,
   latestDeviceState,
   listDevices,
@@ -22,6 +25,7 @@ export type {
   CommandOut as CommandInfo,
   DeviceSummary,
   LatestState,
+  EventOut,
   TelemetryBucketPoint,
   TelemetryPoint,
   WsMessage,
@@ -33,6 +37,7 @@ import type {
   CommandOut,
   DeviceSummary as DeviceSummaryT,
   LatestState as LatestStateT,
+  EventOut as EventOutT,
   TelemetryBucketPoint as TelemetryBucketPointT,
   TelemetryPoint as TelemetryPointT,
 } from "./api-client/types.gen";
@@ -95,12 +100,43 @@ export async function sendCommand(deviceId: string, type: string): Promise<Comma
   const { data } = await sendCommandSdk({
     path: { device_id: deviceId },
     body: {
-      type: type as "none" | "window.open" | "window.close" | "alarm.on" | "alarm.off" | "display.message",
+      type: type as
+        | "none"
+        | "window.open"
+        | "window.close"
+        | "alarm.on"
+        | "alarm.off"
+        | "led.on"
+        | "led.off"
+        | "display.message",
       parameter: {},
       reason: "dashboard command",
     },
     throwOnError: true,
   });
+  return data;
+}
+
+export async function fetchDeviceEvents(deviceId: string, type?: string): Promise<EventOutT[]> {
+  const { data } = await deviceEvents({
+    path: { device_id: deviceId },
+    query: { type, limit: 500 },
+    cache: "no-store",
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function acknowledgeDeviceEvent(deviceId: string, eventId: number): Promise<EventOutT> {
+  const { data } = await ackDeviceEvent({
+    path: { device_id: deviceId, event_id: eventId },
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function requestPoseAnalysis(deviceId: string) {
+  const { data } = await analyzeLatestPose({ path: { device_id: deviceId }, throwOnError: true });
   return data;
 }
 

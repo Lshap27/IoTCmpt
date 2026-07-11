@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AnalyzeDeviceData, AnalyzeDeviceErrors, AnalyzeDeviceResponses, GetAutopilotStateData, GetAutopilotStateErrors, GetAutopilotStateResponses, HealthData, HealthResponses, LatestDeviceStateData, LatestDeviceStateErrors, LatestDeviceStateResponses, ListDevicesData, ListDevicesResponses, SendCommandData, SendCommandErrors, SendCommandResponses, TelemetryHistoryBucketedData, TelemetryHistoryBucketedErrors, TelemetryHistoryBucketedResponses, TelemetryHistoryData, TelemetryHistoryErrors, TelemetryHistoryResponses, UpdateAutopilotStateData, UpdateAutopilotStateErrors, UpdateAutopilotStateResponses, UploadImageData, UploadImageErrors, UploadImageResponses } from './types.gen';
+import type { AckDeviceEventData, AckDeviceEventErrors, AckDeviceEventResponses, AnalyzeDeviceData, AnalyzeDeviceErrors, AnalyzeDeviceResponses, AnalyzeLatestPoseData, AnalyzeLatestPoseErrors, AnalyzeLatestPoseResponses, DeviceEventsData, DeviceEventsErrors, DeviceEventsResponses, GetAutopilotStateData, GetAutopilotStateErrors, GetAutopilotStateResponses, HealthData, HealthResponses, LatestDeviceStateData, LatestDeviceStateErrors, LatestDeviceStateResponses, ListDevicesData, ListDevicesResponses, SendCommandData, SendCommandErrors, SendCommandResponses, TelemetryHistoryBucketedData, TelemetryHistoryBucketedErrors, TelemetryHistoryBucketedResponses, TelemetryHistoryData, TelemetryHistoryErrors, TelemetryHistoryResponses, UpdateAutopilotStateData, UpdateAutopilotStateErrors, UpdateAutopilotStateResponses, UploadImageData, UploadImageErrors, UploadImageResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -58,6 +58,16 @@ export const sendCommand = <ThrowOnError extends boolean = false>(options: Optio
 });
 
 /**
+ * Device Events
+ */
+export const deviceEvents = <ThrowOnError extends boolean = false>(options: Options<DeviceEventsData, ThrowOnError>): RequestResult<DeviceEventsResponses, DeviceEventsErrors, ThrowOnError> => (options.client ?? client).get<DeviceEventsResponses, DeviceEventsErrors, ThrowOnError>({ url: '/api/devices/{device_id}/events', ...options });
+
+/**
+ * Ack Device Event
+ */
+export const ackDeviceEvent = <ThrowOnError extends boolean = false>(options: Options<AckDeviceEventData, ThrowOnError>): RequestResult<AckDeviceEventResponses, AckDeviceEventErrors, ThrowOnError> => (options.client ?? client).post<AckDeviceEventResponses, AckDeviceEventErrors, ThrowOnError>({ url: '/api/devices/{device_id}/events/{event_id}/ack', ...options });
+
+/**
  * Telemetry History
  */
 export const telemetryHistory = <ThrowOnError extends boolean = false>(options: Options<TelemetryHistoryData, ThrowOnError>): RequestResult<TelemetryHistoryResponses, TelemetryHistoryErrors, ThrowOnError> => (options.client ?? client).get<TelemetryHistoryResponses, TelemetryHistoryErrors, ThrowOnError>({ url: '/api/devices/{device_id}/history', ...options });
@@ -84,6 +94,11 @@ export const uploadImage = <ThrowOnError extends boolean = false>(options: Optio
  * Latest Device State
  */
 export const latestDeviceState = <ThrowOnError extends boolean = false>(options: Options<LatestDeviceStateData, ThrowOnError>): RequestResult<LatestDeviceStateResponses, LatestDeviceStateErrors, ThrowOnError> => (options.client ?? client).get<LatestDeviceStateResponses, LatestDeviceStateErrors, ThrowOnError>({ url: '/api/devices/{device_id}/latest', ...options });
+
+/**
+ * Analyze Latest Pose
+ */
+export const analyzeLatestPose = <ThrowOnError extends boolean = false>(options: Options<AnalyzeLatestPoseData, ThrowOnError>): RequestResult<AnalyzeLatestPoseResponses, AnalyzeLatestPoseErrors, ThrowOnError> => (options.client ?? client).post<AnalyzeLatestPoseResponses, AnalyzeLatestPoseErrors, ThrowOnError>({ url: '/api/devices/{device_id}/pose/analyze', ...options });
 
 /**
  * Health

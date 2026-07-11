@@ -219,10 +219,16 @@ static char *build_telemetry_json(const sensor_sample_t *sample, const fusion_st
     } else {
         cJSON_AddNullToObject(sensors, "light_is_dark");
     }
+    if (sample->smoke_valid) {
+        cJSON_AddBoolToObject(sensors, "smoke_detected", sample->smoke_detected);
+    } else {
+        cJSON_AddNullToObject(sensors, "smoke_detected");
+    }
 
     cJSON_AddBoolToObject(state, "window_open", control.window_open);
     cJSON_AddBoolToObject(state, "alarm_on", control.alarm_on);
     cJSON_AddBoolToObject(state, "manual_override", control.manual_override);
+    cJSON_AddBoolToObject(state, "led_on", control.led_on);
 
     cJSON_AddStringToObject(fusion_json, "air_quality", fusion_air_quality_name(fusion->air_quality));
     cJSON_AddBoolToObject(fusion_json, "recommend_open_window", fusion->recommend_open_window);
@@ -233,6 +239,29 @@ static char *build_telemetry_json(const sensor_sample_t *sample, const fusion_st
     cJSON_AddItemToObject(root, "state", state);
     cJSON_AddItemToObject(root, "fusion", fusion_json);
     return cJSON_PrintUnformatted(root);
+}
+
+esp_err_t mqtt_app_publish_event(const char *type, const char *severity, const char *message) {
+    if (!s_client || !type || !severity) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    char topic[96];
+    ESP_RETURN_ON_ERROR(make_topic(topic, sizeof(topic), "event"), TAG, "event topic");
+    cJSON *root = cJSON_CreateObject();
+    if (!root) {
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_AddStringToObject(root, "type", type);
+    cJSON_AddStringToObject(root, "severity", severity);
+    cJSON_AddStringToObject(root, "message", message ? message : "");
+    char *payload = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!payload) {
+        return ESP_ERR_NO_MEM;
+    }
+    esp_mqtt_client_publish(s_client, topic, payload, 0, 1, false);
+    cJSON_free(payload);
+    return ESP_OK;
 }
 
 esp_err_t mqtt_app_publish_telemetry(const sensor_sample_t *sample, const fusion_state_t *fusion) {

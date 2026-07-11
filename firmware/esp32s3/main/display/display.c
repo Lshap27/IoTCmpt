@@ -1,5 +1,6 @@
 #include "display.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "app_config_defaults.h"
@@ -34,6 +35,7 @@ static const char *TAG = "DISPLAY";
 #define COLOR_RED       RGB565(240, 50, 50)
 #define COLOR_BLUE      RGB565(40, 120, 240)
 #define COLOR_CYAN      RGB565(40, 210, 210)
+#define COLOR_WHITE     RGB565(235, 238, 245)
 #define COLOR_GRAY      RGB565(90, 90, 110)
 #define COLOR_DARK      RGB565(8, 10, 18)
 #define COLOR_PANEL     RGB565(24, 28, 42)
@@ -105,20 +107,107 @@ static void fb_rect(int x, int y, int w, int h, uint16_t color) {
     }
 }
 
-static int clamp_int(int value, int min, int max) {
-    if (value < min) {
-        return min;
+static const char *font3x5(char ch) {
+    switch (ch) {
+    case 'A':
+        return "010101111101101";
+    case 'B':
+        return "110101110101110";
+    case 'C':
+        return "011100100100011";
+    case 'D':
+        return "110101101101110";
+    case 'E':
+        return "111100110100111";
+    case 'F':
+        return "111100110100100";
+    case 'G':
+        return "011100101101011";
+    case 'H':
+        return "101101111101101";
+    case 'I':
+        return "111010010010111";
+    case 'J':
+        return "001001001101010";
+    case 'K':
+        return "101101110101101";
+    case 'L':
+        return "100100100100111";
+    case 'M':
+        return "101111111101101";
+    case 'N':
+        return "101111111111101";
+    case 'O':
+        return "010101101101010";
+    case 'P':
+        return "110101110100100";
+    case 'Q':
+        return "010101101111011";
+    case 'R':
+        return "110101110101101";
+    case 'S':
+        return "011100010001110";
+    case 'T':
+        return "111010010010010";
+    case 'U':
+        return "101101101101111";
+    case 'V':
+        return "101101101101010";
+    case 'W':
+        return "101101111111101";
+    case 'X':
+        return "101101010101101";
+    case 'Y':
+        return "101101010010010";
+    case 'Z':
+        return "111001010100111";
+    case '0':
+        return "111101101101111";
+    case '1':
+        return "010110010010111";
+    case '2':
+        return "110001111100111";
+    case '3':
+        return "110001111001110";
+    case '4':
+        return "101101111001001";
+    case '5':
+        return "111100110001110";
+    case '6':
+        return "111100111101111";
+    case '7':
+        return "111001010010010";
+    case '8':
+        return "111101111101111";
+    case '9':
+        return "111101111001111";
+    case ':':
+        return "000010000010000";
+    case '.':
+        return "000000000000010";
+    case '-':
+        return "000000111000000";
+    case '%':
+        return "101001010100101";
+    case '?':
+        return "110001010000010";
+    default:
+        return "000000000000000";
     }
-    if (value > max) {
-        return max;
-    }
-    return value;
 }
 
-static void draw_bar(int y, int value, int max_value, uint16_t color) {
-    fb_rect(8, y, 112, 9, COLOR_PANEL);
-    const int width = clamp_int(value * 112 / max_value, 0, 112);
-    fb_rect(8, y, width, 9, color);
+static void draw_text(int x, int y, const char *text, uint16_t color) {
+    while (*text && x + 3 <= TFT_W) {
+        const char *glyph = font3x5(*text++);
+        for (int row = 0; row < 5; row++) {
+            for (int col = 0; col < 3; col++) {
+                if (glyph[row * 3 + col] == '1') {
+                    fb_rect(x + col, y + row, 1, 1, color);
+                }
+            }
+        }
+        x += 4;
+    }
 }
 
 static void tft_flush(void) {
@@ -227,17 +316,50 @@ esp_err_t display_render(const sensor_sample_t *sample, const fusion_state_t *st
         status_color = COLOR_RED;
     }
 
-    fb_fill(COLOR_DARK);
-    fb_rect(0, 0, TFT_W, 18, status_color);
-    draw_bar(24, sample->climate_valid ? (int)(sample->temperature_c * 3.0f) : 0, 120, COLOR_RED);
-    draw_bar(38, sample->climate_valid ? (int)sample->humidity_percent : 0, 100, COLOR_CYAN);
-    draw_bar(52, sample->air_valid ? sample->tvoc_ppb : 0, 800, COLOR_YELLOW);
-    draw_bar(66, sample->air_valid ? sample->eco2_ppm : 0, 2000, COLOR_BLUE);
-    draw_bar(80, sample->air_valid ? sample->hcho_ug_m3 : 0, 140, COLOR_RED);
+    const char *air = state->air_quality == FUSION_AIR_QUALITY_GOOD    ? "GOOD"
+                      : state->air_quality == FUSION_AIR_QUALITY_WATCH ? "WATCH"
+                      : state->air_quality == FUSION_AIR_QUALITY_ALERT ? "ALERT"
+                                                                       : "UNKNOWN";
+    const char *light = !sample->light_valid ? "NA" : (sample->light_is_dark ? "DARK" : "LIGHT");
+    const char *smoke = !sample->smoke_valid ? "NA" : (sample->smoke_detected ? "YES" : "NO");
+    char line[32];
 
-    fb_rect(8, 99, control.window_open ? 52 : 20, 12, control.window_open ? COLOR_GREEN : COLOR_GRAY);
-    fb_rect(68, 99, control.manual_override ? 52 : 20, 12, control.manual_override ? COLOR_YELLOW : COLOR_GRAY);
-    fb_rect(8, 116, control.alarm_on ? 112 : 20, 7, control.alarm_on ? COLOR_RED : COLOR_GRAY);
+    fb_fill(COLOR_DARK);
+    fb_rect(0, 0, TFT_W, 10, status_color);
+    draw_text(4, 2, "AIOT STATUS", COLOR_BLACK);
+
+    if (sample->climate_valid) {
+        snprintf(line, sizeof(line), "T:%.1fC H:%.0f%%", sample->temperature_c, sample->humidity_percent);
+    } else {
+        snprintf(line, sizeof(line), "T:-- H:--");
+    }
+    draw_text(4, 15, line, COLOR_WHITE);
+
+    if (sample->air_valid) {
+        snprintf(line, sizeof(line), "TVOC:%u HCHO:%u", sample->tvoc_ppb, sample->hcho_ug_m3);
+    } else {
+        snprintf(line, sizeof(line), "TVOC:-- HCHO:--");
+    }
+    draw_text(4, 27, line, COLOR_YELLOW);
+
+    if (sample->air_valid) {
+        snprintf(line, sizeof(line), "ECO2:%u LIGHT:%s", sample->eco2_ppm, light);
+    } else {
+        snprintf(line, sizeof(line), "ECO2:-- LIGHT:%s", light);
+    }
+    draw_text(4, 39, line, COLOR_CYAN);
+
+    snprintf(line, sizeof(line), "AIR:%s SMOKE:%s", air, smoke);
+    draw_text(4, 51, line, sample->smoke_detected ? COLOR_RED : status_color);
+
+    snprintf(line, sizeof(line), "WINDOW:%s MANUAL:%s", control.window_open ? "OPEN" : "CLOSED",
+             control.manual_override ? "YES" : "NO");
+    draw_text(4, 63, line, control.window_open ? COLOR_GREEN : COLOR_WHITE);
+
+    snprintf(line, sizeof(line), "ALARM:%s LED:%s", control.alarm_on ? "YES" : "NO", control.led_on ? "YES" : "NO");
+    draw_text(4, 75, line, control.alarm_on ? COLOR_RED : COLOR_WHITE);
+
+    draw_text(4, 91, status->cloud == APP_STATUS_LINK_READY ? "MQTT:ONLINE" : "MQTT:OFFLINE", COLOR_BLUE);
 
     tft_flush();
     return ESP_OK;

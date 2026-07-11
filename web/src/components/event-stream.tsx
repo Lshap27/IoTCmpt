@@ -62,6 +62,13 @@ function describeEvent(event: UiEvent): EventView {
     }
     case "image":
       return { Icon: Camera, color: "var(--m-hum)", title: "新画面已上传", detail: "" };
+    case "pose_result":
+      return {
+        Icon: Camera,
+        color: "var(--m-hum)",
+        title: `姿态识别：${str(payload.label)}`,
+        detail: payload.human_present ? "检测到人体" : "未检测到人体",
+      };
     case "ai_analyzing":
       return {
         Icon: BrainCircuit,
@@ -107,6 +114,15 @@ function describeEvent(event: UiEvent): EventView {
         detail: "",
       };
     case "event":
+      if (str(payload.type) === "smoke.detected" || str(payload.type) === "smoke.cleared") {
+        const detected = str(payload.type) === "smoke.detected";
+        return {
+          Icon: detected ? AlertTriangle : CheckCircle2,
+          color: detected ? "var(--alert)" : "var(--good)",
+          title: detected ? "烟雾告警" : "烟雾解除",
+          detail: str(payload.message),
+        };
+      }
       return {
         Icon: str(payload.type) === "autopilot" ? Bot : Radio,
         color: "var(--warn)",

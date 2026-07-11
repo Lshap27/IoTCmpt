@@ -44,7 +44,7 @@ HTTP 和 WebSocket API：
 
 ## 本地开发
 
-Windows 上使用 PowerShell 7。
+手动执行开发命令时，Windows 上建议使用 PowerShell 7。VS Code 任务使用系统自带的 Windows PowerShell（`powershell.exe`），队友只需点击任务即可配置或启动本地演示，不需要额外安装 PowerShell 7。
 
 推荐先用 VS Code 任务入口。打开本仓库后，按：
 
@@ -111,9 +111,13 @@ APP_IMAGE_UPLOAD_URL=http://<电脑局域网IP>:8000/api/devices/esp32s3-001/ima
 
 例子：只改仪表盘 UI、图表或交互时，运行这个任务即可，不需要重新构建完整 Docker 栈。
 
+`固件：安装/修复 ESP-IDF 环境`
+
+首次使用固件任务，或看到 `idf.py` 找不到、ESP-IDF Python 环境缺失等报错时，先运行此任务。它会为 ESP32-S3 下载或修复 ESP-IDF 工具链和 Python 环境；完成后再运行下面的配置或构建任务。
+
 `固件：打开图形化配置`
 
-用于打开 ESP-IDF 的 `menuconfig` 图形化配置界面。这里配置 ESP32-S3 端的设备 ID、Wi-Fi、MQTT Broker、图片上传 URL、摄像头/屏幕/执行器开关和硬件引脚。
+用于打开 ESP-IDF 的 `menuconfig` 图形化配置界面。任务会自动找到并加载已安装的 ESP-IDF 环境；这里配置 ESP32-S3 端的设备 ID、Wi-Fi、MQTT Broker、图片上传 URL、摄像头/屏幕/执行器开关和硬件引脚。
 
 例子：运行 `配置：真实设备演示` 后，把它打印出来的 MQTT 和图片上传地址复制到这个图形化配置界面里。
 

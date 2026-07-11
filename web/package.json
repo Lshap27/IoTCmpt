@@ -11,7 +11,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "codegen": "openapi-ts"
+    "codegen": "openapi-ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.2",
@@ -30,6 +31,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
     "@hey-api/openapi-ts": "^0.99.0",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",

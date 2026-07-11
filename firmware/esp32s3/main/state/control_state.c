@@ -37,11 +37,34 @@ void control_state_set_window_open(bool open) {
 }
 
 void control_state_set_alarm(bool on) {
+    control_state_set_alarm_source(CONTROL_ALARM_COMMAND, on);
+}
+
+void control_state_set_alarm_source(control_alarm_source_t source, bool on) {
     if (s_mutex && xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-        s_state.alarm_on = on;
+        if (on) {
+            s_state.alarm_sources |= (uint32_t)source;
+        } else {
+            s_state.alarm_sources &= ~((uint32_t)source);
+        }
+        s_state.alarm_on = s_state.alarm_sources != 0;
         xSemaphoreGive(s_mutex);
     } else {
-        s_state.alarm_on = on;
+        if (on) {
+            s_state.alarm_sources |= (uint32_t)source;
+        } else {
+            s_state.alarm_sources &= ~((uint32_t)source);
+        }
+        s_state.alarm_on = s_state.alarm_sources != 0;
+    }
+}
+
+void control_state_set_led(bool on) {
+    if (s_mutex && xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        s_state.led_on = on;
+        xSemaphoreGive(s_mutex);
+    } else {
+        s_state.led_on = on;
     }
 }
 
@@ -60,11 +83,9 @@ void control_state_toggle_manual_window(void) {
     if (s_mutex && xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         s_state.manual_override = true;
         s_state.manual_open = !s_state.manual_open;
-        s_state.alarm_on = false;
         xSemaphoreGive(s_mutex);
     } else {
         s_state.manual_override = true;
         s_state.manual_open = !s_state.manual_open;
-        s_state.alarm_on = false;
     }
 }

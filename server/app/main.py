@@ -16,6 +16,7 @@ from app.services.autopilot import AutoPilot
 from app.services.llm import LLMService
 from app.services.mqtt import MqttGateway
 from app.services.mqtt_ingest import ingest_mqtt_message
+from app.services.pose import PoseService
 from app.services.websocket import manager
 
 
@@ -36,6 +37,7 @@ async def lifespan(app: FastAPI):
 
     autopilot = AutoPilot(settings, LLMService(settings))
     mqtt_service = MqttGateway(settings)
+    pose_service = PoseService(settings)
     autopilot.mqtt_service = mqtt_service
 
     async def handle_mqtt_message(topic: str, payload: dict[str, Any]) -> None:
@@ -48,9 +50,12 @@ async def lifespan(app: FastAPI):
             autopilot.maybe_trigger(envelope.device_id, envelope.payload)
 
     mqtt_service.start(handle_mqtt_message)
+    await pose_service.start()
     app.state.mqtt_service = mqtt_service
     app.state.autopilot = autopilot
+    app.state.pose_service = pose_service
     yield
+    await pose_service.stop()
     await mqtt_service.stop()
 
 

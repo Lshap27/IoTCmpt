@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -11,7 +12,39 @@ from app.db import models
 from app.services.commands import ensure_device
 
 
-def save_image(db: Session, settings: Settings, device_id: str, file: UploadFile) -> models.ImageAsset:
+def prune_images(db: Session, settings: Settings, device_id: str) -> None:
+    """Keep only the newest configured number of image assets per device."""
+    limit = settings.max_images_per_device
+    if limit <= 0:
+        return
+    expired = (
+        db.query(models.ImageAsset)
+        .filter(models.ImageAsset.device_id == device_id)
+        .order_by(models.ImageAsset.created_at.desc(), models.ImageAsset.id.desc())
+        .offset(limit)
+        .all()
+    )
+    if not expired:
+        return
+
+    expired_ids = [asset.id for asset in expired]
+    db.query(models.PoseResult).filter(
+        or_(
+            models.PoseResult.source_image_id.in_(expired_ids),
+            models.PoseResult.annotated_image_id.in_(expired_ids),
+        )
+    ).delete(synchronize_session=False)
+    paths = [settings.uploads_dir / asset.device_id / asset.filename for asset in expired]
+    for asset in expired:
+        db.delete(asset)
+    db.commit()
+    for path in paths:
+        path.unlink(missing_ok=True)
+
+
+def save_image(
+    db: Session, settings: Settings, device_id: str, file: UploadFile, *, kind: str = "capture"
+) -> models.ImageAsset:
     if file.content_type not in {"image/jpeg", "image/jpg"}:
         raise HTTPException(status_code=415, detail="Only JPEG images are supported")
 
@@ -37,8 +70,10 @@ def save_image(db: Session, settings: Settings, device_id: str, file: UploadFile
         url=f"{settings.base_url}/{relative.as_posix()}",
         content_type=file.content_type or "image/jpeg",
         size_bytes=size,
+        kind=kind,
     )
     db.add(asset)
     db.commit()
     db.refresh(asset)
+    prune_images(db, settings, device_id)
     return asset

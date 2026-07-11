@@ -1,6 +1,15 @@
 "use client";
 
-import { BellOff, BellRing, DoorClosed, DoorOpen, Loader2, SlidersHorizontal } from "lucide-react";
+import {
+  BellOff,
+  BellRing,
+  DoorClosed,
+  DoorOpen,
+  Lightbulb,
+  LightbulbOff,
+  Loader2,
+  SlidersHorizontal,
+} from "lucide-react";
 import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +19,8 @@ const COMMANDS: { type: string; label: string; Icon: typeof DoorOpen }[] = [
   { type: "window.close", label: "关窗", Icon: DoorClosed },
   { type: "alarm.on", label: "报警开", Icon: BellRing },
   { type: "alarm.off", label: "报警关", Icon: BellOff },
+  { type: "led.on", label: "LED 开", Icon: Lightbulb },
+  { type: "led.off", label: "LED 关", Icon: LightbulbOff },
 ];
 
 function StateChip({ label, active }: { label: string; active: boolean | null | undefined }) {
@@ -34,12 +45,14 @@ export function CommandPad({
   pendingCommands,
   windowOpen,
   alarmOn,
+  ledOn,
   className,
 }: {
   onCommand: (type: string) => void;
   pendingCommands: Record<string, string>;
   windowOpen: boolean | null | undefined;
   alarmOn: boolean | null | undefined;
+  ledOn: boolean | null | undefined;
   className?: string;
 }) {
   const pendingTypes = new Set(Object.values(pendingCommands));
@@ -53,10 +66,11 @@ export function CommandPad({
         <div className="flex gap-1.5">
           <StateChip label="窗户" active={windowOpen} />
           <StateChip label="报警" active={alarmOn} />
+          <StateChip label="LED" active={ledOn} />
         </div>
       }
     >
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         {COMMANDS.map(({ type, label, Icon }) => {
           const pending = pendingTypes.has(type);
           return (

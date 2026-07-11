@@ -31,6 +31,10 @@ esp_err_t command_from_name(const char *name, cloud_command_t *out_command) {
         out_command->type = CLOUD_COMMAND_ALARM_ON;
     } else if (strcmp(name, "alarm.off") == 0 || strcmp(name, "alarm_off") == 0) {
         out_command->type = CLOUD_COMMAND_ALARM_OFF;
+    } else if (strcmp(name, "led.on") == 0 || strcmp(name, "led_on") == 0) {
+        out_command->type = CLOUD_COMMAND_LED_ON;
+    } else if (strcmp(name, "led.off") == 0 || strcmp(name, "led_off") == 0) {
+        out_command->type = CLOUD_COMMAND_LED_OFF;
     } else {
         out_command->type = CLOUD_COMMAND_UNKNOWN;
         app_string_copy(out_command->raw, sizeof(out_command->raw), name);
@@ -61,6 +65,12 @@ esp_err_t command_apply(const cloud_command_t *command) {
     case CLOUD_COMMAND_ALARM_OFF:
         ESP_LOGI(TAG, "执行命令：关闭报警");
         return ESP_OK;
+    case CLOUD_COMMAND_LED_ON:
+        ESP_LOGI(TAG, "执行命令：打开 LED");
+        return ESP_OK;
+    case CLOUD_COMMAND_LED_OFF:
+        ESP_LOGI(TAG, "执行命令：关闭 LED");
+        return ESP_OK;
     case CLOUD_COMMAND_UNKNOWN:
     default:
         ESP_LOGW(TAG, "拒绝不支持的命令：%s", command->raw);
@@ -80,6 +90,10 @@ const char *command_type_name(cloud_command_type_t type) {
         return "alarm.on";
     case CLOUD_COMMAND_ALARM_OFF:
         return "alarm.off";
+    case CLOUD_COMMAND_LED_ON:
+        return "led.on";
+    case CLOUD_COMMAND_LED_OFF:
+        return "led.off";
     case CLOUD_COMMAND_UNKNOWN:
     default:
         return "unknown";

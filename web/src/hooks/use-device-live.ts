@@ -2,8 +2,18 @@
 
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { LatestState } from "@/lib/api";
-import { fetchHistory, fetchLatest, requestAiAnalysis, sendCommand, updateAutopilot } from "@/lib/api";
+import type { EventOut, LatestState } from "@/lib/api";
+import {
+  acknowledgeDeviceEvent,
+  fetchDeviceEvents,
+  fetchHistory,
+  fetchHistoryBucketed,
+  fetchLatest,
+  requestAiAnalysis,
+  requestPoseAnalysis,
+  sendCommand,
+  updateAutopilot,
+} from "@/lib/api";
 import { deviceKeys } from "@/lib/query-keys";
 import type { AiPanelState, UiEvent } from "@/lib/ws-dispatcher";
 import { EMPTY_AI, addPendingCommand, applyEnvelope } from "@/lib/ws-dispatcher";
@@ -11,6 +21,15 @@ import { useDeviceSocket } from "@/hooks/use-device-socket";
 
 export type { SocketState } from "@/hooks/use-device-socket";
 export type { UiEvent } from "@/lib/ws-dispatcher";
+
+function removePendingCommand(queryClient: ReturnType<typeof useQueryClient>, deviceId: string, id: string) {
+  queryClient.setQueryData<Record<string, string>>(deviceKeys.pendingCommands(deviceId), (current = {}) => {
+    if (!(id in current)) return current;
+    const next = { ...current };
+    delete next[id];
+    return next;
+  });
+}
 
 /** 组合层：HTTP 查询（TanStack Query）+ WebSocket 实时推送（写入 query cache）+ 操作 mutation。 */
 export function useDeviceLive(deviceId: string) {
@@ -23,7 +42,16 @@ export function useDeviceLive(deviceId: string) {
   });
   const historyQuery = useQuery({
     queryKey: deviceKeys.history(deviceId),
-    queryFn: async () => [...(await fetchHistory(deviceId))].reverse(),
+    queryFn: async () => [...(await fetchHistory(deviceId, 500))].reverse(),
+  });
+  const reportHistoryQuery = useQuery({
+    queryKey: deviceKeys.reportHistory(deviceId),
+    queryFn: async () => [...(await fetchHistoryBucketed(deviceId, 3600, 168))].reverse(),
+    refetchInterval: 5 * 60 * 1000,
+  });
+  const ledgerQuery = useQuery({
+    queryKey: deviceKeys.ledger(deviceId),
+    queryFn: () => fetchDeviceEvents(deviceId),
   });
 
   // 纯客户端状态放 query cache：WS dispatcher 可以在组件树外更新它们。
@@ -53,6 +81,8 @@ export function useDeviceLive(deviceId: string) {
       // 断线期间可能漏推送：重连成功后拉回权威快照。
       void queryClient.invalidateQueries({ queryKey: deviceKeys.latest(deviceId) });
       void queryClient.invalidateQueries({ queryKey: deviceKeys.history(deviceId) });
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.reportHistory(deviceId) });
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.ledger(deviceId) });
     }, [queryClient, deviceId]),
   );
 
@@ -79,13 +109,45 @@ export function useDeviceLive(deviceId: string) {
 
   const commandMutation = useMutation({
     mutationFn: (type: string) => sendCommand(deviceId, type),
-    onMutate: () => setActionError(""),
-    onSuccess: (command, type) => {
+    onMutate: (type) => {
+      setActionError("");
+      const localId = `local-${crypto.randomUUID()}`;
+      addPendingCommand(queryClient, deviceId, localId, type);
+      return { localId };
+    },
+    onSuccess: (command, type, context) => {
+      removePendingCommand(queryClient, deviceId, context.localId);
       if (command?.command_id) {
+        const latest = queryClient.getQueryData<LatestState>(deviceKeys.latest(deviceId));
+        const latestCommand = latest?.command;
+        if (
+          latestCommand?.command_id === command.command_id &&
+          ["executed", "rejected", "failed"].includes(latestCommand.status)
+        ) {
+          return;
+        }
         addPendingCommand(queryClient, deviceId, command.command_id, type);
       }
     },
-    onError: (err) => setActionError(err instanceof Error ? err.message : "指令下发失败"),
+    onError: (err, _type, context) => {
+      if (context) removePendingCommand(queryClient, deviceId, context.localId);
+      setActionError(err instanceof Error ? err.message : "指令下发失败");
+    },
+  });
+
+  const acknowledgeMutation = useMutation({
+    mutationFn: (eventId: number) => acknowledgeDeviceEvent(deviceId, eventId),
+    onSuccess: (event) => {
+      queryClient.setQueryData<EventOut[]>(deviceKeys.ledger(deviceId), (current = []) =>
+        current.map((item) => (item.id === event.id ? event : item)),
+      );
+    },
+    onError: (err) => setActionError(err instanceof Error ? err.message : "告警确认失败"),
+  });
+
+  const poseMutation = useMutation({
+    mutationFn: () => requestPoseAnalysis(deviceId),
+    onError: (err) => setActionError(err instanceof Error ? err.message : "姿态分析请求失败"),
   });
 
   const autopilotMutation = useMutation({
@@ -119,7 +181,9 @@ export function useDeviceLive(deviceId: string) {
   return {
     latest,
     history: historyQuery.data ?? [],
+    reportHistory: reportHistoryQuery.data ?? [],
     events: eventsQuery.data ?? [],
+    ledger: ledgerQuery.data ?? [],
     socketState,
     analyzing: ai.analyzing,
     decision: ai.decision,
@@ -128,6 +192,11 @@ export function useDeviceLive(deviceId: string) {
     error: actionError || (queryError instanceof Error ? queryError.message : ""),
     triggerAnalysis: useCallback(() => analyzeMutation.mutate(), [analyzeMutation]),
     dispatchCommand: useCallback((type: string) => commandMutation.mutate(type), [commandMutation]),
+    acknowledgeEvent: useCallback(
+      (eventId: number) => acknowledgeMutation.mutate(eventId),
+      [acknowledgeMutation],
+    ),
+    requestPose: useCallback(() => poseMutation.mutate(), [poseMutation]),
     toggleAutopilot: useCallback(
       (enabled: boolean) => autopilotMutation.mutate(enabled),
       [autopilotMutation],

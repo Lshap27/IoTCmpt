@@ -7,12 +7,13 @@ import { Panel } from "@/components/panel";
 import type { TelemetryPoint } from "@/lib/api";
 import { cn, formatValue } from "@/lib/utils";
 
-export type MetricKey = "temperature_c" | "humidity_percent" | "tvoc_ppb" | "eco2_ppm";
+export type MetricKey = "temperature_c" | "humidity_percent" | "tvoc_ppb" | "hcho_ug_m3" | "eco2_ppm";
 
 export const METRICS: { key: MetricKey; label: string; unit: string; cssVar: string; digits: number }[] = [
   { key: "temperature_c", label: "温度", unit: "°C", cssVar: "--m-temp", digits: 1 },
   { key: "humidity_percent", label: "湿度", unit: "%", cssVar: "--m-hum", digits: 1 },
   { key: "tvoc_ppb", label: "TVOC", unit: "ppb", cssVar: "--m-tvoc", digits: 0 },
+  { key: "hcho_ug_m3", label: "HCHO", unit: "μg/m³", cssVar: "--alert", digits: 0 },
   { key: "eco2_ppm", label: "eCO₂", unit: "ppm", cssVar: "--m-eco2", digits: 0 },
 ];
 

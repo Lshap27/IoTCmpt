@@ -40,6 +40,10 @@ services:
       AIOT_AUTO_CREATE_TABLES: "false"
       AIOT_BASE_URL: http://localhost:8000
       AIOT_UPLOADS_DIR: /app/uploads
+      AIOT_MAX_IMAGES_PER_DEVICE: 100
+      AIOT_POSE_ENABLED: ${AIOT_POSE_ENABLED:-true}
+      AIOT_POSE_MODEL_PATH: /app/models/pose_landmarker_lite.task
+      AIOT_POSE_MIN_CONFIDENCE: ${AIOT_POSE_MIN_CONFIDENCE:-0.3}
       AIOT_MQTT_ENABLED: "true"
       AIOT_MQTT_HOST: emqx
       AIOT_MQTT_PORT: "1883"

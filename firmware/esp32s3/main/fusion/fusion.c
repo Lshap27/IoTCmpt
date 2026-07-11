@@ -37,18 +37,22 @@ esp_err_t fusion_evaluate(const sensor_sample_t *sample, fusion_state_t *out_sta
 
     bool bad = false;
     bool watch = false;
+    bool ventilation_needed = false;
 
     if (sample->climate_valid) {
         if (sample->temperature_c > 32.0f) {
             bad = true;
+            ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "温度严重偏高 %.1fC；", sample->temperature_c);
         } else if (sample->temperature_c > 28.0f) {
             watch = true;
+            ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "温度偏高 %.1fC；", sample->temperature_c);
         }
 
         if (sample->humidity_percent > 75.0f || sample->humidity_percent < 30.0f) {
             watch = true;
+            ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "湿度异常 %.1f%%；", sample->humidity_percent);
         }
     }
@@ -56,25 +60,31 @@ esp_err_t fusion_evaluate(const sensor_sample_t *sample, fusion_state_t *out_sta
     if (sample->air_valid) {
         if (sample->tvoc_ppb > 600) {
             bad = true;
+            ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "TVOC 严重偏高 %u；", sample->tvoc_ppb);
         } else if (sample->tvoc_ppb > 300) {
             watch = true;
+            ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "TVOC 偏高 %u；", sample->tvoc_ppb);
         }
 
         if (sample->hcho_ug_m3 > 100) {
             bad = true;
+            ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "HCHO 严重偏高 %u；", sample->hcho_ug_m3);
         } else if (sample->hcho_ug_m3 > 60) {
             watch = true;
+            ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "HCHO 偏高 %u；", sample->hcho_ug_m3);
         }
 
         if (sample->eco2_ppm > 1500) {
             bad = true;
+            ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "eCO2 严重偏高 %u；", sample->eco2_ppm);
         } else if (sample->eco2_ppm > 1000) {
             watch = true;
+            ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "eCO2 偏高 %u；", sample->eco2_ppm);
         }
     }
@@ -83,14 +93,19 @@ esp_err_t fusion_evaluate(const sensor_sample_t *sample, fusion_state_t *out_sta
         append_reason(out_state->reason, sizeof(out_state->reason), "光照偏暗；");
     }
 
+    if (sample->smoke_valid && sample->smoke_detected) {
+        bad = true;
+        append_reason(out_state->reason, sizeof(out_state->reason), "MQ-2 检测到烟雾；");
+    }
+
     if (bad) {
         out_state->air_quality = FUSION_AIR_QUALITY_ALERT;
-        out_state->recommend_open_window = true;
+        out_state->recommend_open_window = ventilation_needed;
         out_state->alarm_enabled = true;
     } else if (watch) {
         out_state->air_quality = FUSION_AIR_QUALITY_WATCH;
         out_state->recommend_open_window = true;
-        out_state->alarm_enabled = false;
+        out_state->alarm_enabled = true;
     } else {
         out_state->air_quality = FUSION_AIR_QUALITY_GOOD;
         out_state->recommend_open_window = false;

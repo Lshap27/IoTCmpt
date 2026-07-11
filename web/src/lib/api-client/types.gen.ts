@@ -274,7 +274,7 @@ export type CommandIn = {
     /**
      * Type
      */
-    type: 'none' | 'window.open' | 'window.close' | 'alarm.on' | 'alarm.off' | 'display.message';
+    type: 'none' | 'window.open' | 'window.close' | 'alarm.on' | 'alarm.off' | 'led.on' | 'led.off' | 'display.message';
 };
 
 /**
@@ -333,6 +333,10 @@ export type DeviceStatePayload = {
      * Alarm On
      */
     alarm_on?: boolean | null;
+    /**
+     * Led On
+     */
+    led_on?: boolean | null;
     /**
      * Manual Override
      */
@@ -424,9 +428,51 @@ export type EventEnvelope = {
 };
 
 /**
+ * EventOut
+ */
+export type EventOut = {
+    /**
+     * Acknowledged At
+     */
+    acknowledged_at?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Severity
+     */
+    severity: string;
+    /**
+     * Type
+     */
+    type: string;
+};
+
+/**
  * EventPayload
  */
 export type EventPayload = {
+    /**
+     * Acknowledged At
+     */
+    acknowledged_at?: string | null;
+    /**
+     * Id
+     */
+    id?: number | null;
     /**
      * Message
      */
@@ -556,6 +602,7 @@ export type LatestState = {
     command?: CommandOut | null;
     device: DeviceSummary;
     image?: ImageSnapshot | null;
+    pose?: PoseSnapshot | null;
     telemetry?: TelemetryPoint | null;
 };
 
@@ -584,6 +631,111 @@ export type LogEnvelope = {
 };
 
 /**
+ * PoseAnalyzeAccepted
+ */
+export type PoseAnalyzeAccepted = {
+    /**
+     * Queued
+     */
+    queued: boolean;
+    /**
+     * Source Image Id
+     */
+    source_image_id: number;
+};
+
+/**
+ * PoseEnvelope
+ */
+export type PoseEnvelope = {
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Occurred At
+     */
+    occurred_at: string;
+    payload: PoseResultOut;
+    /**
+     * Type
+     */
+    type: 'pose_result';
+};
+
+/**
+ * PoseResultOut
+ */
+export type PoseResultOut = {
+    /**
+     * Annotated Image Url
+     */
+    annotated_image_url?: string | null;
+    /**
+     * Confidence
+     */
+    confidence: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Human Present
+     */
+    human_present: boolean;
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Source Image Url
+     */
+    source_image_url: string;
+};
+
+/**
+ * PoseSnapshot
+ */
+export type PoseSnapshot = {
+    /**
+     * Annotated Image Url
+     */
+    annotated_image_url?: string | null;
+    /**
+     * Confidence
+     */
+    confidence: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Human Present
+     */
+    human_present: boolean;
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Source Image Url
+     */
+    source_image_url: string;
+};
+
+/**
  * SensorPayload
  */
 export type SensorPayload = {
@@ -603,6 +755,10 @@ export type SensorPayload = {
      * Light Is Dark
      */
     light_is_dark?: boolean | null;
+    /**
+     * Smoke Detected
+     */
+    smoke_detected?: boolean | null;
     /**
      * Temperature C
      */
@@ -669,6 +825,10 @@ export type TelemetryBucketPoint = {
      */
     bucket: string;
     /**
+     * Eco2 Max Ppm
+     */
+    eco2_max_ppm?: number | null;
+    /**
      * Eco2 Ppm
      */
     eco2_ppm?: number | null;
@@ -677,17 +837,45 @@ export type TelemetryBucketPoint = {
      */
     hcho_ug_m3?: number | null;
     /**
+     * Humidity Max Percent
+     */
+    humidity_max_percent?: number | null;
+    /**
+     * Humidity Min Percent
+     */
+    humidity_min_percent?: number | null;
+    /**
      * Humidity Percent
      */
     humidity_percent?: number | null;
+    /**
+     * Led On
+     */
+    led_on?: boolean | null;
+    /**
+     * Light Is Dark
+     */
+    light_is_dark?: boolean | null;
     /**
      * Sample Count
      */
     sample_count: number;
     /**
+     * Smoke Detected
+     */
+    smoke_detected?: boolean | null;
+    /**
      * Temperature C
      */
     temperature_c?: number | null;
+    /**
+     * Temperature Max C
+     */
+    temperature_max_c?: number | null;
+    /**
+     * Temperature Min C
+     */
+    temperature_min_c?: number | null;
     /**
      * Tvoc Ppb
      */
@@ -769,6 +957,8 @@ export type WsMessage = ({
 } & StatusEnvelope) | ({
     type: 'image';
 } & ImageEnvelope) | ({
+    type: 'pose_result';
+} & PoseEnvelope) | ({
     type: 'command';
 } & CommandEnvelope) | ({
     type: 'command_ack';
@@ -924,6 +1114,81 @@ export type SendCommandResponses = {
 
 export type SendCommandResponse = SendCommandResponses[keyof SendCommandResponses];
 
+export type DeviceEventsData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+    };
+    query?: {
+        /**
+         * Type
+         */
+        type?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/devices/{device_id}/events';
+};
+
+export type DeviceEventsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeviceEventsError = DeviceEventsErrors[keyof DeviceEventsErrors];
+
+export type DeviceEventsResponses = {
+    /**
+     * Response Device Events
+     *
+     * Successful Response
+     */
+    200: Array<EventOut>;
+};
+
+export type DeviceEventsResponse = DeviceEventsResponses[keyof DeviceEventsResponses];
+
+export type AckDeviceEventData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+        /**
+         * Event Id
+         */
+        event_id: number;
+    };
+    query?: never;
+    url: '/api/devices/{device_id}/events/{event_id}/ack';
+};
+
+export type AckDeviceEventErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AckDeviceEventError = AckDeviceEventErrors[keyof AckDeviceEventErrors];
+
+export type AckDeviceEventResponses = {
+    /**
+     * Successful Response
+     */
+    200: EventOut;
+};
+
+export type AckDeviceEventResponse = AckDeviceEventResponses[keyof AckDeviceEventResponses];
+
 export type TelemetryHistoryData = {
     body?: never;
     path: {
@@ -1063,6 +1328,36 @@ export type LatestDeviceStateResponses = {
 };
 
 export type LatestDeviceStateResponse = LatestDeviceStateResponses[keyof LatestDeviceStateResponses];
+
+export type AnalyzeLatestPoseData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+    };
+    query?: never;
+    url: '/api/devices/{device_id}/pose/analyze';
+};
+
+export type AnalyzeLatestPoseErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AnalyzeLatestPoseError = AnalyzeLatestPoseErrors[keyof AnalyzeLatestPoseErrors];
+
+export type AnalyzeLatestPoseResponses = {
+    /**
+     * Successful Response
+     */
+    202: PoseAnalyzeAccepted;
+};
+
+export type AnalyzeLatestPoseResponse = AnalyzeLatestPoseResponses[keyof AnalyzeLatestPoseResponses];
 
 export type HealthData = {
     body?: never;

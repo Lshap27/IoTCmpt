@@ -7,6 +7,9 @@ import { CameraPanel } from "@/components/camera-panel";
 import { CommandPad } from "@/components/command-pad";
 import { DeviceHeader } from "@/components/device-header";
 import { EventStream } from "@/components/event-stream";
+import { HealthReport } from "@/components/health-report";
+import { LightCard } from "@/components/light-card";
+import { SafetyPanel } from "@/components/safety-panel";
 import { StatCard } from "@/components/stat-card";
 import { METRICS, TelemetryChart } from "@/components/telemetry-chart";
 import { useDeviceLive } from "@/hooks/use-device-live";
@@ -80,6 +83,10 @@ export default function Dashboard() {
         </div>
       ) : null}
 
+      <div className="mt-4 rounded-lg border border-line bg-raised px-3 py-2 text-[11px] text-ink3">
+        室外温湿度与除湿器：未接入硬件，本页面不会用固定值或随机数据代替。
+      </div>
+
       {/* Bento 网格：12 列不等跨度，入场错峰上浮（见 globals.css .bento-grid） */}
       <section className="bento-grid mt-5 grid grid-cols-12 gap-4">
         {stats.map(({ metric, value, points }) => (
@@ -94,6 +101,11 @@ export default function Dashboard() {
             className="col-span-12 sm:col-span-6 xl:col-span-3"
           />
         ))}
+        <LightCard
+          isDark={telemetry?.sensors.light_is_dark}
+          history={live.history}
+          className="col-span-12 sm:col-span-6 xl:col-span-3"
+        />
 
         <TelemetryChart history={live.history} className="col-span-12 xl:col-span-8" />
         <AiPanel
@@ -105,15 +117,29 @@ export default function Dashboard() {
           className="col-span-12 xl:col-span-4"
         />
 
-        <CameraPanel image={live.latest?.image} className="col-span-12 md:col-span-6 xl:col-span-3" />
+        <CameraPanel
+          image={live.latest?.image}
+          pose={live.latest?.pose}
+          onAnalyze={live.requestPose}
+          className="col-span-12 md:col-span-6 xl:col-span-4"
+        />
         <CommandPad
           onCommand={live.dispatchCommand}
           pendingCommands={live.pendingCommands}
           windowOpen={telemetry?.state.window_open}
           alarmOn={telemetry?.state.alarm_on}
-          className="col-span-12 md:col-span-6 xl:col-span-5"
+          ledOn={telemetry?.state.led_on}
+          className="col-span-12 md:col-span-6 xl:col-span-4"
         />
         <EventStream events={live.events} className="col-span-12 xl:col-span-4" />
+        <SafetyPanel
+          smokeDetected={telemetry?.sensors.smoke_detected}
+          events={live.ledger}
+          history={live.history}
+          onAcknowledge={live.acknowledgeEvent}
+          className="col-span-12"
+        />
+        <HealthReport history={live.reportHistory} events={live.ledger} className="col-span-12" />
       </section>
 
       <footer className="mt-6 pb-4 text-center text-[11px] text-ink3">

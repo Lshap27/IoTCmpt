@@ -14,6 +14,8 @@ ALLOWED_COMMANDS: set[str] = {
     "window.close",
     "alarm.on",
     "alarm.off",
+    "led.on",
+    "led.off",
     "display.message",
 }
 

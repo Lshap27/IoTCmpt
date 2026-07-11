@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     base_url: str = "http://127.0.0.1:8000"
     uploads_dir: Path = Path("uploads")
     max_upload_bytes: int = 10 * 1024 * 1024
+    max_images_per_device: int = 100
+
+    pose_enabled: bool = False
+    pose_model_path: Path = Path("models/pose_landmarker_lite.task")
+    pose_min_confidence: float = 0.3
 
     mqtt_enabled: bool = False
     mqtt_host: str = "127.0.0.1"

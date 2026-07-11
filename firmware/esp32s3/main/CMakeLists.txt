@@ -12,6 +12,7 @@ idf_component_register(
         "actuators/actuators.c"
         "inputs/inputs.c"
         "state/control_state.c"
+        "voice/voice.c"
     INCLUDE_DIRS
         "include"
     REQUIRES

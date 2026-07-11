@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.db import models
 from app.schemas import CommandAckIn, TelemetryIn, WebSocketEnvelope
+from app.services.events import record_device_event, serialize_event
 from app.services.telemetry import record_command_ack, record_status, record_telemetry, serialize_telemetry
 
 
@@ -39,18 +39,12 @@ def ingest_mqtt_message(db: Session, topic: str, payload: dict) -> WebSocketEnve
             ack = CommandAckIn.model_validate({**payload, "device_id": device_id})
             command = record_command_ack(db, ack)
             envelope_payload = payload | {"known_command": command is not None}
-        elif channel in {"event", "log"}:
+        elif channel == "event":
             record_status(db, device_id, "online")
-            db.add(
-                models.DeviceEvent(
-                    device_id=device_id,
-                    type=str(payload.get("type") or channel),
-                    severity=str(payload.get("severity") or "info"),
-                    message=str(payload.get("message") or payload.get("raw") or ""),
-                    raw_payload=payload,
-                )
-            )
-            db.commit()
+            envelope_payload = serialize_event(record_device_event(db, device_id, payload))
+        elif channel == "log":
+            record_status(db, device_id, "online")
+            record_device_event(db, device_id, {**payload, "type": str(payload.get("type") or "log")})
         else:
             return None
     except Exception as exc:

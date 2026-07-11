@@ -103,6 +103,23 @@ Response:
 }
 ```
 
+When `AIOT_POSE_ENABLED=true`, a successful upload is queued for local
+MediaPipe analysis. The upload response does not wait for pose inference; the
+result is delivered through `pose_result` WebSocket messages and the latest
+device snapshot.
+
+## Pose and Safety Events
+
+```text
+POST /api/devices/{device_id}/pose/analyze
+GET  /api/devices/{device_id}/events?type=smoke.detected
+POST /api/devices/{device_id}/events/{event_id}/ack
+```
+
+Pose analysis always uses the latest original capture and returns `202` when
+queued. Event acknowledgement updates the ledger only; it never silences an
+active device-side smoke alarm.
+
 ## AI Analyze
 
 ```text

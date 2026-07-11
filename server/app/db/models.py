@@ -37,9 +37,11 @@ class Telemetry(Base):
     hcho_ug_m3: Mapped[float | None] = mapped_column(Float)
     eco2_ppm: Mapped[float | None] = mapped_column(Float)
     light_is_dark: Mapped[bool | None] = mapped_column(Boolean)
+    smoke_detected: Mapped[bool | None] = mapped_column(Boolean)
     window_open: Mapped[bool | None] = mapped_column(Boolean)
     alarm_on: Mapped[bool | None] = mapped_column(Boolean)
     manual_override: Mapped[bool | None] = mapped_column(Boolean)
+    led_on: Mapped[bool | None] = mapped_column(Boolean)
     air_quality: Mapped[str | None] = mapped_column(String(32))
     recommend_open_window: Mapped[bool | None] = mapped_column(Boolean)
     alarm_enabled: Mapped[bool | None] = mapped_column(Boolean)
@@ -57,6 +59,7 @@ class DeviceEvent(Base):
     severity: Mapped[str] = mapped_column(String(16), default="info")
     message: Mapped[str] = mapped_column(Text, default="")
     raw_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
 
 
@@ -102,4 +105,19 @@ class ImageAsset(Base):
     url: Mapped[str] = mapped_column(String(512))
     content_type: Mapped[str] = mapped_column(String(128), default="image/jpeg")
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    kind: Mapped[str] = mapped_column(String(32), default="capture", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
+class PoseResult(Base):
+    __tablename__ = "pose_results"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[str] = mapped_column(String(64), ForeignKey("devices.device_id"), index=True)
+    source_image_id: Mapped[int] = mapped_column(Integer, ForeignKey("image_assets.id"), index=True)
+    annotated_image_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("image_assets.id"))
+    human_present: Mapped[bool] = mapped_column(Boolean, default=False)
+    label: Mapped[str] = mapped_column(String(128), default="")
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    raw_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)

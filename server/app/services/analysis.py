@@ -12,6 +12,7 @@ from app.schemas import WebSocketEnvelope
 from app.services.commands import create_command, mark_published, serialize_command
 from app.services.llm import LLMService
 from app.services.mqtt import MqttGateway
+from app.services.pose import latest_pose_result, serialize_pose_result
 from app.services.telemetry import serialize_telemetry
 from app.services.websocket import manager
 
@@ -20,6 +21,7 @@ def latest_image_asset(db: Session, device_id: str) -> models.ImageAsset | None:
     return (
         db.query(models.ImageAsset)
         .filter(models.ImageAsset.device_id == device_id)
+        .filter(models.ImageAsset.kind == "capture")
         .order_by(models.ImageAsset.created_at.desc())
         .first()
     )
@@ -61,6 +63,7 @@ def collect_device_snapshot(db: Session, device_id: str, *, include_trend: bool 
         .order_by(models.AiResult.created_at.desc())
         .first()
     )
+    pose = latest_pose_result(db, device_id)
 
     snapshot: dict[str, Any] = {
         "device": {
@@ -71,6 +74,7 @@ def collect_device_snapshot(db: Session, device_id: str, *, include_trend: bool 
         },
         "telemetry": serialize_telemetry(telemetry) if telemetry else None,
         "image": {"id": image.id, "url": image.url, "created_at": image.created_at.isoformat()} if image else None,
+        "pose": serialize_pose_result(db, pose) if pose else None,
         "command": serialize_command(command) if command else None,
         "ai_result": {
             "command_id": ai_result.command_id,
@@ -100,6 +104,8 @@ def collect_device_snapshot(db: Session, device_id: str, *, include_trend: bool 
                 "tvoc_ppb": row.tvoc_ppb,
                 "eco2_ppm": row.eco2_ppm,
                 "air_quality": row.air_quality,
+                "smoke_detected": row.smoke_detected,
+                "led_on": row.led_on,
             }
             for row in reversed(rows)
         ]

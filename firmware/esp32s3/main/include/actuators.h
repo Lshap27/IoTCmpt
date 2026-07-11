@@ -6,3 +6,4 @@
 
 esp_err_t actuator_init(void);
 esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *state);
+void actuator_refresh_alarm(void);

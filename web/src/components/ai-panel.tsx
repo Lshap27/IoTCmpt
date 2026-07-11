@@ -27,6 +27,8 @@ const COMMAND_ICONS: Record<string, typeof DoorOpen> = {
   "window.close": DoorClosed,
   "alarm.on": BellRing,
   "alarm.off": BellOff,
+  "led.on": Sparkles,
+  "led.off": CircleSlash,
   "display.message": MessageSquare,
   none: CircleSlash,
 };

@@ -11,6 +11,8 @@ export const COMMAND_LABELS: Record<string, string> = {
   "window.close": "关窗",
   "alarm.on": "开启报警",
   "alarm.off": "关闭报警",
+  "led.on": "开启 LED",
+  "led.off": "关闭 LED",
   "display.message": "屏显消息",
 };
 

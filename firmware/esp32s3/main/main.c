@@ -13,6 +13,7 @@
 #include "inputs.h"
 #include "mqtt_app.h"
 #include "sensors.h"
+#include "voice.h"
 
 #include <string.h>
 
@@ -50,6 +51,14 @@ static void latest_update(const sensor_sample_t *sample, const fusion_state_t *f
     } else {
         s_latest_sample = *sample;
         s_latest_fusion = *fusion;
+    }
+}
+
+static void latest_smoke_update(bool detected, bool valid) {
+    if (s_latest_mutex && xSemaphoreTake(s_latest_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        s_latest_sample.smoke_detected = detected;
+        s_latest_sample.smoke_valid = valid;
+        xSemaphoreGive(s_latest_mutex);
     }
 }
 
@@ -191,6 +200,7 @@ static void telemetry_task(void *arg) {
         }
 
         latest_update(&sample, &fusion);
+        voice_update(sample.smoke_detected, fusion.recommend_open_window);
         err = mqtt_app_publish_telemetry(&sample, &fusion);
         if (err == ESP_OK) {
             s_status.cloud = APP_STATUS_LINK_READY;
@@ -201,6 +211,37 @@ static void telemetry_task(void *arg) {
         }
 
         vTaskDelay(pdMS_TO_TICKS(s_config.sensor_interval_ms));
+    }
+}
+
+static void safety_task(void *arg) {
+    (void)arg;
+    bool previous = false;
+    bool has_previous = false;
+
+    while (true) {
+        bool detected = false;
+        bool valid = false;
+        if (sensors_read_smoke(&detected, &valid) == ESP_OK && valid) {
+            latest_smoke_update(detected, true);
+            control_state_set_alarm_source(CONTROL_ALARM_SMOKE, detected);
+            actuator_refresh_alarm();
+            if (!has_previous || detected != previous) {
+                if (detected) {
+                    mqtt_app_publish_event("smoke.detected", "critical", "MQ-2 检测到烟雾");
+                } else if (has_previous) {
+                    mqtt_app_publish_event("smoke.cleared", "info", "MQ-2 烟雾状态已解除");
+                }
+                previous = detected;
+                has_previous = true;
+            }
+            sensor_sample_t sample;
+            fusion_state_t fusion;
+            app_status_t status;
+            latest_get(&sample, &fusion, &status);
+            voice_update(detected, fusion.recommend_open_window);
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -338,6 +379,10 @@ void app_main(void) {
         ESP_LOGW(TAG, "sensor layer degraded: %s", esp_err_to_name(err));
     }
     s_status.last_sensor_result = err;
+    err = voice_init();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "voice module degraded: %s", esp_err_to_name(err));
+    }
 
     err = wifi_start();
     if (err == ESP_ERR_INVALID_STATE) {
@@ -370,6 +415,13 @@ void app_main(void) {
     ok = xTaskCreate(actuator_task, "actuator_task", 4096, NULL, 4, NULL);
     if (ok != pdPASS) {
         ESP_LOGE(TAG, "failed to start actuator task");
+    }
+
+    if (CONFIG_APP_MQ2_ENABLED) {
+        ok = xTaskCreate(safety_task, "smoke_safety", 4096, NULL, 6, NULL);
+        if (ok != pdPASS) {
+            ESP_LOGE(TAG, "failed to start smoke safety task");
+        }
     }
 
     if (CONFIG_APP_DISPLAY_ENABLED) {

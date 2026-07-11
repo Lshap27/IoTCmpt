@@ -21,7 +21,10 @@ On PostgreSQL, `telemetry` is a TimescaleDB hypertable partitioned on
 hypertable requires. The ORM keeps the single-column `id` so SQLite test
 databases still autoincrement. Time-bucketed aggregates for the dashboard are
 served by `GET /api/devices/{device_id}/history/bucketed` using
-`time_bucket`.
+`time_bucket`. Bucket responses include averages for continuous sensor values,
+temperature minima/maxima, maximum eCO2, latest LM393/smoke/actuator states,
+and the number of persisted samples represented by each bucket. Reports use
+these aggregates without inventing samples for missing periods.
 
 - `id`
 - `device_id`
@@ -32,9 +35,11 @@ served by `GET /api/devices/{device_id}/history/bucketed` using
 - `hcho_ug_m3`
 - `eco2_ppm`
 - `light_is_dark`
+- `smoke_detected`
 - `window_open`
 - `alarm_on`
 - `manual_override`
+- `led_on`
 - `air_quality`
 - `recommend_open_window`
 - `alarm_enabled`
@@ -51,6 +56,7 @@ served by `GET /api/devices/{device_id}/history/bucketed` using
 - `message`
 - `raw_payload`
 - `created_at`
+- `acknowledged_at`
 
 ## command
 
@@ -89,4 +95,21 @@ served by `GET /api/devices/{device_id}/history/bucketed` using
 - `url`
 - `content_type`
 - `size_bytes`
+- `kind`: `capture` or `pose_annotated`.
+- `created_at`
+
+Image retention is configured with `AIOT_MAX_IMAGES_PER_DEVICE` (default 100).
+After a new capture or annotated pose image is stored, the gateway removes the
+oldest excess image records, their files, and pose results that reference those
+expired assets.
+
+## pose_result
+
+- `device_id`
+- `source_image_id`
+- `annotated_image_id`
+- `human_present`
+- `label`
+- `confidence`
+- `raw_payload`
 - `created_at`

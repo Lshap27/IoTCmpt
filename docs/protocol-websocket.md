@@ -29,6 +29,7 @@ switching on `type` (`web/src/lib/ws-dispatcher.ts`).
 - `event`: device or server event, including autopilot trigger records
   (`payload.type = "autopilot"`).
 - `image`: image metadata after upload.
+- `pose_result`: local MediaPipe result and optional annotated image metadata.
 - `ai_analyzing`: an AI analysis has started. Payload contains the trigger
   (`manual` or `auto:<rule>`); the dashboard shows a "thinking" state until the
   matching `ai_result` arrives.
@@ -66,6 +67,11 @@ switching on `type` (`web/src/lib/ws-dispatcher.ts`).
   `GET /api/devices/{device_id}/autopilot`.
 - `log`: device log line.
 - `error`: malformed payload, rejected command, or service degradation.
+
+`event` payloads for `smoke.detected` and `smoke.cleared` include the
+persisted event `id`, so the dashboard can acknowledge the exact ledger entry.
+`pose_result` contains `human_present`, `label`, `confidence`,
+`source_image_url`, `annotated_image_url`, and `created_at`.
 
 ## Client Behavior
 

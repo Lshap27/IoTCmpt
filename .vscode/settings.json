@@ -1,6 +1,8 @@
 {
   "cmake.sourceDirectory": "${workspaceFolder}/firmware/esp32s3",
   "cmake.configureOnOpen": false,
+  "idf.buildPath": "${workspaceFolder}/firmware/esp32s3/build-esp32s3",
+  "idf.buildPathWin": "${workspaceFolder}\\firmware\\esp32s3\\build-esp32s3",
   "idf.customExtraVars": {},
   "idf.currentSetup": "C:\\esp\\v5.5.2\\esp-idf",
   "clangd.path": "C:\\Espressif\\tools\\esp-clang\\esp-19.1.2_20250312\\esp-clang\\bin\\clangd.exe",
