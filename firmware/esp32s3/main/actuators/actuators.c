@@ -8,6 +8,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+
+/** TODO： 
+ * 1、应当有一个“手动模式优先”和“自动模式优先”的配置选项，决定在手动开窗和自动开窗冲突时的行为。
+ */
+
 static const char *TAG = "ACTUATOR";
 
 #define SERVO_LEDC_CH          LEDC_CHANNEL_1
@@ -32,13 +37,15 @@ static void beep_set(bool on) {
 }
 
 static void beep_alarm_loop(uint32_t total_ms) {
-    const int loops = (int)(total_ms / 200);
-    for (int i = 0; i < loops; i++) {
+    /* 参考硬件：100ms 鸣响 / 200ms 静默周期，低电平触发 */
+    const uint32_t start = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    while ((xTaskGetTickCount() * portTICK_PERIOD_MS) - start < total_ms) {
         beep_set(true);
         vTaskDelay(pdMS_TO_TICKS(100));
         beep_set(false);
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
+    beep_set(false);
 }
 
 static void servo_set_pulse(uint16_t pulse_us) {
@@ -172,7 +179,6 @@ esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *s
 
     bool target_open = local.manual_override ? local.manual_open : state->recommend_open_window;
     bool manual_request = false;
-    control_state_set_alarm_source(CONTROL_ALARM_FUSION, state->alarm_enabled);
 
     if (command) {
         switch (command->type) {

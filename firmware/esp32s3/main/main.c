@@ -27,6 +27,14 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 
+/** TODO：
+ * 1、LED灯的控制要加入可视化“固件配置”面板。
+ * 2、LED灯要根据当前环境亮度，有人无人（摄像头是否检测到人）来自动控制开关。(AI自行决策)
+ * 3、mideaPipe检测有人无人。
+ * 4、mideaPipe目前的精度似乎不够。
+ * 5、
+ */
+
 static const char *TAG = "AIOT_FW";
 static const int WIFI_CONNECTED_BIT = BIT0;
 

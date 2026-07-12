@@ -12,6 +12,12 @@
 #include "freertos/task.h"
 #include "sensors.h"
 
+/** TODO：
+ * 1、当TFT显示屏显示空气质量由好变差时，自动模式下 AI 通过语音给出建议，在一句话以内，无需蜂鸣器
+ * 2、当烟雾传感器检测烟雾浓度过高，语音给出建议（AI分析给出建议，非硬件）
+ * 3、检测到久坐超过两个小时（模拟时半分钟左右），语音给出建议
+ * 
+ */
 static const char *TAG = "VOICE";
 static SemaphoreHandle_t s_mutex;
 

@@ -129,13 +129,13 @@ menu "AIoT MQTT 固件主线"
 
         choice APP_LED_MODE
             prompt "LED 控制模式"
-            default APP_LED_MODE_LOGICAL
-
-            config APP_LED_MODE_LOGICAL
-                bool "仅维护逻辑状态（未确认 GPIO）"
+            default APP_LED_MODE_GPIO
 
             config APP_LED_MODE_GPIO
                 bool "驱动物理 GPIO"
+
+            config APP_LED_MODE_LOGICAL
+                bool "仅维护逻辑状态（未确认 GPIO）"
         endchoice
 
         config APP_LED_GPIO
