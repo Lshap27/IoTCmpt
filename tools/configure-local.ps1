@@ -3,6 +3,21 @@ param(
     [ValidateSet("MockDemo", "DeviceDemo", "LlmDemo")]
     [string] $Preset = "MockDemo",
 
+    [string] $DeviceId,
+    [string] $LanAddress,
+    [string] $ApiBaseUrl,
+    [string] $LlmEndpoint,
+    [string] $LlmModel,
+    [string] $LlmApiKey,
+    [string] $LlmVisionEnabled,
+    [string] $AutopilotEnabled,
+    [string] $AutopilotMinConfidence,
+    [string] $AutopilotTriggerLevels,
+
+    # 面板/自动化调用时使用：跳过所有交互提问，未指定的参数取默认值。
+    [switch] $NonInteractive,
+
+    # 兼容旧任务定义，无实际作用。
     [switch] $Force
 )
 
@@ -17,13 +32,19 @@ $DeviceIdDefault = "esp32s3-001"
 
 function Get-DefaultLanAddress {
     try {
+        # InterfaceMetric 只在 Get-NetIPInterface 上，Get-NetIPAddress 没有该属性
+        $metrics = @{}
+        Get-NetIPInterface -AddressFamily IPv4 | ForEach-Object {
+            $metrics[$_.InterfaceIndex] = $_.InterfaceMetric
+        }
+
         $addresses = Get-NetIPAddress -AddressFamily IPv4 |
             Where-Object {
                 $_.IPAddress -ne "127.0.0.1" -and
                 $_.IPAddress -notlike "169.254.*" -and
                 $_.PrefixOrigin -in @("Dhcp", "Manual")
             } |
-            Sort-Object InterfaceMetric, InterfaceIndex
+            Sort-Object { $metrics[$_.InterfaceIndex] }, InterfaceIndex
 
         if ($addresses) {
             return $addresses[0].IPAddress
@@ -33,6 +54,28 @@ function Get-DefaultLanAddress {
     }
 
     return "127.0.0.1"
+}
+
+function Get-ExistingEnvValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Path,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Key
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return ""
+    }
+
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        if ($line -match "^\s*$([regex]::Escape($Key))=(.*)$") {
+            return $Matches[1].Trim()
+        }
+    }
+
+    return ""
 }
 
 function Read-Value {
@@ -102,29 +145,6 @@ function ConvertTo-EnvValue {
     return [string] $Value
 }
 
-function Backup-IfNeeded {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string] $Path
-    )
-
-    if (-not (Test-Path -LiteralPath $Path)) {
-        return
-    }
-
-    if (-not $Force) {
-        $overwrite = Read-YesNo -Prompt "Local config exists at $Path. Back up and overwrite it?" -Default $false
-        if (-not $overwrite) {
-            throw "Canceled before overwriting $Path."
-        }
-    }
-
-    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $backupPath = "$Path.bak.$timestamp"
-    Copy-Item -LiteralPath $Path -Destination $backupPath -Force
-    Write-Host "Backed up $Path to $backupPath" -ForegroundColor DarkGray
-}
-
 function Write-LocalEnvFile {
     param(
         [Parameter(Mandatory = $true)]
@@ -140,7 +160,6 @@ function Write-LocalEnvFile {
         New-Item -ItemType Directory -Path $directory | Out-Null
     }
 
-    Backup-IfNeeded -Path $Path
     Set-Content -LiteralPath $Path -Value $Lines -Encoding utf8
     Write-Host "Wrote $Path" -ForegroundColor Green
 }
@@ -199,6 +218,8 @@ function New-ComposeEnvLines {
     )
 
     $orderedKeys = @(
+        "NEXT_PUBLIC_API_BASE_URL",
+        "AIOT_CORS_ORIGINS",
         "AIOT_LLM_ENDPOINT",
         "AIOT_LLM_API_KEY",
         "AIOT_LLM_MODEL",
@@ -244,53 +265,114 @@ function Show-FirmwareHint {
     Write-Host "Open it from VS Code with: Tasks: Run Task -> 固件：打开图形化配置"
 }
 
-$lanAddress = Get-DefaultLanAddress
-$deviceId = $DeviceIdDefault
-$apiBaseUrl = "http://localhost:8000"
+function Resolve-Value {
+    param(
+        [AllowEmptyString()]
+        [string] $Bound,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Prompt,
+
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string] $Default
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($Bound)) {
+        return $Bound.Trim()
+    }
+
+    if ($NonInteractive) {
+        return $Default
+    }
+
+    return Read-Value -Prompt $Prompt -Default $Default
+}
+
+function Resolve-Bool {
+    param(
+        [AllowEmptyString()]
+        [string] $Bound,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Prompt,
+
+        [bool] $Default = $true
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($Bound)) {
+        return ($Bound.Trim() -match "^(y|yes|true|1|shi|是)$")
+    }
+
+    if ($NonInteractive) {
+        return $Default
+    }
+
+    return Read-YesNo -Prompt $Prompt -Default $Default
+}
+
+$lanAddressValue = if ([string]::IsNullOrWhiteSpace($LanAddress)) { Get-DefaultLanAddress } else { $LanAddress.Trim() }
+$deviceIdValue = if ([string]::IsNullOrWhiteSpace($DeviceId)) { $DeviceIdDefault } else { $DeviceId.Trim() }
+$apiBaseUrlValue = if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) { "http://localhost:8000" } else { $ApiBaseUrl.Trim() }
 $serverBaseUrl = "http://127.0.0.1:8000"
 $mqttHost = "127.0.0.1"
-$llmEndpoint = "mock"
-$llmApiKey = ""
-$llmModel = "demo-model"
-$llmVisionEnabled = "true"
-$autopilotEnabled = "true"
-$autopilotMinConfidence = "0.6"
-$autopilotTriggerLevels = "alert"
+$llmEndpointValue = if ([string]::IsNullOrWhiteSpace($LlmEndpoint)) { "mock" } else { $LlmEndpoint.Trim() }
+$llmApiKeyValue = if ($null -eq $LlmApiKey) { "" } else { $LlmApiKey }
+if ([string]::IsNullOrWhiteSpace($llmApiKeyValue)) {
+    # 未显式传入 key 时保留现有 server\.env 中的值；面板的“留空则不修改”依赖此行为
+    $llmApiKeyValue = Get-ExistingEnvValue -Path $ServerEnvPath -Key "AIOT_LLM_API_KEY"
+}
+$llmModelValue = if ([string]::IsNullOrWhiteSpace($LlmModel)) { "demo-model" } else { $LlmModel.Trim() }
+$llmVisionValue = if ([string]::IsNullOrWhiteSpace($LlmVisionEnabled)) { "true" } else { $LlmVisionEnabled.Trim().ToLowerInvariant() }
+$autopilotEnabledValue = if ([string]::IsNullOrWhiteSpace($AutopilotEnabled)) { "true" } else { $AutopilotEnabled.Trim().ToLowerInvariant() }
+$autopilotMinConfidenceValue = if ([string]::IsNullOrWhiteSpace($AutopilotMinConfidence)) { "0.6" } else { $AutopilotMinConfidence.Trim() }
+$autopilotTriggerLevelsValue = if ([string]::IsNullOrWhiteSpace($AutopilotTriggerLevels)) { "alert" } else { $AutopilotTriggerLevels.Trim() }
 
 switch ($Preset) {
     "MockDemo" {
         Write-Host "Configuring local offline demo with AIOT_LLM_ENDPOINT=mock." -ForegroundColor Cyan
+        $llmEndpointValue = "mock"
     }
     "DeviceDemo" {
         Write-Host "Configuring real-device demo defaults." -ForegroundColor Cyan
-        $deviceId = Read-Value -Prompt "Device ID" -Default $DeviceIdDefault
-        $lanAddress = Read-Value -Prompt "This laptop LAN IP for ESP32-S3" -Default $lanAddress
-        $serverBaseUrl = "http://$lanAddress`:8000"
-        $mqttHost = $lanAddress
-        $apiBaseUrl = Read-Value -Prompt "Web console API base URL" -Default "http://localhost:8000"
-        $llmEndpoint = Read-Value -Prompt "LLM endpoint (use mock for offline demo)" -Default "mock"
-        if ($llmEndpoint -ne "mock" -and -not [string]::IsNullOrWhiteSpace($llmEndpoint)) {
-            $llmModel = Read-Value -Prompt "LLM model" -Default "demo-model"
-            $llmApiKey = Read-SecretPlainText -Prompt "LLM API key (input hidden, leave empty if not needed)"
+        $deviceIdValue = Resolve-Value -Bound $DeviceId -Prompt "Device ID" -Default $DeviceIdDefault
+        $lanAddressValue = Resolve-Value -Bound $LanAddress -Prompt "This laptop LAN IP for ESP32-S3" -Default $lanAddressValue
+        $serverBaseUrl = "http://$lanAddressValue`:8000"
+        $mqttHost = $lanAddressValue
+        $apiBaseUrlValue = Resolve-Value -Bound $ApiBaseUrl -Prompt "Web console API base URL" -Default "http://localhost:8000"
+        $llmEndpointValue = Resolve-Value -Bound $LlmEndpoint -Prompt "LLM endpoint (use mock for offline demo)" -Default "mock"
+        if ($llmEndpointValue -ne "mock" -and -not [string]::IsNullOrWhiteSpace($llmEndpointValue)) {
+            $llmModelValue = Resolve-Value -Bound $LlmModel -Prompt "LLM model" -Default "demo-model"
+            if ([string]::IsNullOrWhiteSpace($LlmApiKey) -and -not $NonInteractive) {
+                $enteredKey = Read-SecretPlainText -Prompt "LLM API key (input hidden, leave empty to keep existing)"
+                if (-not [string]::IsNullOrWhiteSpace($enteredKey)) {
+                    $llmApiKeyValue = $enteredKey
+                }
+            }
         }
-        $llmVisionEnabled = if (Read-YesNo -Prompt "Attach latest JPEG to LLM requests?" -Default $true) { "true" } else { "false" }
-        $autopilotEnabled = if (Read-YesNo -Prompt "Enable autopilot by default?" -Default $true) { "true" } else { "false" }
-        $autopilotMinConfidence = Read-Value -Prompt "Autopilot minimum confidence" -Default "0.6"
-        $autopilotTriggerLevels = Read-Value -Prompt "Autopilot trigger levels (comma-separated good/watch/alert)" -Default "alert"
+        $llmVisionValue = if (Resolve-Bool -Bound $LlmVisionEnabled -Prompt "Attach latest JPEG to LLM requests?" -Default $true) { "true" } else { "false" }
+        $autopilotEnabledValue = if (Resolve-Bool -Bound $AutopilotEnabled -Prompt "Enable autopilot by default?" -Default $true) { "true" } else { "false" }
+        $autopilotMinConfidenceValue = Resolve-Value -Bound $AutopilotMinConfidence -Prompt "Autopilot minimum confidence" -Default "0.6"
+        $autopilotTriggerLevelsValue = Resolve-Value -Bound $AutopilotTriggerLevels -Prompt "Autopilot trigger levels (comma-separated good/watch/alert)" -Default "alert"
     }
     "LlmDemo" {
         Write-Host "Configuring local demo with a real OpenAI-compatible LLM endpoint." -ForegroundColor Cyan
-        $llmEndpoint = Read-Value -Prompt "LLM endpoint" -Default "https://api.openai.com/v1/chat/completions"
-        $llmModel = Read-Value -Prompt "LLM model" -Default "gpt-4o-mini"
-        $llmApiKey = Read-SecretPlainText -Prompt "LLM API key (input hidden)"
-        $llmVisionEnabled = if (Read-YesNo -Prompt "Attach latest JPEG to LLM requests?" -Default $true) { "true" } else { "false" }
+        $llmEndpointValue = Resolve-Value -Bound $LlmEndpoint -Prompt "LLM endpoint" -Default "https://api.openai.com/v1/chat/completions"
+        $llmModelValue = Resolve-Value -Bound $LlmModel -Prompt "LLM model" -Default "gpt-4o-mini"
+        if ([string]::IsNullOrWhiteSpace($LlmApiKey) -and -not $NonInteractive) {
+            $enteredKey = Read-SecretPlainText -Prompt "LLM API key (input hidden, leave empty to keep existing)"
+            if (-not [string]::IsNullOrWhiteSpace($enteredKey)) {
+                $llmApiKeyValue = $enteredKey
+            }
+        }
+        $llmVisionValue = if (Resolve-Bool -Bound $LlmVisionEnabled -Prompt "Attach latest JPEG to LLM requests?" -Default $true) { "true" } else { "false" }
     }
 }
 
 $corsOrigins = @(
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "http://$lanAddress`:3000"
+    "http://$lanAddressValue`:3000"
 ) | Select-Object -Unique
 
 $serverConfig = @{
@@ -307,23 +389,24 @@ $serverConfig = @{
     AIOT_MQTT_USERNAME = ""
     AIOT_MQTT_PASSWORD = ""
     AIOT_MQTT_RECONNECT_SECONDS = "3"
+    NEXT_PUBLIC_API_BASE_URL = $apiBaseUrlValue
     AIOT_CORS_ORIGINS = $corsOrigins -join ","
-    AIOT_LLM_ENDPOINT = $llmEndpoint
-    AIOT_LLM_API_KEY = $llmApiKey
-    AIOT_LLM_MODEL = $llmModel
+    AIOT_LLM_ENDPOINT = $llmEndpointValue
+    AIOT_LLM_API_KEY = $llmApiKeyValue
+    AIOT_LLM_MODEL = $llmModelValue
     AIOT_LLM_TIMEOUT_SECONDS = "12"
-    AIOT_LLM_VISION_ENABLED = $llmVisionEnabled
+    AIOT_LLM_VISION_ENABLED = $llmVisionValue
     AIOT_LLM_IMAGE_MAX_AGE_SECONDS = "600"
     AIOT_LLM_RESPONSE_FORMAT = "json_object"
-    AIOT_AUTOPILOT_ENABLED = $autopilotEnabled
+    AIOT_AUTOPILOT_ENABLED = $autopilotEnabledValue
     AIOT_AUTOPILOT_COOLDOWN_SECONDS = "120"
-    AIOT_AUTOPILOT_MIN_CONFIDENCE = $autopilotMinConfidence
-    AIOT_AUTOPILOT_TRIGGER_LEVELS = $autopilotTriggerLevels
+    AIOT_AUTOPILOT_MIN_CONFIDENCE = $autopilotMinConfidenceValue
+    AIOT_AUTOPILOT_TRIGGER_LEVELS = $autopilotTriggerLevelsValue
 }
 
 $webLines = @(
     "# Generated by tools/configure-local.ps1.",
-    "NEXT_PUBLIC_API_BASE_URL=$apiBaseUrl"
+    "NEXT_PUBLIC_API_BASE_URL=$apiBaseUrlValue"
 )
 
 Write-LocalEnvFile -Path $ComposeEnvPath -Lines (New-ComposeEnvLines -Config $serverConfig)
@@ -337,5 +420,5 @@ Write-Host "  server\.env"
 Write-Host "  web\.env.local"
 
 if ($Preset -eq "DeviceDemo") {
-    Show-FirmwareHint -DeviceId $deviceId -LanAddress $lanAddress
+    Show-FirmwareHint -DeviceId $deviceIdValue -LanAddress $lanAddressValue
 }

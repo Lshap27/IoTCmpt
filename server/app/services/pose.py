@@ -9,6 +9,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.core.timeutil import iso_utc
 from app.db import models
 from app.db.session import SessionLocal
 from app.schemas import WebSocketEnvelope
@@ -67,7 +68,7 @@ def serialize_pose_result(db: Session, result: models.PoseResult) -> dict[str, A
         "confidence": result.confidence,
         "source_image_url": source.url if source else "",
         "annotated_image_url": annotated.url if annotated else None,
-        "created_at": result.created_at.isoformat(),
+        "created_at": iso_utc(result.created_at),
     }
 
 

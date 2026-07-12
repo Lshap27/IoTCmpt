@@ -115,6 +115,10 @@ APP_IMAGE_UPLOAD_URL=http://<电脑局域网IP>:8000/api/devices/esp32s3-001/ima
 
 首次使用固件任务，或看到 `idf.py` 找不到、ESP-IDF Python 环境缺失等报错时，先运行此任务。它会为 ESP32-S3 下载或修复 ESP-IDF 工具链和 Python 环境；完成后再运行下面的配置或构建任务。
 
+`面板：启动本地配置面板`
+
+双击项目根目录的 `启动配置面板.cmd` 也可打开，是最推荐的非代码团队成员入口。它在本地 `127.0.0.1:8765` 启动一个网页控制台，整合了四个配置步骤，也可在面板中一键编译、烧录并查看日志。
+
 `固件：打开图形化配置`
 
 用于打开 ESP-IDF 的 `menuconfig` 图形化配置界面。任务会自动找到并加载已安装的 ESP-IDF 环境；这里配置 ESP32-S3 端的设备 ID、Wi-Fi、MQTT Broker、图片上传 URL、摄像头/屏幕/执行器开关和硬件引脚。
@@ -126,10 +130,18 @@ APP_IMAGE_UPLOAD_URL=http://<电脑局域网IP>:8000/api/devices/esp32s3-001/ima
 用于编译固件。它在 `firmware/esp32s3/` 执行：
 
 ```powershell
-idf.py -B build-esp32s3 build
+idf.py -B build build
 ```
 
 例子：改完 `menuconfig` 或固件代码后，先运行这个任务确认能编译，再烧录到开发板。
+
+`固件：烧录 ESP32-S3`
+
+把编译生成的固件烧录到 ESP32-S3 开发板。若未插入开发板或串口未正确安装驱动，会报告串口不可用。
+
+`固件：烧录并监视 ESP32-S3`
+
+烧录后立即启动串口监视，方便直接在 VS Code 终端中查看固件启动日志、Wi-Fi 连接状态和 MQTT 遥测上报。
 
 ### 推荐使用流程
 
@@ -147,9 +159,12 @@ idf.py -B build-esp32s3 build
 配置：真实设备演示
 固件：打开图形化配置
 固件：构建 ESP32-S3
+固件：烧录并监视 ESP32-S3
 启动：完整 Docker 演示栈
 打开 http://localhost:3000
 ```
+
+或者直接双击 `启动配置面板.cmd`，在浏览器里完成全部配置和编译烧录。
 
 真实 LLM + 真实设备演示：
 
@@ -191,7 +206,7 @@ pnpm dev
 
 ```powershell
 cd firmware\esp32s3
-idf.py -B build-esp32s3 build
+idf.py -B build build
 ```
 
 ## 质量检查

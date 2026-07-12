@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.core.timeutil import iso_utc
 from app.schemas import CommandAckIn, TelemetryIn, WebSocketEnvelope
 from app.services.events import record_device_event, serialize_event
 from app.services.telemetry import record_command_ack, record_status, record_telemetry, serialize_telemetry
@@ -30,7 +31,7 @@ def ingest_mqtt_message(db: Session, topic: str, payload: dict) -> WebSocketEnve
             envelope_payload = {
                 "device_id": device.device_id,
                 "status": device.status,
-                "last_seen_at": device.last_seen_at.isoformat() if device.last_seen_at else None,
+                "last_seen_at": iso_utc(device.last_seen_at) if device.last_seen_at else None,
             }
         elif channel == "telemetry":
             sample = record_telemetry(db, TelemetryIn.model_validate({**payload, "device_id": device_id}))

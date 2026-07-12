@@ -80,6 +80,27 @@ esp_err_t voice_init(void) {
         .intr_type = GPIO_INTR_DISABLE,
     };
     gpio_config(&by);
+
+    /* 与 TVOC 共用 UART：模拟传感器模式下 sensors_init 不会装 UART 驱动，这里补装，
+     * 否则 speak() 的 uart_write_bytes 会静默失败，语音播报永远不响 */
+    if (!uart_is_driver_installed((uart_port_t)CONFIG_APP_TVOC_UART_NUM)) {
+        uart_config_t uart_config = {
+            .baud_rate = 9600,
+            .data_bits = UART_DATA_8_BITS,
+            .parity = UART_PARITY_DISABLE,
+            .stop_bits = UART_STOP_BITS_1,
+            .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+            .source_clk = UART_SCLK_DEFAULT,
+        };
+        esp_err_t err = uart_driver_install((uart_port_t)CONFIG_APP_TVOC_UART_NUM, 256, 0, 0, NULL, 0);
+        if (err != ESP_OK) {
+            return err;
+        }
+        ESP_ERROR_CHECK(uart_param_config((uart_port_t)CONFIG_APP_TVOC_UART_NUM, &uart_config));
+        ESP_ERROR_CHECK(uart_set_pin((uart_port_t)CONFIG_APP_TVOC_UART_NUM, CONFIG_APP_TVOC_TX_GPIO,
+                                     CONFIG_APP_TVOC_RX_GPIO, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+    }
+
     s_mutex = xSemaphoreCreateMutex();
     if (!s_mutex) {
         return ESP_ERR_NO_MEM;

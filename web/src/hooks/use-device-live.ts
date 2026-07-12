@@ -16,11 +16,21 @@ import {
 } from "@/lib/api";
 import { deviceKeys } from "@/lib/query-keys";
 import type { AiPanelState, UiEvent } from "@/lib/ws-dispatcher";
-import { EMPTY_AI, addPendingCommand, applyEnvelope } from "@/lib/ws-dispatcher";
+import { EMPTY_AI, HISTORY_CAP, addPendingCommand, applyEnvelope, isAckedCommand } from "@/lib/ws-dispatcher";
 import { useDeviceSocket } from "@/hooks/use-device-socket";
 
 export type { SocketState } from "@/hooks/use-device-socket";
 export type { UiEvent } from "@/lib/ws-dispatcher";
+
+const TERMINAL_COMMAND_STATUSES = ["executed", "rejected", "failed"];
+
+let localIdSeq = 0;
+
+// crypto.randomUUID 在非安全上下文（如局域网 HTTP）不可用，这里只需要本地占位 id
+function makeLocalCommandId() {
+  localIdSeq += 1;
+  return `local-${Date.now()}-${localIdSeq}`;
+}
 
 function removePendingCommand(queryClient: ReturnType<typeof useQueryClient>, deviceId: string, id: string) {
   queryClient.setQueryData<Record<string, string>>(deviceKeys.pendingCommands(deviceId), (current = {}) => {
@@ -42,7 +52,7 @@ export function useDeviceLive(deviceId: string) {
   });
   const historyQuery = useQuery({
     queryKey: deviceKeys.history(deviceId),
-    queryFn: async () => [...(await fetchHistory(deviceId, 500))].reverse(),
+    queryFn: async () => [...(await fetchHistory(deviceId, HISTORY_CAP))].reverse(),
   });
   const reportHistoryQuery = useQuery({
     queryKey: deviceKeys.reportHistory(deviceId),
@@ -79,7 +89,18 @@ export function useDeviceLive(deviceId: string) {
     useCallback((envelope) => applyEnvelope(queryClient, deviceId, envelope), [queryClient, deviceId]),
     useCallback(() => {
       // 断线期间可能漏推送：重连成功后拉回权威快照。
-      void queryClient.invalidateQueries({ queryKey: deviceKeys.latest(deviceId) });
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.latest(deviceId) }).then(() => {
+        // 如果 analyzing 在断线时被悬置，用最新快照清掉
+        queryClient.setQueryData<AiPanelState>(deviceKeys.ai(deviceId), (c = EMPTY_AI) =>
+          c.analyzing ? { ...c, analyzing: null } : c,
+        );
+        // 断线期间 command_ack 可能已经错过，按权威快照清掉已终结的 pending 指令
+        const latest = queryClient.getQueryData<LatestState>(deviceKeys.latest(deviceId));
+        const command = latest?.command;
+        if (command?.command_id && TERMINAL_COMMAND_STATUSES.includes(command.status)) {
+          removePendingCommand(queryClient, deviceId, command.command_id);
+        }
+      });
       void queryClient.invalidateQueries({ queryKey: deviceKeys.history(deviceId) });
       void queryClient.invalidateQueries({ queryKey: deviceKeys.reportHistory(deviceId) });
       void queryClient.invalidateQueries({ queryKey: deviceKeys.ledger(deviceId) });
@@ -111,21 +132,13 @@ export function useDeviceLive(deviceId: string) {
     mutationFn: (type: string) => sendCommand(deviceId, type),
     onMutate: (type) => {
       setActionError("");
-      const localId = `local-${crypto.randomUUID()}`;
+      const localId = makeLocalCommandId();
       addPendingCommand(queryClient, deviceId, localId, type);
       return { localId };
     },
     onSuccess: (command, type, context) => {
       removePendingCommand(queryClient, deviceId, context.localId);
-      if (command?.command_id) {
-        const latest = queryClient.getQueryData<LatestState>(deviceKeys.latest(deviceId));
-        const latestCommand = latest?.command;
-        if (
-          latestCommand?.command_id === command.command_id &&
-          ["executed", "rejected", "failed"].includes(latestCommand.status)
-        ) {
-          return;
-        }
+      if (command?.command_id && !isAckedCommand(command.command_id)) {
         addPendingCommand(queryClient, deviceId, command.command_id, type);
       }
     },
@@ -168,7 +181,12 @@ export function useDeviceLive(deviceId: string) {
     },
     onError: (err, _enabled, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(deviceKeys.latest(deviceId), context.previous);
+        // 只回滚 autopilot 字段，不覆盖并发 WS 推送的 telemetry/command/status
+        queryClient.setQueryData<LatestState>(deviceKeys.latest(deviceId), (current) =>
+          current
+            ? { ...current, autopilot: context.previous?.autopilot ?? null }
+            : current,
+        );
       }
       setActionError(err instanceof Error ? err.message : "自动决策开关设置失败");
     },
@@ -176,7 +194,8 @@ export function useDeviceLive(deviceId: string) {
 
   const latest = latestQuery.data ?? null;
   const ai = aiQuery.data ?? EMPTY_AI;
-  const queryError = latestQuery.error ?? historyQuery.error;
+  const queryError =
+    latestQuery.error ?? historyQuery.error ?? reportHistoryQuery.error ?? ledgerQuery.error;
 
   return {
     latest,

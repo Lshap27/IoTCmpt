@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.core.timeutil import iso_utc
 from app.db import models
 from app.services.commands import ensure_device
 
@@ -15,8 +16,8 @@ def serialize_event(event: models.DeviceEvent) -> dict:
         "type": event.type,
         "severity": event.severity,
         "message": event.message,
-        "acknowledged_at": event.acknowledged_at.isoformat() if event.acknowledged_at else None,
-        "created_at": event.created_at.isoformat(),
+        "acknowledged_at": iso_utc(event.acknowledged_at),
+        "created_at": iso_utc(event.created_at),
     }
 
 

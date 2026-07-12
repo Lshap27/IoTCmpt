@@ -94,7 +94,7 @@ load the detected ESP-IDF environment automatically.
 
 ```powershell
 cd firmware\esp32s3
-idf.py -B build-esp32s3 build
+idf.py -B build build
 ```
 
 ## Quality Checks

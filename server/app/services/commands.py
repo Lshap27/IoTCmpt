@@ -3,8 +3,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import case, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.timeutil import iso_utc
 from app.db import models
 from app.schemas import CommandMessage, CommandSource, CommandType
 
@@ -32,7 +35,12 @@ def ensure_device(db: Session, device_id: str) -> models.Device:
         return device
     device = models.Device(device_id=device_id, display_name=device_id, status="unknown")
     db.add(device)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # 新设备首次上线时，MQTT 接入线程和 HTTP 请求可能并发插入同一 device_id
+        db.rollback()
+        device = db.query(models.Device).filter(models.Device.device_id == device_id).one()
     return device
 
 
@@ -73,9 +81,19 @@ def create_command(
 
 
 def mark_published(db: Session, command: models.Command) -> models.Command:
-    command.status = "published"
-    command.published_at = datetime.now(UTC).replace(tzinfo=None)
-    db.add(command)
+    # 设备的 command_ack 可能已由 MQTT 接入线程先行落库（status=executed），
+    # 因此只在仍为 pending 时推进到 published，避免把 ack 结果覆盖回去。
+    db.execute(
+        update(models.Command)
+        .where(models.Command.command_id == command.command_id)
+        .values(
+            published_at=datetime.now(UTC).replace(tzinfo=None),
+            status=case(
+                (models.Command.status == "pending", "published"),
+                else_=models.Command.status,
+            ),
+        )
+    )
     db.commit()
     db.refresh(command)
     return command
@@ -90,7 +108,7 @@ def serialize_command(command: models.Command) -> dict[str, Any]:
         "confidence": command.confidence or 0.0,
         "reason": command.reason or "",
         "status": command.status,
-        "created_at": command.created_at.isoformat() if command.created_at else "",
-        "published_at": command.published_at.isoformat() if command.published_at else None,
-        "executed_at": command.executed_at.isoformat() if command.executed_at else None,
+        "created_at": iso_utc(command.created_at) if command.created_at else "",
+        "published_at": iso_utc(command.published_at),
+        "executed_at": iso_utc(command.executed_at),
     }

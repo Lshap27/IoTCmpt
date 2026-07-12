@@ -130,7 +130,7 @@ The server builds an LLM request from the latest device snapshot, a compact
 recent-telemetry trend, and — when the newest uploaded image is fresh enough —
 the JPEG itself (OpenAI-compatible vision message with a base64 data URL). The
 LLM must return a JSON decision. Commands outside the executable set
-(`none`, `window.open`, `window.close`, `alarm.on`, `alarm.off`) are downgraded
+(`none`, `window.open`, `window.close`, `alarm.on`, `alarm.off`, `led.on`, `led.off`) are downgraded
 to `none`.
 
 The generated command is always persisted. It is published to MQTT only when

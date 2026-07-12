@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core.timeutil import iso_utc
 from app.db import models
 from app.schemas import CommandAckIn, TelemetryIn
 from app.services.commands import ensure_device
@@ -70,7 +71,7 @@ def record_command_ack(db: Session, payload: CommandAckIn) -> models.Command | N
 def serialize_telemetry(sample: models.Telemetry) -> dict:
     return {
         "device_id": sample.device_id,
-        "sampled_at": sample.sampled_at.isoformat(),
+        "sampled_at": iso_utc(sample.sampled_at),
         "sensors": {
             "temperature_c": sample.temperature_c,
             "humidity_percent": sample.humidity_percent,
@@ -135,7 +136,7 @@ def fetch_history_bucketed(db: Session, device_id: str, bucket_seconds: int, lim
     ).mappings()
     return [
         {
-            "bucket": row["bucket"].isoformat(),
+            "bucket": iso_utc(row["bucket"]),
             "temperature_c": row["temperature_c"],
             "temperature_min_c": row["temperature_min_c"],
             "temperature_max_c": row["temperature_max_c"],

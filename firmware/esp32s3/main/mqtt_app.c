@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cJSON.h"
@@ -112,11 +113,21 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
     }
     case MQTT_EVENT_DATA: {
-        char payload[512] = {0};
-        const int copy_len = event->data_len < (int)sizeof(payload) - 1 ? event->data_len : (int)sizeof(payload) - 1;
-        memcpy(payload, event->data, copy_len);
-        payload[copy_len] = '\0';
+        /* 超过客户端缓冲区的消息会拆成多个 DATA 事件，单个分片不是完整 JSON，直接丢弃 */
+        if (event->current_data_offset != 0 || event->data_len != event->total_data_len) {
+            ESP_LOGW(TAG, "discarding fragmented MQTT message (offset=%d len=%d total=%d)",
+                     event->current_data_offset, event->data_len, event->total_data_len);
+            break;
+        }
+        char *payload = malloc((size_t)event->data_len + 1);
+        if (!payload) {
+            ESP_LOGE(TAG, "no memory for command payload (%d bytes)", event->data_len);
+            break;
+        }
+        memcpy(payload, event->data, event->data_len);
+        payload[event->data_len] = '\0';
         handle_command_payload(payload);
+        free(payload);
         break;
     }
     case MQTT_EVENT_DISCONNECTED:
@@ -180,8 +191,8 @@ esp_err_t mqtt_app_publish_status(const char *status) {
     char payload[128];
     ESP_RETURN_ON_ERROR(make_topic(topic, sizeof(topic), "status"), TAG, "status topic");
     snprintf(payload, sizeof(payload), "{\"status\":\"%s\"}", status);
-    esp_mqtt_client_publish(s_client, topic, payload, 0, 1, true);
-    return ESP_OK;
+    const int msg_id = esp_mqtt_client_publish(s_client, topic, payload, 0, 1, true);
+    return msg_id < 0 ? ESP_FAIL : ESP_OK;
 }
 
 static void add_optional_number(cJSON *root, const char *name, bool valid, double value) {
@@ -238,7 +249,9 @@ static char *build_telemetry_json(const sensor_sample_t *sample, const fusion_st
     cJSON_AddItemToObject(root, "sensors", sensors);
     cJSON_AddItemToObject(root, "state", state);
     cJSON_AddItemToObject(root, "fusion", fusion_json);
-    return cJSON_PrintUnformatted(root);
+    char *json = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    return json;
 }
 
 esp_err_t mqtt_app_publish_event(const char *type, const char *severity, const char *message) {
@@ -259,9 +272,13 @@ esp_err_t mqtt_app_publish_event(const char *type, const char *severity, const c
     if (!payload) {
         return ESP_ERR_NO_MEM;
     }
-    esp_mqtt_client_publish(s_client, topic, payload, 0, 1, false);
+    esp_err_t err = ESP_OK;
+    const int msg_id = esp_mqtt_client_publish(s_client, topic, payload, 0, 1, false);
+    if (msg_id < 0) {
+        err = ESP_FAIL;
+    }
     cJSON_free(payload);
-    return ESP_OK;
+    return err;
 }
 
 esp_err_t mqtt_app_publish_telemetry(const sensor_sample_t *sample, const fusion_state_t *fusion) {
@@ -277,9 +294,9 @@ esp_err_t mqtt_app_publish_telemetry(const sensor_sample_t *sample, const fusion
         return ESP_ERR_NO_MEM;
     }
 
-    esp_mqtt_client_publish(s_client, topic, payload, 0, 0, false);
+    const int msg_id = esp_mqtt_client_publish(s_client, topic, payload, 0, 0, false);
     cJSON_free(payload);
-    return ESP_OK;
+    return msg_id < 0 ? ESP_FAIL : ESP_OK;
 }
 
 esp_err_t mqtt_app_publish_command_ack(const mqtt_app_command_t *command, const char *status, const char *message) {
@@ -304,9 +321,9 @@ esp_err_t mqtt_app_publish_command_ack(const mqtt_app_command_t *command, const 
         return ESP_ERR_NO_MEM;
     }
 
-    esp_mqtt_client_publish(s_client, topic, payload, 0, 1, false);
+    const int msg_id = esp_mqtt_client_publish(s_client, topic, payload, 0, 1, false);
     cJSON_free(payload);
-    return ESP_OK;
+    return msg_id < 0 ? ESP_FAIL : ESP_OK;
 }
 
 esp_err_t mqtt_app_set_command_handler(mqtt_app_command_handler_t handler) {

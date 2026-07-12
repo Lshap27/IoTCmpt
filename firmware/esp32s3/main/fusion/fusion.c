@@ -18,8 +18,20 @@ static void append_reason(char *dest, size_t dest_size, const char *format, ...)
 
     va_list args;
     va_start(args, format);
-    (void)vsnprintf(dest + used, dest_size - used, format, args);
+    const int written = vsnprintf(dest + used, dest_size - used, format, args);
     va_end(args);
+
+    /* 截断时回退到最近的 UTF-8 字符边界，避免把 3 字节汉字切成非法字节混进 JSON */
+    if (written < 0 || (size_t)written >= dest_size - used) {
+        size_t end = dest_size - 1;
+        while (end > used && (dest[end - 1] & 0xC0) == 0x80) {
+            end--;
+        }
+        if (end > used && (dest[end - 1] & 0xC0) == 0xC0) {
+            end--;
+        }
+        dest[end] = '\0';
+    }
 }
 
 esp_err_t fusion_evaluate(const sensor_sample_t *sample, fusion_state_t *out_state) {
@@ -105,7 +117,8 @@ esp_err_t fusion_evaluate(const sensor_sample_t *sample, fusion_state_t *out_sta
     } else if (watch) {
         out_state->air_quality = FUSION_AIR_QUALITY_WATCH;
         out_state->recommend_open_window = true;
-        out_state->alarm_enabled = true;
+        /* WATCH 只建议通风，不触发蜂鸣器；持续鸣响仅保留给 ALERT */
+        out_state->alarm_enabled = false;
     } else {
         out_state->air_quality = FUSION_AIR_QUALITY_GOOD;
         out_state->recommend_open_window = false;

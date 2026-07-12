@@ -16,10 +16,28 @@ export type AiPanelState = {
 
 export const EMPTY_AI: AiPanelState = { analyzing: null, decision: null };
 
-const HISTORY_CAP = 120;
+// 首次拉取与实时追加共用的历史窗口大小（use-device-live 的 fetchHistory 也用它）
+export const HISTORY_CAP = 120;
 const EVENT_CAP = 30;
 
 let eventSeq = 0;
+
+// 已经收到过 ack 的 command_id 集合（即使 ack 在 onSuccess 添加 pending 之前到达），避免指令按钮永远卡死
+const ackedCommands = new Set<string>();
+
+function rememberAcked(id: string) {
+  ackedCommands.add(id);
+  if (ackedCommands.size > 200) {
+    // 仅保留最近 100 个防止无限增长
+    const values = [...ackedCommands];
+    ackedCommands.clear();
+    for (const v of values.slice(-100)) ackedCommands.add(v);
+  }
+}
+
+export function isAckedCommand(id: string): boolean {
+  return ackedCommands.has(id);
+}
 
 function patchLatest(
   queryClient: QueryClient,
@@ -49,6 +67,9 @@ export function addPendingCommand(
 
 /** WebSocket envelope → query cache 的纯分发器；envelope 类型由 codegen 的判别联合窄化。 */
 export function applyEnvelope(queryClient: QueryClient, deviceId: string, envelope: WsMessage) {
+  // 设备切换时旧连接残留在途消息可能命中新设备缓存，必须按 device_id 过滤
+  if (envelope.device_id !== deviceId) return;
+
   eventSeq += 1;
   queryClient.setQueryData<UiEvent[]>(deviceKeys.events(deviceId), (current = []) =>
     [
@@ -65,10 +86,13 @@ export function applyEnvelope(queryClient: QueryClient, deviceId: string, envelo
   switch (envelope.type) {
     case "telemetry": {
       const point = envelope.payload;
-      queryClient.setQueryData<TelemetryPoint[]>(deviceKeys.history(deviceId), (current = []) => [
-        ...current.slice(-(HISTORY_CAP - 1)),
-        point,
-      ]);
+      queryClient.setQueryData<TelemetryPoint[]>(deviceKeys.history(deviceId), (current = []) => {
+        // 重连后的 HTTP 拉取和 WS 实时推送可能包含同一点，去重避免重复 React key
+        const tail = current.length && current[current.length - 1].sampled_at === point.sampled_at
+          ? current.slice(-(HISTORY_CAP - 1))
+          : current.slice(-(HISTORY_CAP - 2));
+        return [...tail, point];
+      });
       patchLatest(queryClient, deviceId, (current) => ({
         ...current,
         telemetry: point,
@@ -109,6 +133,7 @@ export function applyEnvelope(queryClient: QueryClient, deviceId: string, envelo
     case "command_ack": {
       const { command_id: commandId, status, executed_at } = envelope.payload;
       if (!commandId) break;
+      rememberAcked(commandId);
       queryClient.setQueryData<Record<string, string>>(
         deviceKeys.pendingCommands(deviceId),
         (current = {}) => {

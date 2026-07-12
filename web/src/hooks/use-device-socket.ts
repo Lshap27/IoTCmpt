@@ -26,7 +26,8 @@ export function useDeviceSocket(
 
     function connect() {
       if (closed) return;
-      setSocketState((state) => (state === "live" ? state : "connecting"));
+      // 切换设备时上一个连接的 "live" 状态不能沿用，必须回到 connecting
+      setSocketState("connecting");
       socket = new WebSocket(wsUrl(deviceId));
       socket.onopen = () => {
         setSocketState("live");

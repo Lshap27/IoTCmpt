@@ -23,7 +23,7 @@ export function LightCard({
           className="flex size-11 items-center justify-center rounded-full"
           style={{
             background: !available ? "var(--surface)" : isDark ? "var(--accent-soft)" : "var(--warn-soft)",
-            color: !available ? "var(--ink3)" : isDark ? "var(--accent)" : "var(--warn)",
+            color: !available ? "var(--ink-3)" : isDark ? "var(--accent)" : "var(--warn)",
           }}
         >
           <Icon size={22} aria-hidden />

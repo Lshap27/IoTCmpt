@@ -159,6 +159,18 @@ static void sht30_init(void) {
     ESP_LOGI(TAG, "SHT30 软件 I2C 初始化完成（SCL=GPIO%d SDA=GPIO%d）", scl_gpio(), sda_gpio());
 }
 
+/* SHT30 数据 CRC-8：多项式 0x31，初值 0xFF（数据手册 4.12 节） */
+static uint8_t sht30_crc8(const uint8_t *data, size_t len) {
+    uint8_t crc = 0xFF;
+    for (size_t i = 0; i < len; i++) {
+        crc ^= data[i];
+        for (int bit = 0; bit < 8; bit++) {
+            crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x31) : (uint8_t)(crc << 1);
+        }
+    }
+    return crc;
+}
+
 static bool sht30_read(float *temp, float *hum) {
     sht30_i2c_start();
     if (!sht30_i2c_write_byte((SHT30_ADDR << 1) | 0)) {
@@ -184,6 +196,12 @@ static bool sht30_read(float *temp, float *hum) {
         data[i] = sht30_i2c_read_byte(i < 5);
     }
     sht30_i2c_stop();
+
+    /* 软件 I2C 可被任务抢占打断时序，靠 CRC 拦下坏读数，避免单次毛刺直接触发告警开窗 */
+    if (sht30_crc8(&data[0], 2) != data[2] || sht30_crc8(&data[3], 2) != data[5]) {
+        ESP_LOGW(TAG, "SHT30 CRC 校验失败，丢弃本次读数");
+        return false;
+    }
 
     const uint16_t raw_temp = (data[0] << 8) | data[1];
     const uint16_t raw_hum = (data[3] << 8) | data[4];

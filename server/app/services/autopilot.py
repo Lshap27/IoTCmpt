@@ -58,7 +58,7 @@ class AutoPilot:
         return None
 
     def should_run(self, device_id: str, telemetry_payload: dict[str, Any]) -> str | None:
-        """检查开关、触发规则与冷却期；全部通过则记账并返回触发原因。"""
+        """检查开关、触发规则与冷却期；通过则返回触发原因（冷却期由 run_once 实际开跑时记账）。"""
         if not self.is_enabled(device_id):
             return None
         trigger = self.evaluate_trigger(telemetry_payload)
@@ -68,7 +68,6 @@ class AutoPilot:
         last = self._last_run.get(device_id)
         if last is not None and now - last < self.settings.autopilot_cooldown_seconds:
             return None
-        self._last_run[device_id] = now
         return trigger
 
     def maybe_trigger(self, device_id: str, telemetry_payload: dict[str, Any]) -> None:
@@ -83,20 +82,27 @@ class AutoPilot:
     async def run_once(self, device_id: str, trigger: str) -> None:
         lock = self._locks.setdefault(device_id, asyncio.Lock())
         if lock.locked():
+            # 上一轮分析还在进行：直接丢弃本次触发，且不消耗冷却期
             return
         async with lock:
+            # 真正开跑才记账冷却期，被锁丢弃的触发不应重置计时
+            self._last_run[device_id] = time.monotonic()
             db = SessionLocal()
             try:
-                db.add(
-                    models.DeviceEvent(
-                        device_id=device_id,
-                        type="autopilot",
-                        severity="info",
-                        message=f"自动决策触发：{trigger}",
-                        raw_payload={"trigger": trigger},
+                def _record_trigger() -> None:
+                    db.add(
+                        models.DeviceEvent(
+                            device_id=device_id,
+                            type="autopilot",
+                            severity="info",
+                            message=f"自动决策触发：{trigger}",
+                            raw_payload={"trigger": trigger},
+                        )
                     )
-                )
-                db.commit()
+                    db.commit()
+
+                # 同步 DB 提交移出事件循环，避免 Postgres 卡顿时冻结整个网关
+                await asyncio.to_thread(_record_trigger)
                 await manager.broadcast(
                     device_id,
                     WebSocketEnvelope(

@@ -28,7 +28,11 @@ static const char *TAG = "DISPLAY";
 #define ST7735_MADCTL  0x36
 #define ST7735_COLMOD  0x3A
 
-#define RGB565(r, g, b) ((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
+/* 帧缓冲以 SPI 发送字节序（高字节在前）存储像素：tft_flush 直接把 s_fb 的内存字节
+ * 发给 ST7735，而 ESP32-S3 是小端，因此这里预先交换 RGB565 的高低字节。 */
+#define RGB565_RAW(r, g, b) ((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
+#define RGB565(r, g, b) \
+    ((uint16_t)(((RGB565_RAW(r, g, b) & 0xFF) << 8) | ((RGB565_RAW(r, g, b) >> 8) & 0xFF)))
 #define COLOR_BLACK     RGB565(0, 0, 0)
 #define COLOR_GREEN     RGB565(40, 220, 80)
 #define COLOR_YELLOW    RGB565(250, 210, 40)

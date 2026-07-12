@@ -11,6 +11,7 @@ from app.api.deps import (
     get_pose_service,
 )
 from app.core.config import get_settings
+from app.core.timeutil import iso_utc
 from app.db import models
 from app.db.session import get_db
 from app.schemas import (
@@ -50,7 +51,7 @@ def list_devices(db: Session = Depends(get_db)):
             "device_id": device.device_id,
             "display_name": device.display_name,
             "status": device.status,
-            "last_seen_at": device.last_seen_at.isoformat() if device.last_seen_at else None,
+            "last_seen_at": iso_utc(device.last_seen_at),
         }
         for device in devices
     ]
@@ -102,11 +103,11 @@ async def upload_image(
     envelope = WebSocketEnvelope(
         type="image",
         device_id=device_id,
-        payload={"id": asset.id, "url": asset.url, "created_at": asset.created_at.isoformat()},
+        payload={"id": asset.id, "url": asset.url, "created_at": iso_utc(asset.created_at)},
     )
     await manager.broadcast(device_id, envelope.model_dump(mode="json"))
     await pose.enqueue(device_id, asset.id)
-    return {"id": asset.id, "device_id": asset.device_id, "url": asset.url, "created_at": asset.created_at}
+    return {"id": asset.id, "device_id": asset.device_id, "url": asset.url, "created_at": iso_utc(asset.created_at)}
 
 
 @router.post("/devices/{device_id}/pose/analyze", response_model=PoseAnalyzeAccepted, status_code=202)
@@ -160,8 +161,9 @@ async def send_command(
 ):
     command = create_command(db, device_id, payload.type, parameter=payload.parameter, reason=payload.reason)
     if mqtt is not None:
-        await mqtt.publish_json(f"devices/{device_id}/command", serialize_command(command), qos=1)
-        mark_published(db, command)
+        published = await mqtt.publish_json(f"devices/{device_id}/command", serialize_command(command), qos=1)
+        if published:
+            mark_published(db, command)
     envelope = WebSocketEnvelope(type="command", device_id=device_id, payload=serialize_command(command))
     await manager.broadcast(device_id, envelope.model_dump(mode="json"))
     return serialize_command(command)

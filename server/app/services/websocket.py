@@ -22,7 +22,9 @@ class WebSocketManager:
         for websocket in list(self._connections.get(device_id, set())):
             try:
                 await websocket.send_json(envelope)
-            except RuntimeError:
+            except Exception:
+                # 半开/已断开的连接在 uvicorn+starlette 下抛 WebSocketDisconnect（非 RuntimeError）。
+                # 广播绝不能因个别死连接失败：踢掉它，继续发给其余客户端。
                 stale.append(websocket)
         for websocket in stale:
             self.disconnect(device_id, websocket)

@@ -27,6 +27,7 @@ class FakeMqtt:
 
     async def publish_json(self, topic, payload, qos=1, retain=False):
         self.published.append((topic, payload, qos, retain))
+        return True
 
 
 class FakeLLM:
@@ -202,6 +203,11 @@ def test_autopilot_trigger_rules_and_cooldown():
 
     assert pilot.evaluate_trigger(good) is None
     assert pilot.should_run("dev", alert) == "air_quality=alert"
+
+    # 冷却期现在由 run_once 在实际执行时记账，
+    # should_run 自身不再消费/重置冷却计时器
+    import time
+    pilot._last_run["dev"] = time.monotonic()
     assert pilot.should_run("dev", alert) is None  # 冷却期内不再触发
 
 
@@ -270,4 +276,5 @@ def test_analyze_route_broadcasts_analyzing_then_result(client):
     body = response.json()
     assert body["command"]["type"] == "window.open"
     assert body["risk_level"] == "medium"
-    assert body["published"] is True
+    # 测试环境没有真实 MQTT 连接，publish 失败时不得谎报 published
+    assert body["published"] is False

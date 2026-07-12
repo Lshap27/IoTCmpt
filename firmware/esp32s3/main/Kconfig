@@ -10,7 +10,7 @@ menu "AIoT MQTT 固件主线"
 
     config APP_SENSOR_INTERVAL_MS
         int "传感器循环间隔（毫秒）"
-        default 5000
+        default 2500
         range 1000 60000
 
     config APP_WIFI_ENABLED

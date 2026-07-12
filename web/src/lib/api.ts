@@ -53,7 +53,9 @@ export type Envelope = {
 export function wsUrl(deviceId: string) {
   const base = new URL(API_BASE_URL);
   base.protocol = base.protocol === "https:" ? "wss:" : "ws:";
-  base.pathname = `/ws/devices/${deviceId}`;
+  // 保留原 base 的路径前缀（如反向代理 /aiot），并追加设备 WebSocket 路由
+  const prefix = base.pathname.replace(/\/+$/, "");
+  base.pathname = `${prefix}/ws/devices/${encodeURIComponent(deviceId)}`;
   base.search = "";
   return base.toString();
 }

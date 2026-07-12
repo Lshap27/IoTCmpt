@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from types import SimpleNamespace
 
 from app.core import config
@@ -53,7 +54,7 @@ def test_bucketed_history_serializes_report_and_light_fields():
         def mappings(self):
             return [
                 {
-                    "bucket": SimpleNamespace(isoformat=lambda: "2026-07-12T01:00:00+00:00"),
+                    "bucket": datetime(2026, 7, 12, 1, 0, 0),
                     "temperature_c": 25.0,
                     "temperature_min_c": 23.0,
                     "temperature_max_c": 28.0,

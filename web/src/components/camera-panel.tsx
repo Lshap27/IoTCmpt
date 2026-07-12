@@ -27,7 +27,9 @@ export function CameraPanel({
   className?: string;
 }) {
   const [showAnnotated, setShowAnnotated] = useState(true);
-  const imageUrl = showAnnotated && pose?.annotated_image_url ? pose.annotated_image_url : image?.url;
+  const showingAnnotated = showAnnotated && Boolean(pose?.annotated_image_url);
+  const imageUrl = showingAnnotated ? pose?.annotated_image_url : image?.url;
+  const capturedAt = showingAnnotated ? pose?.created_at : image?.created_at;
   return (
     <Panel
       title="现场画面与姿态"
@@ -59,7 +61,7 @@ export function CameraPanel({
               <span className="h-1.5 w-1.5 animate-pulse-soft rounded-full bg-white" aria-hidden />
               OV2640
             </span>
-            <span>更新于 {formatRelative(pose?.created_at ?? image?.created_at)}</span>
+            <span>更新于 {formatRelative(capturedAt)}</span>
           </figcaption>
         </figure>
       ) : (

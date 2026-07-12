@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import aiomqtt
+from aiomqtt.client import Will
 import httpx
 
 DEFAULT_JPEG = base64.b64decode(
@@ -179,7 +180,13 @@ class SimulatedDevice:
         if not self.args.no_image:
             await self.upload_image()
         async with aiomqtt.Client(
-            self.args.host, port=self.args.port, identifier=f"sim-{self.args.device_id}"
+            self.args.host, port=self.args.port, identifier=f"sim-{self.args.device_id}",
+            will=Will(
+                f"devices/{self.args.device_id}/status",
+                json.dumps({"status": "offline"}, ensure_ascii=False),
+                qos=1,
+                retain=True,
+            ),
         ) as client:
             try:
                 async with asyncio.TaskGroup() as group:

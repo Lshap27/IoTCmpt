@@ -6,7 +6,8 @@
 #include "esp_err.h"
 #include "sensors.h"
 
-#define FUSION_REASON_MAX_LEN 128
+/* 中文 reason 每子句约 20-30 字节（UTF-8），全部异常同时出现约 160+ 字节，256 留足余量 */
+#define FUSION_REASON_MAX_LEN 256
 
 typedef enum {
     FUSION_AIR_QUALITY_UNKNOWN = 0,

@@ -4,8 +4,9 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router as api_router
@@ -75,6 +76,18 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def limit_upload_size(request: Request, call_next):
+        # 必须在 multipart 解析之前按 Content-Length 拒绝超大请求；
+        # 到路由层再检查时整个请求体已经被吞进临时文件，限制形同虚设。
+        if request.method == "POST":
+            content_length = request.headers.get("content-length")
+            if content_length and content_length.isdigit():
+                if int(content_length) > settings.max_upload_bytes + 64 * 1024:
+                    return JSONResponse(status_code=413, content={"detail": "Request body is too large"})
+        return await call_next(request)
+
     settings.uploads_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/uploads", StaticFiles(directory=str(settings.uploads_dir)), name="uploads")
 
@@ -89,6 +102,9 @@ def create_app() -> FastAPI:
             while True:
                 await websocket.receive_text()
         except WebSocketDisconnect:
+            pass
+        finally:
+            # 任何异常（如客户端发来二进制帧）都要注销连接，避免死连接残留
             manager.disconnect(device_id, websocket)
 
     app.include_router(api_router, prefix="/api")

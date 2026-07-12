@@ -73,6 +73,14 @@ class MqttGateway:
                 LOGGER.warning(
                     "MQTT connection lost (%s); reconnecting in %.1fs", exc, self.settings.mqtt_reconnect_seconds
                 )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # 本循环是 MQTT 接入的唯一守护者：任何意外异常若逃逸，任务会静默死亡，
+                # 网关看似健康但再也收不到遥测。兜底记录并照常重连。
+                LOGGER.exception(
+                    "MQTT loop crashed unexpectedly; reconnecting in %.1fs", self.settings.mqtt_reconnect_seconds
+                )
             finally:
                 self._client = None
             await asyncio.sleep(self.settings.mqtt_reconnect_seconds)
@@ -85,12 +93,15 @@ class MqttGateway:
             self._task = None
         self._client = None
 
-    async def publish_json(self, topic: str, payload: dict[str, Any], qos: int = 1, retain: bool = False) -> None:
+    async def publish_json(self, topic: str, payload: dict[str, Any], qos: int = 1, retain: bool = False) -> bool:
+        """发布成功返回 True；未连接或发布失败返回 False，调用方据此决定是否推进指令状态。"""
         client = self._client
         if client is None:
             LOGGER.info("MQTT publish skipped because client is not connected: %s", topic)
-            return
+            return False
         try:
             await client.publish(topic, json.dumps(payload, ensure_ascii=False), qos=qos, retain=retain)
         except aiomqtt.MqttError:
             LOGGER.warning("MQTT publish failed: %s", topic)
+            return False
+        return True

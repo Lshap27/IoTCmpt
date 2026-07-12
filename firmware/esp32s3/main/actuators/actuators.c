@@ -171,16 +171,19 @@ esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *s
     control_state_get(&local);
 
     bool target_open = local.manual_override ? local.manual_open : state->recommend_open_window;
+    bool manual_request = false;
     control_state_set_alarm_source(CONTROL_ALARM_FUSION, state->alarm_enabled);
 
     if (command) {
         switch (command->type) {
         case CLOUD_COMMAND_WINDOW_OPEN:
             target_open = true;
+            manual_request = true;
             control_state_set_manual(true, true);
             break;
         case CLOUD_COMMAND_WINDOW_CLOSE:
             target_open = false;
+            manual_request = true;
             control_state_set_manual(true, false);
             break;
         case CLOUD_COMMAND_ALARM_ON:
@@ -212,7 +215,8 @@ esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *s
         return command ? ESP_ERR_INVALID_STATE : ESP_OK;
     }
 
-    if (!local.window_open && target_open && !local.manual_override) {
+    /* 仅自动联动开窗需要 3 秒预警音；手动/云端指令开窗立即执行 */
+    if (!local.window_open && target_open && !local.manual_override && !manual_request) {
         beep_alarm_loop(3000);
     }
 

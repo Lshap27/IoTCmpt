@@ -197,6 +197,73 @@
       }
     },
     {
+      "label": "面板：启动本地配置面板",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\tools\\start-panel.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "固件：烧录 ESP32-S3",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\tools\\esp-idf-task.ps1",
+        "-Action",
+        "Flash"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}\\firmware\\esp32s3"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "固件：烧录并监视 ESP32-S3",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\tools\\esp-idf-task.ps1",
+        "-Action",
+        "FlashMonitor"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}\\firmware\\esp32s3"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
       "label": "固件：构建 ESP32-S3",
       "type": "process",
       "command": "powershell.exe",

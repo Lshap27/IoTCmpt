@@ -1,8 +1,11 @@
 ﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("Install", "Menuconfig", "Build")]
-    [string] $Action
+    [ValidateSet("Install", "Menuconfig", "Build", "Flash", "Monitor", "FlashMonitor")]
+    [string] $Action,
+
+    # 串口号，例如 COM5。留空时由 idf.py 自动探测。
+    [string] $Port
 )
 
 Set-StrictMode -Version Latest
@@ -140,10 +143,18 @@ function Set-IdfToolEnvironment {
 $IdfPath = Get-IdfPath
 Set-IdfToolEnvironment
 
+# Git Bash/MSYS 终端启动的进程会泄漏 MSYSTEM 变量，
+# ESP-IDF 的 idf_tools.py 检测到它会直接报 "MSys/Mingw is not supported" 并退出。
+Remove-Item Env:MSYSTEM -ErrorAction SilentlyContinue
+
 if ($Action -eq "Install") {
     Write-Host "Installing or repairing ESP-IDF tools for ESP32-S3..." -ForegroundColor Cyan
+    # install.ps1 是 PowerShell 脚本，不会设置 $LASTEXITCODE，因此依据 $? 判定结果
     & (Join-Path $IdfPath "install.ps1") "esp32s3"
-    exit $LASTEXITCODE
+    if (-not $?) {
+        exit 1
+    }
+    exit 0
 }
 
 try {
@@ -156,11 +167,17 @@ catch {
 
 Push-Location $FirmwarePath
 try {
-    if ($Action -eq "Menuconfig") {
-        & idf.py -B build-esp32s3 menuconfig
+    $idfArgs = @("-B", "build")
+    if (-not [string]::IsNullOrWhiteSpace($Port)) {
+        $idfArgs += @("-p", $Port)
     }
-    else {
-        & idf.py -B build-esp32s3 build
+
+    switch ($Action) {
+        "Menuconfig" { & idf.py @idfArgs menuconfig }
+        "Build" { & idf.py @idfArgs build }
+        "Flash" { & idf.py @idfArgs flash }
+        "Monitor" { & idf.py @idfArgs monitor }
+        "FlashMonitor" { & idf.py @idfArgs flash monitor }
     }
 
     exit $LASTEXITCODE
