@@ -170,17 +170,28 @@ class SimulatedDevice:
             f"{self.args.api_base.rstrip('/')}/api/devices/{self.args.device_id}/images"
         )
         async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.post(
-                url, files={"file": ("simulator.jpg", content, "image/jpeg")}
-            )
-            response.raise_for_status()
-            print(f"image uploaded: {response.json()['url']}")
+            for attempt in range(1, 11):
+                try:
+                    response = await client.post(
+                        url, files={"file": ("simulator.jpg", content, "image/jpeg")}
+                    )
+                    response.raise_for_status()
+                    print(f"image uploaded: {response.json()['url']}")
+                    return
+                except httpx.HTTPError as exc:
+                    if attempt == 10:
+                        # 图片只是增强数据；API 暂时不可用不应让 MQTT 设备退出。
+                        print(f"image upload skipped after retries: {exc}")
+                        return
+                    await asyncio.sleep(1)
 
     async def run(self) -> None:
         if not self.args.no_image:
             await self.upload_image()
         async with aiomqtt.Client(
-            self.args.host, port=self.args.port, identifier=f"sim-{self.args.device_id}",
+            self.args.host,
+            port=self.args.port,
+            identifier=f"sim-{self.args.device_id}",
             will=Will(
                 f"devices/{self.args.device_id}/status",
                 json.dumps({"status": "offline"}, ensure_ascii=False),

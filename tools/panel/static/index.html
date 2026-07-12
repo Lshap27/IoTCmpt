@@ -1,180 +1,493 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="light dark">
-  <title>IoTCmpt 配置面板</title>
-  <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-  <div class="page">
-
-    <header>
-      <div class="brand">
-        <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="6" y="6" width="12" height="12" rx="2.5" />
-          <circle cx="12" cy="12" r="2.2" class="core" />
-          <path d="M9 6V3M12 6V3M15 6V3M9 21v-3M12 21v-3M15 21v-3M6 9H3M6 12H3M6 15H3M21 9h-3M21 12h-3M21 15h-3" />
-        </svg>
-        <div class="brand-text">
-          <h1>IoTCmpt 配置面板</h1>
-          <span class="brand-sub">宿智云 AIoT · 本地工作台</span>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>IoTCmpt 配置面板</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="6" y="6" width="12" height="12" rx="2.5" />
+            <circle cx="12" cy="12" r="2.2" class="core" />
+            <path
+              d="M9 6V3M12 6V3M15 6V3M9 21v-3M12 21v-3M15 21v-3M6 9H3M6 12H3M6 15H3M21 9h-3M21 12h-3M21 15h-3"
+            />
+          </svg>
+          <div class="brand-text">
+            <h1>IoTCmpt 配置面板</h1>
+            <span class="brand-sub">宿智云 AIoT · 本地工作台</span>
+          </div>
         </div>
-      </div>
 
-      <div id="statusBar">
-        <span class="ip-chip">本机 IP <b id="lanIp">…</b></span>
-        <span class="led"><span class="dot" id="dot-backend8000"></span>后端 <i>:8000</i></span>
-        <span class="led"><span class="dot" id="dot-frontend3000"></span>前端 <i>:3000</i></span>
-        <span class="led"><span class="dot" id="dot-mqtt1883"></span>MQTT <i>:1883</i></span>
-        <span class="led"><span class="dot" id="dot-postgres5432"></span>数据库 <i>:5432</i></span>
-      </div>
-    </header>
-
-    <nav aria-label="配置步骤">
-      <span class="tabs-ind" aria-hidden="true"></span>
-      <button class="tab active" data-tab="env"><i>1</i><span>环境配置</span></button>
-      <button class="tab" data-tab="services"><i>2</i><span>服务控制</span></button>
-      <button class="tab" data-tab="fwcfg"><i>3</i><span>固件配置</span></button>
-      <button class="tab" data-tab="fwops"><i>4</i><span>固件操作</span></button>
-    </nav>
-
-    <!-- ① 环境配置 -->
-    <section id="tab-env" class="panel active">
-      <h2>选择演示模式</h2>
-      <div class="presets">
-        <label><input type="radio" name="preset" value="MockDemo" checked>
-          <b>本地离线演示</b><small>无需网络和真机，AI 用内置模拟</small></label>
-        <label><input type="radio" name="preset" value="DeviceDemo">
-          <b>真实设备演示</b><small>连接真实 ESP32-S3 开发板</small></label>
-        <label><input type="radio" name="preset" value="LlmDemo">
-          <b>在线大模型</b><small>使用真实 LLM API（需 API Key）</small></label>
-      </div>
-
-      <div class="grid" id="envForm">
-        <label>设备 ID <input id="deviceId" placeholder="esp32s3-001"></label>
-        <label>本机局域网 IP
-          <span class="row"><input id="lanAddress" placeholder="自动检测">
-          <button type="button" id="btnDetectIp">自动检测</button></span></label>
-        <label>LLM 接口地址 <input id="llmEndpoint" placeholder="mock 或 https://..."></label>
-        <label>LLM 模型 <input id="llmModel" placeholder="demo-model"></label>
-        <label>LLM API Key <input id="llmApiKey" type="password" placeholder="留空则不修改"></label>
-        <label class="check"><input type="checkbox" id="llmVisionEnabled" checked> AI 分析时附带最新照片</label>
-        <label class="check"><input type="checkbox" id="autopilotEnabled" checked> 启用自动处置（autopilot）</label>
-        <label>自动处置最低置信度 <input id="autopilotMinConfidence" placeholder="0.6"></label>
-        <label>自动处置触发级别 <input id="autopilotTriggerLevels" placeholder="alert"></label>
-      </div>
-
-      <div class="actions">
-        <button class="primary" id="btnSaveEnv">保存环境配置</button>
-        <div class="msg" id="envMsg" role="status"></div>
-      </div>
-    </section>
-
-    <!-- ② 服务控制 -->
-    <section id="tab-services" class="panel">
-      <h2>启动与停止服务</h2>
-      <div class="svc" data-job="docker-up">
-        <div class="svc-head">
-          <h3>Docker 演示栈</h3>
-          <small>数据库 + MQTT + 后端 + 前端，一键起全套</small>
+        <div id="statusBar">
+          <span class="ip-chip">本机 IP <b id="lanIp">…</b></span>
+          <span class="led"
+            ><span class="dot" id="dot-backend8000"></span>后端
+            <i>:8000</i></span
+          >
+          <span class="led"
+            ><span class="dot" id="dot-frontend3000"></span>前端
+            <i>:3000</i></span
+          >
+          <span class="led"
+            ><span class="dot" id="dot-mqtt1883"></span>MQTT <i>:1883</i></span
+          >
+          <span class="led"
+            ><span class="dot" id="dot-postgres5432"></span>数据库
+            <i>:5432</i></span
+          >
+          <span class="led"
+            ><span class="dot" id="dot-simulator"></span>虚拟设备</span
+          >
         </div>
-        <div class="row">
-          <button class="primary" data-action="docker-up">启动</button>
-          <button data-action="docker-down">停止</button>
-          <button data-action="docker-logs">查看日志</button>
-          <button data-stop="docker-logs">停止日志</button>
+      </header>
+
+      <nav aria-label="配置步骤">
+        <span class="tabs-ind" aria-hidden="true"></span>
+        <button class="tab active" data-tab="system">
+          <i>1</i><span>环境中心</span>
+        </button>
+        <button class="tab" data-tab="env">
+          <i>2</i><span>项目配置</span>
+        </button>
+        <button class="tab" data-tab="services">
+          <i>3</i><span>服务控制</span>
+        </button>
+        <button class="tab" data-tab="fwcfg">
+          <i>4</i><span>固件配置</span>
+        </button>
+        <button class="tab" data-tab="fwops">
+          <i>5</i><span>固件操作</span>
+        </button>
+      </nav>
+
+      <!-- ① 环境中心 -->
+      <section id="tab-system" class="panel active">
+        <h2>
+          电脑环境检查<small class="h-note"
+            >先检查，再按需补全；已安装的软件不会重复安装</small
+          >
+        </h2>
+        <div
+          id="envSummary"
+          class="health-summary checking"
+          role="status"
+          aria-live="polite"
+        >
+          <span class="health-orb" aria-hidden="true"></span>
+          <div>
+            <b>正在检查这台电脑……</b><small>Docker、运行环境和网络状态</small>
+          </div>
         </div>
-      </div>
-      <div class="svc" data-job="backend">
-        <div class="svc-head">
-          <h3>后端开发服务</h3>
-          <small>不用 Docker 时单独启动，端口 8000</small>
+        <div
+          id="componentList"
+          class="component-list"
+          aria-label="环境组件"
+        ></div>
+        <div class="actions compact-actions">
+          <button class="primary" id="btnEnvCheck">重新检查</button>
+          <button id="btnEnvComplete">一键补全演示环境</button>
+          <button id="btnEnvInstallSelected">安装所选</button>
+          <button id="btnRepairIdf">安装 / 修复 ESP-IDF 工具链</button>
+          <button class="danger" id="btnEnvRemove">卸载所选</button>
+          <div class="msg" id="systemMsg" role="status"></div>
         </div>
-        <div class="row">
-          <button data-action="backend-start">启动</button>
-          <button data-stop="backend">停止</button>
+
+        <h3 class="group-title">Docker 网络与镜像源</h3>
+        <div id="networkNotice" class="network-notice" role="status"></div>
+        <div class="network-grid">
+          <article class="network-card">
+            <b>Docker Hub 官方源</b>
+            <small>网络可直连或 Docker Desktop 已正确使用代理时选择</small>
+            <button id="btnOfficialSource">切回官方源</button>
+          </article>
+          <article class="network-card recommended">
+            <b>国内公共镜像</b><span class="tag">推荐无代理电脑</span>
+            <small>使用 DaoCloud Docker Hub mirror，可随时切回官方源</small>
+            <label
+              >镜像地址<input
+                id="mirrorUrl"
+                value="https://docker.m.daocloud.io"
+            /></label>
+            <button class="primary" id="btnChinaMirror">一键切换</button>
+          </article>
+          <article class="network-card">
+            <b>本机代理</b>
+            <small>自动寻找 7890、7897、10809 等常见代理端口</small>
+            <div class="row">
+              <input
+                id="proxyUrl"
+                aria-label="手动代理地址"
+                placeholder="http://127.0.0.1:7890"
+              />
+              <button id="btnAutoProxy">检测端口并启用系统代理</button>
+            </div>
+            <button id="btnManualProxy">使用此地址启用系统代理</button>
+          </article>
         </div>
-      </div>
-      <div class="svc" data-job="frontend">
-        <div class="svc-head">
-          <h3>前端控制台</h3>
-          <small>不用 Docker 时单独启动，端口 3000</small>
+        <div class="actions compact-actions">
+          <button id="btnNetworkTest">测试 Docker 拉取网络</button>
+          <span class="hint-inline"
+            >网络切换会重启 Docker Desktop，正在运行的容器会短暂中断。</span
+          >
         </div>
-        <div class="row">
-          <button data-action="frontend-start">启动</button>
-          <button data-stop="frontend">停止</button>
+        <div class="term">
+          <div class="term-head">
+            <span class="term-title">环境操作日志</span
+            ><span class="term-hint">安装、网络切换和测试结果</span>
+          </div>
+          <pre id="environmentLog" class="log log-small" tabindex="0"></pre>
         </div>
-      </div>
+      </section>
 
-      <div class="term">
-        <div class="term-head"><span class="term-title">运行日志</span><span class="term-hint">实时输出，自动滚动到底部</span></div>
-        <pre id="svcLog" class="log" tabindex="0"></pre>
-      </div>
-    </section>
+      <!-- ② 项目配置 -->
+      <section id="tab-env" class="panel">
+        <h2>
+          配置演示组合<small class="h-note"
+            >设备来源和 AI 模式可以自由组合</small
+          >
+        </h2>
+        <div class="mode-composer">
+          <fieldset class="mode-group">
+            <legend>① 设备来源</legend>
+            <div class="presets compact">
+              <label
+                ><input
+                  type="radio"
+                  name="deviceMode"
+                  value="Simulator"
+                  checked
+                />
+                <b>虚拟设备</b><small>无需开发板，使用设备模拟器</small></label
+              >
+              <label
+                ><input type="radio" name="deviceMode" value="Real" />
+                <b>真实 ESP32-S3</b><small>连接开发板和传感器</small></label
+              >
+            </div>
+          </fieldset>
+          <fieldset class="mode-group">
+            <legend>② AI 模式</legend>
+            <div class="presets compact">
+              <label
+                ><input type="radio" name="aiMode" value="Mock" checked />
+                <b>本地 mock AI</b><small>离线、免费、结果可重复</small></label
+              >
+              <label
+                ><input type="radio" name="aiMode" value="Online" />
+                <b>在线大模型</b><small>调用真实 LLM API</small></label
+              >
+            </div>
+          </fieldset>
+        </div>
 
-    <!-- ③ 固件配置 -->
-    <section id="tab-fwcfg" class="panel">
-      <h2>固件参数<small class="h-note">写入 sdkconfig，重新编译烧录后生效</small></h2>
-      <div class="grid">
-        <label>设备 ID <input id="fw_CONFIG_APP_DEVICE_ID"></label>
-        <label>传感器采集间隔（毫秒）<input id="fw_CONFIG_APP_SENSOR_INTERVAL_MS" type="number" min="1000" max="60000"></label>
-        <label class="check"><input type="checkbox" id="fw_CONFIG_APP_SENSOR_MOCK_ENABLED"> 使用模拟传感器数据</label>
-        <label class="check"><input type="checkbox" id="fw_CONFIG_APP_WIFI_ENABLED"> 启用 Wi-Fi</label>
-        <label>Wi-Fi 名称 <input id="fw_CONFIG_APP_WIFI_SSID"></label>
-        <label>Wi-Fi 密码 <input id="fw_CONFIG_APP_WIFI_PASSWORD" type="password"></label>
-        <label class="check"><input type="checkbox" id="fw_CONFIG_APP_MQTT_ENABLED"> 启用 MQTT</label>
-        <label>MQTT 服务器地址 <input id="fw_CONFIG_APP_MQTT_BROKER_URI" placeholder="mqtt://192.168.1.10:1883"></label>
-        <label class="check"><input type="checkbox" id="fw_CONFIG_APP_IMAGE_UPLOAD_ENABLED"> 启用图片上传</label>
-        <label>图片上传地址 <input id="fw_CONFIG_APP_IMAGE_UPLOAD_URL" placeholder="http://IP:8000/api/devices/xxx/images"></label>
-      </div>
-      <h3 class="group-title">功能模块开关</h3>
-      <div class="grid modules">
-        <label class="check"><input type="checkbox" id="fw_CONFIG_APP_CAMERA_ENABLED"> OV2640 摄像头</label>
-        <label class="check"><input type="checkbox" id="fw_CONFIG_APP_DISPLAY_ENABLED"> ST7735 显示屏</label>
-        <label class="check"><input type="checkbox" id="fw_CONFIG_APP_ACTUATOR_ENABLED"> 舵机和蜂鸣器</label>
-        <label class="check"><input type="checkbox" id="fw_CONFIG_APP_BUTTON_ENABLED"> 手动按键</label>
-        <label class="check"><input type="checkbox" id="fw_CONFIG_APP_MQ2_ENABLED"> MQ-2 烟雾监测</label>
-        <label class="check"><input type="checkbox" id="fw_CONFIG_APP_VOICE_ENABLED"> SYN6288 语音播报</label>
-      </div>
-      <div class="actions">
-        <button id="btnFwAutofill">一键填充网络地址</button>
-        <button class="primary" id="btnSaveFw">写入固件配置</button>
-        <div class="msg" id="fwMsg" role="status"></div>
-      </div>
-    </section>
+        <div class="grid" id="envForm">
+          <label
+            >设备 ID
+            <input
+              id="deviceId"
+              placeholder="esp32s3-001"
+              pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
+              maxlength="64"
+              required
+          /></label>
+          <label data-for-device="real"
+            >本机局域网 IP
+            <span class="row"
+              ><input id="lanAddress" placeholder="自动检测" />
+              <button type="button" id="btnDetectIp">自动检测</button></span
+            ></label
+          >
+          <label data-for-ai="online"
+            >LLM 接口地址
+            <input id="llmEndpoint" type="url" placeholder="https://..."
+          /></label>
+          <label data-for-ai="online"
+            >LLM 模型
+            <input id="llmModel" placeholder="gpt-4o-mini" maxlength="128"
+          /></label>
+          <label data-for-ai="online"
+            >LLM API Key
+            <input id="llmApiKey" type="password" placeholder="留空则不修改"
+          /></label>
+          <label class="check" data-for-ai="online"
+            ><input type="checkbox" id="llmVisionEnabled" checked /> AI
+            分析时附带最新照片</label
+          >
+          <label class="check"
+            ><input type="checkbox" id="autopilotEnabled" checked />
+            启用自动处置（autopilot）</label
+          >
+          <label data-for-autopilot="enabled"
+            >自动处置最低置信度
+            <input
+              id="autopilotMinConfidence"
+              type="number"
+              min="0"
+              max="1"
+              step="0.05"
+              value="0.6"
+          /></label>
+          <fieldset class="choice-field" data-for-autopilot="enabled">
+            <legend>自动处置触发级别（至少一项）</legend>
+            <div class="choice-row" id="autopilotTriggerLevels" tabindex="-1">
+              <label class="check compact-check"
+                ><input type="checkbox" name="triggerLevel" value="good" /> 良好
+                good</label
+              >
+              <label class="check compact-check"
+                ><input type="checkbox" name="triggerLevel" value="watch" />
+                关注 watch</label
+              >
+              <label class="check compact-check"
+                ><input
+                  type="checkbox"
+                  name="triggerLevel"
+                  value="alert"
+                  checked
+                />
+                告警 alert</label
+              >
+            </div>
+          </fieldset>
+        </div>
 
-    <!-- ④ 固件操作 -->
-    <section id="tab-fwops" class="panel">
-      <h2>固件编译与烧录</h2>
-      <div class="toolbar">
-        <label class="port-pick">串口
-          <select id="comPort"><option value="">自动</option></select>
-        </label>
-        <button id="btnRefreshCom">刷新串口</button>
-        <span class="toolbar-sep" aria-hidden="true"></span>
-        <button data-action="idf-install">安装 / 修复 ESP-IDF</button>
-        <button data-action="idf-menuconfig">图形化配置<i class="ext">↗</i></button>
-      </div>
-      <div class="toolbar">
-        <button class="primary" data-action="idf-build">编译</button>
-        <button data-action="idf-flash">烧录</button>
-        <button data-action="idf-monitor">监视<i class="ext">↗</i></button>
-        <button data-action="idf-flash-monitor">烧录并监视<i class="ext">↗</i></button>
-        <button data-stop="idf">停止当前操作</button>
-      </div>
-      <p class="hint">带 <i class="ext">↗</i> 的操作在独立控制台窗口中运行。</p>
+        <div class="actions">
+          <button class="primary" id="btnSaveEnv">保存环境配置</button>
+          <div class="msg" id="envMsg" role="status"></div>
+        </div>
+      </section>
 
-      <div class="term">
-        <div class="term-head"><span class="term-title">操作日志</span><span class="term-hint">编译与烧录输出</span></div>
-        <pre id="idfLog" class="log" tabindex="0"></pre>
-      </div>
-    </section>
+      <!-- ③ 服务控制 -->
+      <section id="tab-services" class="panel">
+        <h2>启动与停止服务</h2>
+        <div class="svc" data-job="docker-up">
+          <div class="svc-head">
+            <h3>Docker 演示栈</h3>
+            <small>数据库 + MQTT + 后端 + 前端，一键起全套</small>
+          </div>
+          <div class="row">
+            <button class="primary" data-action="docker-up">启动</button>
+            <button data-action="docker-down">停止</button>
+            <button data-action="docker-logs">查看日志</button>
+            <button data-stop="docker-logs">停止日志</button>
+          </div>
+        </div>
+        <div class="svc" data-job="simulator">
+          <div class="svc-head">
+            <h3>虚拟 ESP32-S3</h3>
+            <small
+              >虚拟设备模式下随 Docker 栈自动启动，真实走 MQTT、HTTP
+              和命令确认</small
+            >
+          </div>
+          <div class="row">
+            <label class="port-pick"
+              >场景
+              <select id="simulatorScenario">
+                <option value="air-alert" selected>空气告警（触发 AI）</option>
+                <option value="normal">正常环境</option>
+                <option value="smoke">烟雾告警</option>
+              </select>
+            </label>
+            <button data-action="simulator-start">启动 / 切换场景</button>
+            <button data-stop="simulator">停止</button>
+          </div>
+        </div>
+        <div class="svc" data-job="backend">
+          <div class="svc-head">
+            <h3>后端开发服务</h3>
+            <small>不用 Docker 时单独启动，端口 8000</small>
+          </div>
+          <div class="row">
+            <button data-action="backend-start">启动</button>
+            <button data-stop="backend">停止</button>
+          </div>
+        </div>
+        <div class="svc" data-job="frontend">
+          <div class="svc-head">
+            <h3>前端控制台</h3>
+            <small>不用 Docker 时单独启动，端口 3000</small>
+          </div>
+          <div class="row">
+            <button data-action="frontend-start">启动</button>
+            <button data-stop="frontend">停止</button>
+          </div>
+        </div>
 
-    <footer>仅监听 127.0.0.1 · 环境配置写入 .env，固件配置写入 sdkconfig</footer>
-  </div>
+        <div class="term">
+          <div class="term-head">
+            <span class="term-title">运行日志</span
+            ><span class="term-hint">实时输出，自动滚动到底部</span>
+          </div>
+          <pre id="svcLog" class="log" tabindex="0"></pre>
+        </div>
+      </section>
 
-  <script src="/static/app.js"></script>
-</body>
+      <!-- ④ 固件配置 -->
+      <section id="tab-fwcfg" class="panel">
+        <h2>
+          固件参数<small class="h-note"
+            >写入 sdkconfig，重新编译烧录后生效</small
+          >
+        </h2>
+        <div class="grid">
+          <label
+            >设备 ID
+            <input
+              id="fw_CONFIG_APP_DEVICE_ID"
+              pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
+              maxlength="64"
+              required
+          /></label>
+          <label
+            >传感器采集间隔（毫秒）<input
+              id="fw_CONFIG_APP_SENSOR_INTERVAL_MS"
+              type="number"
+              min="1000"
+              max="60000"
+              step="100"
+          /></label>
+          <label class="check"
+            ><input type="checkbox" id="fw_CONFIG_APP_SENSOR_MOCK_ENABLED" />
+            使用模拟传感器数据</label
+          >
+          <label class="check"
+            ><input type="checkbox" id="fw_CONFIG_APP_WIFI_ENABLED" /> 启用
+            Wi-Fi</label
+          >
+          <label data-for-firmware="wifi"
+            >Wi-Fi 名称 <input id="fw_CONFIG_APP_WIFI_SSID" maxlength="32"
+          /></label>
+          <label data-for-firmware="wifi"
+            >Wi-Fi 密码
+            <input
+              id="fw_CONFIG_APP_WIFI_PASSWORD"
+              type="password"
+              maxlength="64"
+          /></label>
+          <label class="check"
+            ><input type="checkbox" id="fw_CONFIG_APP_MQTT_ENABLED" /> 启用
+            MQTT</label
+          >
+          <label data-for-firmware="mqtt"
+            >MQTT 服务器地址
+            <input
+              id="fw_CONFIG_APP_MQTT_BROKER_URI"
+              type="url"
+              placeholder="mqtt://192.168.1.10:1883"
+          /></label>
+          <label class="check"
+            ><input type="checkbox" id="fw_CONFIG_APP_IMAGE_UPLOAD_ENABLED" />
+            启用图片上传</label
+          >
+          <label data-for-firmware="image"
+            >图片上传地址
+            <input
+              id="fw_CONFIG_APP_IMAGE_UPLOAD_URL"
+              type="url"
+              placeholder="http://IP:8000/api/devices/xxx/images"
+          /></label>
+        </div>
+        <h3 class="group-title">功能模块开关</h3>
+        <div class="grid modules">
+          <label class="check"
+            ><input type="checkbox" id="fw_CONFIG_APP_CAMERA_ENABLED" /> OV2640
+            摄像头</label
+          >
+          <label class="check"
+            ><input type="checkbox" id="fw_CONFIG_APP_DISPLAY_ENABLED" /> ST7735
+            显示屏</label
+          >
+          <label class="check"
+            ><input type="checkbox" id="fw_CONFIG_APP_ACTUATOR_ENABLED" />
+            舵机和蜂鸣器</label
+          >
+          <label class="check"
+            ><input type="checkbox" id="fw_CONFIG_APP_BUTTON_ENABLED" />
+            手动按键</label
+          >
+          <label class="check"
+            ><input type="checkbox" id="fw_CONFIG_APP_MQ2_ENABLED" /> MQ-2
+            烟雾监测</label
+          >
+          <label class="check"
+            ><input type="checkbox" id="fw_CONFIG_APP_VOICE_ENABLED" /> SYN6288
+            语音播报</label
+          >
+        </div>
+        <div class="actions">
+          <button id="btnFwAutofill">一键填充网络地址</button>
+          <button class="primary" id="btnSaveFw">写入固件配置</button>
+          <div class="msg" id="fwMsg" role="status"></div>
+        </div>
+      </section>
+
+      <!-- ⑤ 固件操作 -->
+      <section id="tab-fwops" class="panel">
+        <h2>固件编译与烧录</h2>
+        <div class="toolbar">
+          <label class="port-pick"
+            >串口
+            <select id="comPort">
+              <option value="">自动</option>
+            </select>
+          </label>
+          <button id="btnRefreshCom">刷新串口</button>
+          <span class="toolbar-sep" aria-hidden="true"></span>
+          <button data-action="idf-menuconfig">
+            图形化配置<i class="ext">↗</i>
+          </button>
+        </div>
+        <div class="toolbar">
+          <button class="primary" data-action="idf-build">编译</button>
+          <button data-action="idf-flash">烧录</button>
+          <button data-action="idf-monitor">监视<i class="ext">↗</i></button>
+          <button data-action="idf-flash-monitor">
+            烧录并监视<i class="ext">↗</i>
+          </button>
+          <button data-stop="idf">停止当前操作</button>
+        </div>
+        <p class="hint">
+          带 <i class="ext">↗</i> 的操作在独立控制台窗口中运行。
+        </p>
+
+        <div class="term">
+          <div class="term-head">
+            <span class="term-title">操作日志</span
+            ><span class="term-hint">编译与烧录输出</span>
+          </div>
+          <pre id="idfLog" class="log" tabindex="0"></pre>
+        </div>
+      </section>
+
+      <footer>
+        仅监听 127.0.0.1 · 环境配置写入 .env，固件配置写入 sdkconfig
+      </footer>
+    </div>
+
+    <dialog id="uninstallDialog" aria-labelledby="uninstallTitle">
+      <form method="dialog" class="dialog-card">
+        <h2 id="uninstallTitle">确认卸载所选环境？</h2>
+        <p id="uninstallText">
+          只会调用系统卸载程序，不删除项目文件或 Docker 数据卷。
+        </p>
+        <div class="dialog-warning">
+          卸载 Docker、Git 或 PowerShell 可能影响其他项目。Python
+          正被面板使用，不会在面板内卸载。
+        </div>
+        <div class="row dialog-actions">
+          <button value="cancel">取消</button>
+          <button value="confirm" class="danger-solid">确认卸载</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/static/app.js"></script>
+  </body>
 </html>

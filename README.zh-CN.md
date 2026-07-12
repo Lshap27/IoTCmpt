@@ -44,142 +44,49 @@ HTTP 和 WebSocket API：
 
 ## 本地开发
 
-手动执行开发命令时，Windows 上建议使用 PowerShell 7。VS Code 任务使用系统自带的 Windows PowerShell（`powershell.exe`），队友只需点击任务即可配置或启动本地演示，不需要额外安装 PowerShell 7。
+### 可视化面板（推荐）
 
-推荐先用 VS Code 任务入口。打开本仓库后，按：
+不熟悉命令行时，双击项目根目录的 `启动配置面板.cmd`。面板只监听 `127.0.0.1:8765`，依次提供“环境中心、项目配置、服务控制、固件配置、固件操作”。建议按以下顺序演示：
 
-```text
-Ctrl+Shift+P -> Tasks: Run Task
-```
+1. 在“环境中心”点“重新检查”。缺少基础软件时点“一键补全演示环境”；Docker 拉取失败时再测试网络、选择官方源/国内镜像或为 Docker Desktop 启用本机代理。
+2. ESP-IDF 的检测与“安装/修复”也统一在“环境中心”。它检查框架、Python 环境、CMake、Ninja、Xtensa ESP32-S3 工具链和 OpenOCD；支持能实际加载的 ESP-IDF `>=5.1,<6.0`。
+3. 在“项目配置”分别选择设备来源和 AI 模式，保存配置。
+4. 在“服务控制”启动 Docker 演示栈。若选择“虚拟设备”，面板会在 MQTT 和后端就绪后自动启动模拟器，并显示独立的在线状态。
+5. 打开 Web 控制台 `http://localhost:3000`。后端健康检查为 `http://localhost:8000/health`，EMQX 控制台为 `http://localhost:18083`（默认 `admin / public`）。
 
-任务定义在 `.vscode/tasks.json`，配置生成脚本是 `tools/configure-local.ps1`。生成的 `.env`、`server/.env` 和 `web/.env.local` 都是本机配置，已被 `.gitignore` 忽略，不要提交真实密钥。
+设备与 AI 是两个独立维度：
 
-### VS Code 任务说明
+| 设备来源      | AI 模式      | 用途                                               |
+| ------------- | ------------ | -------------------------------------------------- |
+| 虚拟设备      | 本地 Mock AI | 推荐的离线软件演示；无需开发板、API Key 或外部模型 |
+| 虚拟设备      | 在线大模型   | 用模拟遥测验证真实模型判断                         |
+| 真实 ESP32-S3 | 本地 Mock AI | 只验证硬件、MQTT 和执行闭环                        |
+| 真实 ESP32-S3 | 在线大模型   | 完整真实演示                                       |
 
-`配置：本地离线演示（mock AI）`
+默认的“空气异常”场景会定期通过 MQTT 上报遥测和事件，后端保存数据并调用 Mock AI；启用自动处置后，后端会发布命令，虚拟设备再返回 `command_ack`。这不是前端假数据。也可以在“服务控制”切换成“正常空气”或手动停止模拟器。
 
-用于最快跑通页面和 AI 决策流程，不需要真实 ESP32-S3、不需要 LLM API Key，也不需要外网模型服务。它会生成：
+“自动处置触发级别”只能从 `good`、`watch`、`alert` 中勾选，最低置信度限制为 `0~1`。设备 ID、地址、采集间隔等配置也会在浏览器和服务端双重校验，避免把无效值写进环境或固件配置。
 
-- 根目录 `.env`：给 `docker compose` 读取，例如让 Docker 栈使用 `AIOT_LLM_ENDPOINT=mock`。
-- `server/.env`：给直接运行后端时读取。
-- `web/.env.local`：让前端请求 `http://localhost:8000`。
+生成的根目录 `.env`、`server/.env` 和 `web/.env.local` 都是本机文件，已被 Git 忽略。不要提交 Wi-Fi 密码或 LLM API Key。
 
-例子：只想看看控制台界面、AI 面板、自动决策流程是否能跑，就先点这个任务，再点 `启动：完整 Docker 演示栈`。
+### 真实设备与固件
 
-`配置：真实设备演示`
+选择“真实 ESP32-S3”后，面板会生成适合局域网的 MQTT 和图片上传地址。“固件配置”写入本机 `sdkconfig`；“固件操作”只负责图形化配置、编译、烧录和监视。环境有问题应回到“环境中心”统一修复。
 
-用于把真实 ESP32-S3 接到电脑上的本地服务。脚本会提示填写设备 ID 和电脑局域网 IP，然后生成本机配置，并在终端里打印固件 `menuconfig` 应该填写的值，例如：
+“使用模拟传感器数据”仍然运行在真实 ESP32-S3 固件内部，用来替代物理传感器读数；“虚拟设备”则是在电脑上运行的完整 MQTT 设备模拟器，不需要开发板，两者不是同一功能。
 
-```text
-APP_MQTT_BROKER_URI=mqtt://<电脑局域网IP>:1883
-APP_IMAGE_UPLOAD_URL=http://<电脑局域网IP>:8000/api/devices/esp32s3-001/images
-```
+### 命令行开发
 
-例子：电脑 IP 是 `192.168.1.23`，ESP32-S3 和电脑在同一个 Wi-Fi 下，就运行这个任务，把终端输出的 MQTT 和图片上传地址填到固件图形化配置里。
-
-`配置：填写 LLM API`
-
-用于把 mock AI 换成真实 OpenAI 兼容模型。脚本会提示填写 endpoint、model 和 API Key，API Key 输入时不会明文显示。常见 endpoint 示例见 `server/.env.example`。
-
-例子：准备展示真实多模态分析时，先运行这个任务，填写模型配置；如果还要接真实设备，再运行 `配置：真实设备演示` 检查设备连接地址。
-
-`启动：完整 Docker 演示栈`
-
-用于一键启动完整本地系统：TimescaleDB/PostgreSQL、EMQX、FastAPI server 和 Next.js web。启动后访问：
-
-- Web 控制台：`http://localhost:3000`
-- 后端健康检查：`http://localhost:8000/health`
-- EMQX 控制台：`http://localhost:18083`，默认账号 `admin / public`
-
-例子：做演示时最推荐用这个任务，因为数据库、MQTT、后端和前端会一起启动，不需要分别开多个终端。
-
-`停止：完整 Docker 演示栈`
-
-用于停止上面的 Docker 服务。它只执行 `docker compose down`，不会删除数据库卷和上传文件卷；下次启动还能继续使用已有数据。
-
-例子：演示结束后点这个任务，释放端口 `3000`、`8000`、`1883`、`5432`。
-
-`启动：后端开发服务`
-
-用于代码开发时单独启动 FastAPI 后端。它在 `server/` 目录执行 `uv run python run_dev.py`。使用这个任务前，一般需要 Docker 里的 PostgreSQL 和 EMQX 已经在运行，并且已经生成 `server/.env`。
-
-例子：只改后端接口、MQTT 接入或 LLM 逻辑时，可以开数据库和 EMQX，再单独跑这个任务观察后端日志。
-
-`启动：前端控制台`
-
-用于代码开发时单独启动 Next.js 前端。它在 `web/` 目录执行 `pnpm dev`，默认访问 `http://localhost:3000`。使用这个任务前，后端应在 `http://localhost:8000`，或者通过 `web/.env.local` 改过 `NEXT_PUBLIC_API_BASE_URL`。
-
-例子：只改仪表盘 UI、图表或交互时，运行这个任务即可，不需要重新构建完整 Docker 栈。
-
-`固件：安装/修复 ESP-IDF 环境`
-
-首次使用固件任务，或看到 `idf.py` 找不到、ESP-IDF Python 环境缺失等报错时，先运行此任务。它会为 ESP32-S3 下载或修复 ESP-IDF 工具链和 Python 环境；完成后再运行下面的配置或构建任务。
-
-`面板：启动本地配置面板`
-
-双击项目根目录的 `启动配置面板.cmd` 也可打开，是最推荐的非代码团队成员入口。它在本地 `127.0.0.1:8765` 启动一个网页控制台，整合了四个配置步骤，也可在面板中一键编译、烧录并查看日志。
-
-`固件：打开图形化配置`
-
-用于打开 ESP-IDF 的 `menuconfig` 图形化配置界面。任务会自动找到并加载已安装的 ESP-IDF 环境；这里配置 ESP32-S3 端的设备 ID、Wi-Fi、MQTT Broker、图片上传 URL、摄像头/屏幕/执行器开关和硬件引脚。
-
-例子：运行 `配置：真实设备演示` 后，把它打印出来的 MQTT 和图片上传地址复制到这个图形化配置界面里。
-
-`固件：构建 ESP32-S3`
-
-用于编译固件。它在 `firmware/esp32s3/` 执行：
-
-```powershell
-idf.py -B build build
-```
-
-例子：改完 `menuconfig` 或固件代码后，先运行这个任务确认能编译，再烧录到开发板。
-
-`固件：烧录 ESP32-S3`
-
-把编译生成的固件烧录到 ESP32-S3 开发板。若未插入开发板或串口未正确安装驱动，会报告串口不可用。
-
-`固件：烧录并监视 ESP32-S3`
-
-烧录后立即启动串口监视，方便直接在 VS Code 终端中查看固件启动日志、Wi-Fi 连接状态和 MQTT 遥测上报。
-
-### 推荐使用流程
-
-纯软件离线演示：
-
-```text
-配置：本地离线演示（mock AI）
-启动：完整 Docker 演示栈
-打开 http://localhost:3000
-```
-
-真实 ESP32-S3 演示：
-
-```text
-配置：真实设备演示
-固件：打开图形化配置
-固件：构建 ESP32-S3
-固件：烧录并监视 ESP32-S3
-启动：完整 Docker 演示栈
-打开 http://localhost:3000
-```
-
-或者直接双击 `启动配置面板.cmd`，在浏览器里完成全部配置和编译烧录。
-
-真实 LLM + 真实设备演示：
-
-```text
-配置：填写 LLM API
-配置：真实设备演示
-固件：打开图形化配置
-固件：构建 ESP32-S3
-启动：完整 Docker 演示栈
-```
-
-启动完整 AIoT 服务栈（TimescaleDB、EMQX、server、web）：
+Windows 手动开发命令使用 PowerShell 7。启动完整 AIoT 服务栈（TimescaleDB、EMQX、server、web）：
 
 ```powershell
 docker compose up --build
+```
+
+如需手动运行虚拟设备（Docker 栈已就绪）：
+
+```powershell
+server\.venv\Scripts\python.exe tools\simulate-device.py --scenario air-alert --device-id esp32s3-001
 ```
 
 直接运行服务端（需要 Docker 里的 `postgres` + `emqx` 在跑）：
@@ -206,8 +113,10 @@ pnpm dev
 
 ```powershell
 cd firmware\esp32s3
-idf.py -B build build
+idf.py -B build-esp32s3 build
 ```
+
+VS Code 的 `Tasks: Run Task` 仍可作为快捷入口；任务定义在 `.vscode/tasks.json`。固件环境检测/修复以可视化面板的“环境中心”为统一入口。
 
 ## 质量检查
 

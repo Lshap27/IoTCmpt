@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     autopilot_enabled: bool = True
     autopilot_cooldown_seconds: float = 120.0
-    autopilot_min_confidence: float = 0.6
+    autopilot_min_confidence: float = Field(default=0.6, ge=0.0, le=1.0)
     autopilot_trigger_levels: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["alert"])
 
     @field_validator("cors_origins", "autopilot_trigger_levels", mode="before")
@@ -71,6 +71,15 @@ class Settings(BaseSettings):
         if value not in allowed:
             raise ValueError(f"llm_reasoning_effort must be one of {sorted(allowed)}")
         return value
+
+    @field_validator("autopilot_trigger_levels")
+    @classmethod
+    def check_autopilot_trigger_levels(cls, value: list[str]) -> list[str]:
+        allowed = {"good", "watch", "alert"}
+        normalized = list(dict.fromkeys(item.strip().lower() for item in value if item.strip()))
+        if not normalized or any(item not in allowed for item in normalized):
+            raise ValueError("autopilot_trigger_levels must contain one or more of: good, watch, alert")
+        return normalized
 
     @field_validator("base_url")
     @classmethod

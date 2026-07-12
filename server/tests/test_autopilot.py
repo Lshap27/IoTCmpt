@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 
+import pytest
+from pydantic import ValidationError
+
 from app.core import config
 from app.db import models
 from app.schemas import AiDecision, CommandMessage, TelemetryIn
@@ -19,6 +22,17 @@ def make_settings(**overrides) -> config.Settings:
 
 def naive_utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def test_autopilot_settings_normalize_and_validate_controlled_values():
+    settings = make_settings(autopilot_trigger_levels="alert,watch,alert", autopilot_min_confidence=0.75)
+    assert settings.autopilot_trigger_levels == ["alert", "watch"]
+    assert settings.autopilot_min_confidence == 0.75
+
+    with pytest.raises(ValidationError):
+        make_settings(autopilot_trigger_levels="danger")
+    with pytest.raises(ValidationError):
+        make_settings(autopilot_min_confidence=1.1)
 
 
 class FakeMqtt:

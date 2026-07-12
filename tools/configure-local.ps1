@@ -13,6 +13,10 @@ param(
     [string] $AutopilotEnabled,
     [string] $AutopilotMinConfidence,
     [string] $AutopilotTriggerLevels,
+    [ValidateSet("Simulator", "Real")]
+    [string] $DemoDeviceMode,
+    [ValidateSet("Mock", "Online")]
+    [string] $DemoAiMode,
 
     # 面板/自动化调用时使用：跳过所有交互提问，未指定的参数取默认值。
     [switch] $NonInteractive,
@@ -42,6 +46,9 @@ function Get-DefaultLanAddress {
             Where-Object {
                 $_.IPAddress -ne "127.0.0.1" -and
                 $_.IPAddress -notlike "169.254.*" -and
+                $_.IPAddress -notlike "198.18.*" -and
+                $_.IPAddress -notlike "198.19.*" -and
+                $_.InterfaceAlias -notmatch "vEthernet|WSL|Hyper-V|Default Switch|Docker|Loopback|Clash|TUN|TAP|Tailscale|VPN|WireGuard|Wintun|ZeroTier" -and
                 $_.PrefixOrigin -in @("Dhcp", "Manual")
             } |
             Sort-Object { $metrics[$_.InterfaceIndex] }, InterfaceIndex
@@ -219,6 +226,10 @@ function New-ComposeEnvLines {
 
     $orderedKeys = @(
         "NEXT_PUBLIC_API_BASE_URL",
+        "AIOT_DEMO_DEVICE_MODE",
+        "AIOT_DEMO_AI_MODE",
+        "AIOT_DEMO_DEVICE_ID",
+        "AIOT_DEMO_SCENARIO",
         "AIOT_CORS_ORIGINS",
         "AIOT_LLM_ENDPOINT",
         "AIOT_LLM_API_KEY",
@@ -327,11 +338,17 @@ $llmVisionValue = if ([string]::IsNullOrWhiteSpace($LlmVisionEnabled)) { "true" 
 $autopilotEnabledValue = if ([string]::IsNullOrWhiteSpace($AutopilotEnabled)) { "true" } else { $AutopilotEnabled.Trim().ToLowerInvariant() }
 $autopilotMinConfidenceValue = if ([string]::IsNullOrWhiteSpace($AutopilotMinConfidence)) { "0.6" } else { $AutopilotMinConfidence.Trim() }
 $autopilotTriggerLevelsValue = if ([string]::IsNullOrWhiteSpace($AutopilotTriggerLevels)) { "alert" } else { $AutopilotTriggerLevels.Trim() }
+$demoDeviceModeValue = if ([string]::IsNullOrWhiteSpace($DemoDeviceMode)) { "Simulator" } else { $DemoDeviceMode }
+$demoAiModeValue = if ([string]::IsNullOrWhiteSpace($DemoAiMode)) { "Mock" } else { $DemoAiMode }
+$demoScenarioValue = Get-ExistingEnvValue -Path $ComposeEnvPath -Key "AIOT_DEMO_SCENARIO"
+if ([string]::IsNullOrWhiteSpace($demoScenarioValue)) { $demoScenarioValue = "air-alert" }
 
 switch ($Preset) {
     "MockDemo" {
         Write-Host "Configuring local offline demo with AIOT_LLM_ENDPOINT=mock." -ForegroundColor Cyan
         $llmEndpointValue = "mock"
+        $demoDeviceModeValue = "Simulator"
+        $demoAiModeValue = "Mock"
     }
     "DeviceDemo" {
         Write-Host "Configuring real-device demo defaults." -ForegroundColor Cyan
@@ -354,6 +371,8 @@ switch ($Preset) {
         $autopilotEnabledValue = if (Resolve-Bool -Bound $AutopilotEnabled -Prompt "Enable autopilot by default?" -Default $true) { "true" } else { "false" }
         $autopilotMinConfidenceValue = Resolve-Value -Bound $AutopilotMinConfidence -Prompt "Autopilot minimum confidence" -Default "0.6"
         $autopilotTriggerLevelsValue = Resolve-Value -Bound $AutopilotTriggerLevels -Prompt "Autopilot trigger levels (comma-separated good/watch/alert)" -Default "alert"
+        $demoDeviceModeValue = "Real"
+        $demoAiModeValue = if ($llmEndpointValue -eq "mock") { "Mock" } else { "Online" }
     }
     "LlmDemo" {
         Write-Host "Configuring local demo with a real OpenAI-compatible LLM endpoint." -ForegroundColor Cyan
@@ -366,8 +385,30 @@ switch ($Preset) {
             }
         }
         $llmVisionValue = if (Resolve-Bool -Bound $LlmVisionEnabled -Prompt "Attach latest JPEG to LLM requests?" -Default $true) { "true" } else { "false" }
+        $demoDeviceModeValue = "Simulator"
+        $demoAiModeValue = "Online"
     }
 }
+
+if ($DemoDeviceMode) { $demoDeviceModeValue = $DemoDeviceMode }
+if ($DemoAiMode) { $demoAiModeValue = $DemoAiMode }
+
+if ($deviceIdValue -notmatch "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$") {
+    throw "Device ID must be 1-64 characters and use only letters, numbers, dot, underscore, or hyphen."
+}
+$confidenceNumber = 0.0
+if (-not [double]::TryParse($autopilotMinConfidenceValue, [ref] $confidenceNumber) -or
+    $confidenceNumber -lt 0 -or $confidenceNumber -gt 1) {
+    throw "Autopilot minimum confidence must be between 0 and 1."
+}
+$allowedTriggerLevels = @("good", "watch", "alert")
+$triggerLevels = @($autopilotTriggerLevelsValue.Split(",") |
+    ForEach-Object { $_.Trim().ToLowerInvariant() } |
+    Where-Object { $_ } | Select-Object -Unique)
+if ($triggerLevels.Count -eq 0 -or @($triggerLevels | Where-Object { $_ -notin $allowedTriggerLevels }).Count -gt 0) {
+    throw "Autopilot trigger levels must contain one or more of: good, watch, alert."
+}
+$autopilotTriggerLevelsValue = $triggerLevels -join ","
 
 $corsOrigins = @(
     "http://localhost:3000",
@@ -390,6 +431,10 @@ $serverConfig = @{
     AIOT_MQTT_PASSWORD = ""
     AIOT_MQTT_RECONNECT_SECONDS = "3"
     NEXT_PUBLIC_API_BASE_URL = $apiBaseUrlValue
+    AIOT_DEMO_DEVICE_MODE = $demoDeviceModeValue
+    AIOT_DEMO_AI_MODE = $demoAiModeValue
+    AIOT_DEMO_DEVICE_ID = $deviceIdValue
+    AIOT_DEMO_SCENARIO = $demoScenarioValue
     AIOT_CORS_ORIGINS = $corsOrigins -join ","
     AIOT_LLM_ENDPOINT = $llmEndpointValue
     AIOT_LLM_API_KEY = $llmApiKeyValue

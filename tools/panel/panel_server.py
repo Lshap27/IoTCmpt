@@ -17,6 +17,9 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.error import URLError
+from urllib.parse import urlparse
+from urllib.request import urlopen
 
 REPO = Path(__file__).resolve().parents[2]
 TOOLS = REPO / "tools"
@@ -37,13 +40,18 @@ class ApiError(Exception):
 
 def ps_file_args(script, *extra):
     return [
-        "powershell.exe", "-NoLogo", "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-File", str(TOOLS / script),
+        "powershell.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(TOOLS / script),
     ] + list(extra)
 
 
 # ---------------------------------------------------------------- job runner
+
 
 class Job:
     def __init__(self, name):
@@ -55,7 +63,7 @@ class Job:
         self.lock = threading.Lock()
         self.status = "idle"  # idle | running | done | failed | stopped
 
-    def start(self, cmd, cwd):
+    def start(self, cmd, cwd, on_success=None):
         if self.proc and self.proc.poll() is None:
             raise ApiError(409, "任务 {} 正在运行中".format(self.name))
         with self.lock:
@@ -65,10 +73,14 @@ class Job:
             self.status = "running"
         try:
             self.proc = subprocess.Popen(
-                cmd, cwd=str(cwd),
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL, text=True,
-                encoding="utf-8", errors="replace",
+                cmd,
+                cwd=str(cwd),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
             )
         except FileNotFoundError:
             with self.lock:
@@ -78,9 +90,9 @@ class Job:
                 "未找到命令 {}。请先安装它（例如 docker / uv / pnpm），"
                 "或改用 Docker 演示栈。".format(cmd[0]),
             )
-        threading.Thread(target=self._pump, daemon=True).start()
+        threading.Thread(target=self._pump, args=(on_success,), daemon=True).start()
 
-    def _pump(self):
+    def _pump(self, on_success):
         for line in self.proc.stdout:
             with self.lock:
                 self.lines.append(line.rstrip("\r\n"))
@@ -92,6 +104,12 @@ class Job:
             if self.status == "running":
                 self.status = "done" if code == 0 else "failed"
             self.lines.append("[进程退出，代码 {}]".format(code))
+        if code == 0 and on_success:
+            try:
+                on_success()
+            except Exception as exc:  # noqa: BLE001
+                with self.lock:
+                    self.lines.append("[后续操作失败] {}".format(exc))
 
     def stop(self):
         if not self.proc or self.proc.poll() is not None:
@@ -120,6 +138,7 @@ def get_job(name):
 
 # ---------------------------------------------------------------- actions
 
+
 def start_console_window(args, cwd):
     """交互式 TUI（menuconfig / monitor）在独立控制台窗口运行。"""
     subprocess.Popen(args, cwd=str(cwd), creationflags=CREATE_NEW_CONSOLE)
@@ -130,35 +149,169 @@ def port_args(body):
     return ["-Port", port] if port else []
 
 
+def environment_args(action, body=None):
+    body = body or {}
+    args = ps_file_args("environment-manager.ps1", "-Action", action)
+    components = body.get("components") or []
+    if components:
+        if not isinstance(components, list):
+            raise ApiError(400, "components 必须是数组")
+        args += ["-Components", ",".join(str(item) for item in components)]
+    if body.get("networkMode"):
+        args += ["-NetworkMode", str(body["networkMode"])]
+    if body.get("proxyUrl"):
+        args += ["-ProxyUrl", str(body["proxyUrl"])]
+    if body.get("mirrorUrl"):
+        args += ["-MirrorUrl", str(body["mirrorUrl"])]
+    if body.get("confirm"):
+        args += ["-Confirm", str(body["confirm"])]
+    return args
+
+
+def start_environment_job(action, body):
+    get_job("environment").start(environment_args(action, body), REPO)
+
+
+SIMULATOR_SCENARIOS = {"normal", "air-alert", "smoke"}
+DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def write_compose_env_value(key, value):
+    path = REPO / ".env"
+    lines = path.read_text(encoding="utf-8-sig").splitlines() if path.exists() else []
+    replacement = "{}={}".format(key, value)
+    pattern = re.compile(r"^{}=".format(re.escape(key)))
+    for index, line in enumerate(lines):
+        if pattern.match(line):
+            lines[index] = replacement
+            break
+    else:
+        lines.append(replacement)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def simulator_config(body=None):
+    body = body or {}
+    compose = parse_env(REPO / ".env")
+    scenario = str(
+        body.get("scenario") or compose.get("AIOT_DEMO_SCENARIO") or "air-alert"
+    )
+    device_id = str(
+        body.get("deviceId") or compose.get("AIOT_DEMO_DEVICE_ID") or "esp32s3-001"
+    )
+    if scenario not in SIMULATOR_SCENARIOS:
+        raise ApiError(400, "模拟场景必须是 normal、air-alert 或 smoke")
+    if not DEVICE_ID_PATTERN.fullmatch(device_id):
+        raise ApiError(
+            400, "设备 ID 必须为 1-64 位，只能包含字母、数字、点、下划线和连字符"
+        )
+    return compose, scenario, device_id
+
+
+def start_simulator(body=None, automatic=False):
+    compose, scenario, device_id = simulator_config(body)
+    if automatic and compose.get("AIOT_DEMO_DEVICE_MODE", "Simulator") != "Simulator":
+        return
+    job = get_job("simulator")
+    if job.running():
+        if automatic:
+            return
+        job.stop()
+        for _ in range(20):
+            if not job.running():
+                break
+            time.sleep(0.1)
+        if job.running():
+            raise ApiError(409, "旧虚拟设备尚未停止，请稍后重试")
+    if automatic:
+        for _ in range(60):
+            if probe(1883) and backend_ready():
+                break
+            time.sleep(1)
+        else:
+            raise RuntimeError("等待 MQTT 和后端就绪超时，虚拟设备未启动")
+    elif not (probe(1883) and probe(8000)):
+        raise ApiError(409, "请先启动 Docker 演示栈或后端与 MQTT 服务")
+
+    python = REPO / "server" / ".venv" / "Scripts" / "python.exe"
+    if not python.exists():
+        raise ApiError(409, "缺少 server/.venv；请先在环境中心点击“一键补全演示环境”")
+    write_compose_env_value("AIOT_DEMO_SCENARIO", scenario)
+    job.start(
+        [
+            str(python),
+            str(TOOLS / "simulate-device.py"),
+            "--scenario",
+            scenario,
+            "--device-id",
+            device_id,
+        ],
+        REPO,
+    )
+
+
+def backend_ready():
+    try:
+        with urlopen("http://127.0.0.1:8000/health", timeout=1) as response:
+            return response.status == 200
+    except (OSError, URLError):
+        return False
+
+
+def start_docker_stack(_body):
+    get_job("docker-up").start(
+        ["docker", "compose", "up", "--build", "-d"],
+        REPO,
+        on_success=lambda: start_simulator(automatic=True),
+    )
+
+
+def stop_docker_stack(_body):
+    simulator = get_job("simulator")
+    if simulator.running():
+        simulator.stop()
+    get_job("docker-down").start(["docker", "compose", "down"], REPO)
+
+
 ACTIONS = {
-    "docker-up": lambda b: get_job("docker-up").start(
-        ["docker", "compose", "up", "--build", "-d"], REPO),
-    "docker-down": lambda b: get_job("docker-down").start(
-        ["docker", "compose", "down"], REPO),
+    "docker-up": start_docker_stack,
+    "docker-down": stop_docker_stack,
     "docker-logs": lambda b: get_job("docker-logs").start(
-        ["docker", "compose", "logs", "-f", "--tail", "100"], REPO),
+        ["docker", "compose", "logs", "-f", "--tail", "100"], REPO
+    ),
     "backend-start": lambda b: get_job("backend").start(
-        ["uv", "run", "python", "run_dev.py"], REPO / "server"),
+        ["uv", "run", "python", "run_dev.py"], REPO / "server"
+    ),
     "frontend-start": lambda b: get_job("frontend").start(
-        ["cmd", "/c", "pnpm", "dev"], REPO / "web"),
-    "idf-install": lambda b: get_job("idf").start(
-        ps_file_args("esp-idf-task.ps1", "-Action", "Install"), REPO),
+        ["cmd", "/c", "pnpm", "dev"], REPO / "web"
+    ),
+    "simulator-start": lambda b: start_simulator(b),
     "idf-build": lambda b: get_job("idf").start(
-        ps_file_args("esp-idf-task.ps1", "-Action", "Build"), FIRMWARE),
+        ps_file_args("esp-idf-task.ps1", "-Action", "Build"), FIRMWARE
+    ),
     "idf-flash": lambda b: get_job("idf").start(
-        ps_file_args("esp-idf-task.ps1", "-Action", "Flash", *port_args(b)), FIRMWARE),
+        ps_file_args("esp-idf-task.ps1", "-Action", "Flash", *port_args(b)), FIRMWARE
+    ),
+    "env-install": lambda b: start_environment_job("Install", b),
+    "env-uninstall": lambda b: start_environment_job("Uninstall", b),
+    "env-network": lambda b: start_environment_job("Network", b),
+    "env-test": lambda b: start_environment_job("TestNetwork", b),
 }
 
 CONSOLE_ACTIONS = {
     "idf-menuconfig": lambda b: start_console_window(
-        ps_file_args("esp-idf-task.ps1", "-Action", "Menuconfig"), FIRMWARE),
+        ps_file_args("esp-idf-task.ps1", "-Action", "Menuconfig"), FIRMWARE
+    ),
     "idf-monitor": lambda b: start_console_window(
-        ps_file_args("esp-idf-task.ps1", "-Action", "Monitor", *port_args(b)), FIRMWARE),
+        ps_file_args("esp-idf-task.ps1", "-Action", "Monitor", *port_args(b)), FIRMWARE
+    ),
     "idf-flash-monitor": lambda b: start_console_window(
-        ps_file_args("esp-idf-task.ps1", "-Action", "FlashMonitor", *port_args(b)), FIRMWARE),
+        ps_file_args("esp-idf-task.ps1", "-Action", "FlashMonitor", *port_args(b)),
+        FIRMWARE,
+    ),
 }
 
-STOPPABLE = {"docker-logs", "backend", "frontend", "idf"}
+STOPPABLE = {"docker-logs", "backend", "frontend", "simulator", "idf", "environment"}
 
 
 # ---------------------------------------------------------------- env config
@@ -195,6 +348,28 @@ def get_env_config():
     return data
 
 
+def validate_http_url(value, label):
+    parsed = urlparse(str(value or "").strip())
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ApiError(400, "{}必须是完整的 http(s) 地址".format(label))
+
+
+def normalize_trigger_levels(value):
+    if isinstance(value, list):
+        levels = value
+    else:
+        levels = str(value or "").split(",")
+    levels = list(
+        dict.fromkeys(str(item).strip().lower() for item in levels if str(item).strip())
+    )
+    allowed = {"good", "watch", "alert"}
+    if not levels or any(level not in allowed for level in levels):
+        raise ApiError(
+            400, "自动处置触发级别只能选择 good、watch、alert，且至少选择一项"
+        )
+    return levels
+
+
 ENV_PARAM_FLAGS = [
     ("deviceId", "-DeviceId"),
     ("lanAddress", "-LanAddress"),
@@ -213,10 +388,52 @@ ENV_BOOL_FLAGS = [
 
 
 def save_env_config(body):
-    preset = body.get("preset", "MockDemo")
+    device_mode = body.get("deviceMode")
+    ai_mode = body.get("aiMode")
+    if device_mode is not None or ai_mode is not None:
+        if device_mode not in ("Simulator", "Real"):
+            raise ApiError(400, "设备来源必须是 Simulator 或 Real")
+        if ai_mode not in ("Mock", "Online"):
+            raise ApiError(400, "AI 模式必须是 Mock 或 Online")
+        endpoint = str(body.get("llmEndpoint") or "").strip()
+        if ai_mode == "Online" and (not endpoint or endpoint == "mock"):
+            raise ApiError(400, "在线大模型需要填写真实 LLM 接口地址")
+        if ai_mode == "Online":
+            validate_http_url(endpoint, "LLM 接口地址")
+            if not str(body.get("llmModel") or "").strip():
+                raise ApiError(400, "在线大模型需要填写模型名称")
+        if ai_mode == "Mock":
+            body["llmEndpoint"] = "mock"
+            body["llmModel"] = "demo-model"
+        preset = (
+            "DeviceDemo"
+            if device_mode == "Real"
+            else ("LlmDemo" if ai_mode == "Online" else "MockDemo")
+        )
+    else:
+        # 兼容旧版面板和现有 VS Code 任务使用的预设名称。
+        preset = body.get("preset", "MockDemo")
     if preset not in ("MockDemo", "DeviceDemo", "LlmDemo"):
         raise ApiError(400, "未知预设 {}".format(preset))
+    device_id = str(body.get("deviceId") or "esp32s3-001").strip()
+    if not DEVICE_ID_PATTERN.fullmatch(device_id):
+        raise ApiError(
+            400, "设备 ID 必须为 1-64 位，只能包含字母、数字、点、下划线和连字符"
+        )
+    body["deviceId"] = device_id
+    try:
+        confidence = float(body.get("autopilotMinConfidence", 0.6))
+    except (TypeError, ValueError):
+        raise ApiError(400, "自动处置最低置信度必须是 0 到 1 之间的数字")
+    if not 0 <= confidence <= 1:
+        raise ApiError(400, "自动处置最低置信度必须在 0 到 1 之间")
+    body["autopilotMinConfidence"] = str(confidence)
+    body["autopilotTriggerLevels"] = ",".join(
+        normalize_trigger_levels(body.get("autopilotTriggerLevels", "alert"))
+    )
     args = ["-Preset", preset, "-NonInteractive"]
+    if device_mode is not None:
+        args += ["-DemoDeviceMode", device_mode, "-DemoAiMode", ai_mode]
     for key, flag in ENV_PARAM_FLAGS:
         value = body.get(key)
         if value:
@@ -227,12 +444,42 @@ def save_env_config(body):
             args += [flag, "true" if value else "false"]
     result = subprocess.run(
         ps_file_args("configure-local.ps1", *args),
-        cwd=str(REPO), capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=60,
+        cwd=str(REPO),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=60,
     )
     if result.returncode != 0:
         raise ApiError(500, "配置脚本失败：{}\n{}".format(result.stdout, result.stderr))
-    return {"ok": True, "output": result.stdout}
+
+    stack_reconfigured = False
+    if probe(8000) or probe(1883) or probe(3000):
+        simulator = get_job("simulator")
+        if simulator.running():
+            simulator.stop()
+        compose = subprocess.run(
+            ["docker", "compose", "up", "-d"],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=180,
+        )
+        if compose.returncode != 0:
+            raise ApiError(
+                500, "配置已保存，但 Docker 栈重新应用失败：{}".format(compose.stderr)
+            )
+        stack_reconfigured = True
+        if device_mode == "Simulator":
+            start_simulator({"deviceId": device_id}, automatic=True)
+    return {
+        "ok": True,
+        "output": result.stdout,
+        "stackReconfigured": stack_reconfigured,
+    }
 
 
 # ---------------------------------------------------------------- firmware config
@@ -293,6 +540,30 @@ def save_firmware_config(body):
     if unknown:
         raise ApiError(400, "不支持的配置项：{}".format(sorted(unknown)))
 
+    device_id = str(values.get("CONFIG_APP_DEVICE_ID") or "").strip()
+    if device_id and not DEVICE_ID_PATTERN.fullmatch(device_id):
+        raise ApiError(
+            400, "固件设备 ID 必须为 1-64 位，只能包含字母、数字、点、下划线和连字符"
+        )
+    if "CONFIG_APP_SENSOR_INTERVAL_MS" in values:
+        try:
+            interval = int(values["CONFIG_APP_SENSOR_INTERVAL_MS"])
+        except (TypeError, ValueError):
+            raise ApiError(400, "传感器采集间隔必须是整数")
+        if not 1000 <= interval <= 60000:
+            raise ApiError(400, "传感器采集间隔必须在 1000 到 60000 毫秒之间")
+    if (
+        values.get("CONFIG_APP_WIFI_ENABLED")
+        and not str(values.get("CONFIG_APP_WIFI_SSID") or "").strip()
+    ):
+        raise ApiError(400, "启用 Wi-Fi 时必须填写 Wi-Fi 名称")
+    if values.get("CONFIG_APP_MQTT_ENABLED"):
+        mqtt = urlparse(str(values.get("CONFIG_APP_MQTT_BROKER_URI") or "").strip())
+        if mqtt.scheme not in ("mqtt", "mqtts") or not mqtt.netloc:
+            raise ApiError(400, "MQTT 服务器地址必须是完整的 mqtt:// 或 mqtts:// 地址")
+    if values.get("CONFIG_APP_IMAGE_UPLOAD_ENABLED"):
+        validate_http_url(values.get("CONFIG_APP_IMAGE_UPLOAD_URL"), "图片上传地址")
+
     if SDKCONFIG.exists():
         text = SDKCONFIG.read_text(encoding="utf-8", errors="replace")
     elif SDKCONFIG_DEFAULTS.exists():
@@ -320,6 +591,7 @@ def save_firmware_config(body):
 
 
 # ---------------------------------------------------------------- status
+
 
 def probe(port):
     with socket.socket() as s:
@@ -351,6 +623,26 @@ def _lan_ip_usable(ip):
 
 def detect_lan_ip():
     candidates = []
+    # Windows hostname resolution often returns WSL/Hyper-V adapters first.
+    # Prefer a connected physical adapter ordered by Windows interface metric.
+    try:
+        script = (
+            "$m=@{}; Get-NetIPInterface -AddressFamily IPv4 -ConnectionState Connected | "
+            "% {$m[$_.InterfaceIndex]=$_.InterfaceMetric}; "
+            "Get-NetIPAddress -AddressFamily IPv4 | ? {"
+            "$_.IPAddress -ne '127.0.0.1' -and $_.IPAddress -notlike '169.254.*' -and "
+            "$_.InterfaceAlias -notmatch 'vEthernet|WSL|Hyper-V|Default Switch|Docker|Loopback|Clash|TUN|TAP|Tailscale|VPN|WireGuard|Wintun|ZeroTier'"
+            "} | sort {$m[$_.InterfaceIndex]} | select -ExpandProperty IPAddress"
+        )
+        result = subprocess.run(
+            ["powershell.exe", "-NoLogo", "-NoProfile", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        candidates.extend(line.strip() for line in result.stdout.splitlines())
+    except (OSError, subprocess.SubprocessError):
+        pass
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
@@ -365,7 +657,7 @@ def detect_lan_ip():
     usable = [ip for ip in candidates if _lan_ip_usable(ip)]
     if not usable:
         return "127.0.0.1"
-    return sorted(set(usable), key=_lan_ip_rank)[0]
+    return list(dict.fromkeys(usable))[0]
 
 
 def get_status():
@@ -386,12 +678,37 @@ def get_status():
 
 def get_comports():
     result = subprocess.run(
-        ["powershell.exe", "-NoLogo", "-NoProfile", "-Command",
-         "[System.IO.Ports.SerialPort]::GetPortNames() -join ','"],
-        capture_output=True, text=True, timeout=15,
+        [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-Command",
+            "[System.IO.Ports.SerialPort]::GetPortNames() -join ','",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
     )
     ports = [p for p in result.stdout.strip().split(",") if p]
     return {"ports": ports}
+
+
+def get_environment():
+    result = subprocess.run(
+        environment_args("Check"),
+        cwd=str(REPO),
+        capture_output=True,
+        text=True,
+        encoding="utf-8-sig",
+        errors="replace",
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise ApiError(500, "环境检查失败：{}".format(result.stderr or result.stdout))
+    try:
+        return json.loads(result.stdout.lstrip("\ufeff"))
+    except ValueError:
+        raise ApiError(500, "环境检查返回了无效数据")
 
 
 # ---------------------------------------------------------------- http
@@ -442,7 +759,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header(
             "Content-Type",
-            CONTENT_TYPES.get(resolved.suffix.lower(), "application/octet-stream"))
+            CONTENT_TYPES.get(resolved.suffix.lower(), "application/octet-stream"),
+        )
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -477,7 +795,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.wfile.flush()
                 if not alive and status != "running" and not new:
                     self.wfile.write(
-                        "event: end\ndata: {}\n\n".format(status).encode("utf-8"))
+                        "event: end\ndata: {}\n\n".format(status).encode("utf-8")
+                    )
                     self.wfile.flush()
                     return
                 time.sleep(0.4)
@@ -492,18 +811,22 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/":
                 self.send_file(STATIC / "index.html")
             elif path.startswith("/static/"):
-                self.send_file(STATIC / path[len("/static/"):])
+                self.send_file(STATIC / path[len("/static/") :])
             elif path == "/api/status":
                 self.send_json(get_status())
             elif path == "/api/comports":
                 self.send_json(get_comports())
+            elif path == "/api/environment":
+                self.send_json(get_environment())
             elif path == "/api/config/env":
                 self.send_json(get_env_config())
             elif path == "/api/config/firmware":
-                self.send_json({
-                    "sdkconfigExists": SDKCONFIG.exists(),
-                    "values": read_sdkconfig_values(),
-                })
+                self.send_json(
+                    {
+                        "sdkconfigExists": SDKCONFIG.exists(),
+                        "values": read_sdkconfig_values(),
+                    }
+                )
             else:
                 m = re.fullmatch(r"/api/actions/([\w-]+)/logs", path)
                 if m:

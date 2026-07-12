@@ -97,12 +97,7 @@
       "label": "停止：完整 Docker 演示栈",
       "type": "process",
       "command": "powershell.exe",
-      "args": [
-        "-NoLogo",
-        "-NoProfile",
-        "-Command",
-        "docker compose down"
-      ],
+      "args": ["-NoLogo", "-NoProfile", "-Command", "docker compose down"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -116,12 +111,7 @@
       "label": "启动：后端开发服务",
       "type": "process",
       "command": "powershell.exe",
-      "args": [
-        "-NoLogo",
-        "-NoProfile",
-        "-Command",
-        "uv run python run_dev.py"
-      ],
+      "args": ["-NoLogo", "-NoProfile", "-Command", "uv run python run_dev.py"],
       "options": {
         "cwd": "${workspaceFolder}\\server"
       },
@@ -135,12 +125,7 @@
       "label": "启动：前端控制台",
       "type": "process",
       "command": "powershell.exe",
-      "args": [
-        "-NoLogo",
-        "-NoProfile",
-        "-Command",
-        "pnpm dev"
-      ],
+      "args": ["-NoLogo", "-NoProfile", "-Command", "pnpm dev"],
       "options": {
         "cwd": "${workspaceFolder}\\web"
       },
@@ -151,7 +136,7 @@
       }
     },
     {
-      "label": "固件：安装/修复 ESP-IDF 环境",
+      "label": "固件：安装/修复 ESP-IDF 工具链",
       "type": "process",
       "command": "powershell.exe",
       "args": [

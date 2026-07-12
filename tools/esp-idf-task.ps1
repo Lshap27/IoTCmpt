@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("Install", "Menuconfig", "Build", "Flash", "Monitor", "FlashMonitor")]
+    [ValidateSet("Check", "Install", "Menuconfig", "Build", "Flash", "Monitor", "FlashMonitor")]
     [string] $Action,
 
     # 串口号，例如 COM5。留空时由 idf.py 自动探测。
@@ -154,7 +154,6 @@ if ($Action -eq "Install") {
     if (-not $?) {
         exit 1
     }
-    exit 0
 }
 
 try {
@@ -162,7 +161,52 @@ try {
     $idfCommand = Get-Command idf.py -ErrorAction Stop
 }
 catch {
-    throw "ESP-IDF 已找到，但开发环境尚未就绪。请先运行任务 '固件：安装/修复 ESP-IDF 环境'，然后重试。原始原因：$($_.Exception.Message)"
+    throw "ESP-IDF 框架已找到，但工具链尚未就绪。请先运行任务 '固件：安装/修复 ESP-IDF 工具链'，然后重试。原始原因：$($_.Exception.Message)"
+}
+
+function Test-IdfEnvironment {
+    $requiredCommands = @(
+        "python",
+        "cmake",
+        "ninja",
+        "openocd"
+    )
+    $missing = @($requiredCommands | Where-Object {
+        $null -eq (Get-Command $_ -ErrorAction SilentlyContinue)
+    })
+    if ($missing.Count -gt 0) {
+        throw "ESP-IDF 工具链不完整，缺少命令：$($missing -join ', ')"
+    }
+    $xtensaCompiler = @("xtensa-esp-elf-gcc", "xtensa-esp32s3-elf-gcc") |
+        Where-Object { $null -ne (Get-Command $_ -ErrorAction SilentlyContinue) } |
+        Select-Object -First 1
+    if (-not $xtensaCompiler) {
+        throw "ESP-IDF 工具链不完整，缺少 ESP32-S3 Xtensa 编译器。"
+    }
+
+    $versionOutput = (& idf.py --version 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $versionOutput -notmatch "(?i)ESP-IDF\s+v?(\d+)\.(\d+)(?:\.(\d+))?") {
+        throw "无法确认 ESP-IDF 版本：$versionOutput"
+    }
+    $major = [int] $Matches[1]
+    $minor = [int] $Matches[2]
+    if ($major -ne 5 -or $minor -lt 1) {
+        throw "当前项目要求 ESP-IDF >=5.1 且 <6.0，检测到：$versionOutput"
+    }
+
+    $pythonVersion = (& python --version 2>&1 | Out-String).Trim()
+    Write-Host "ESP-IDF environment is ready." -ForegroundColor Green
+    Write-Host "  Framework: $versionOutput"
+    Write-Host "  Framework path: $IdfPath"
+    Write-Host "  Tools root: $env:IDF_TOOLS_PATH"
+    Write-Host "  Python environment: $env:IDF_PYTHON_ENV_PATH"
+    Write-Host "  Python: $pythonVersion"
+    Write-Host "  Xtensa compiler: $xtensaCompiler"
+}
+
+if ($Action -in @("Check", "Install")) {
+    Test-IdfEnvironment
+    exit 0
 }
 
 Push-Location $FirmwarePath

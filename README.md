@@ -54,14 +54,62 @@ fails on drift).
 
 ## Local Development
 
-Use PowerShell 7 on Windows for manual development commands. VS Code tasks use
-the built-in Windows PowerShell (`powershell.exe`), so teammates do not need to
-install PowerShell 7 just to configure or start the local demo.
+### Visual setup panel (recommended)
 
-Start the full AIoT stack (TimescaleDB, EMQX, server, web):
+On Windows, double-click `启动配置面板.cmd`. The local-only panel at
+`127.0.0.1:8765` provides environment checks, project configuration, service
+control, firmware configuration, and firmware operations.
+
+1. Run the Environment Center check. It can install missing prerequisites,
+   test Docker Hub access, select the official registry/a public mirror, and
+   configure Docker Desktop to use a detected local proxy.
+2. ESP-IDF detection and repair are centralized in the Environment Center. It
+   validates the framework, Python environment, CMake, Ninja, ESP32-S3 Xtensa
+   toolchain, and OpenOCD. Working ESP-IDF releases `>=5.1,<6.0` are accepted.
+3. Select the device source and AI mode independently, then save.
+4. Start the Docker demo stack. In Virtual Device mode, the panel waits for
+   MQTT and the API, then starts the host simulator automatically.
+5. Open `http://localhost:3000`. Health is at `http://localhost:8000/health`;
+   EMQX is at `http://localhost:18083` (`admin / public`).
+
+The four supported combinations are Virtual Device + Mock AI (recommended
+offline demo), Virtual Device + Online LLM, Real ESP32-S3 + Mock AI, and Real
+ESP32-S3 + Online LLM. The default air-alert simulator publishes real MQTT
+telemetry/events; the backend persists them, runs Mock AI, publishes autopilot
+commands, and receives command acknowledgements from the simulator. It is not
+frontend-only sample data.
+
+Risky settings are constrained: autopilot levels are selected from `good`,
+`watch`, and `alert`, confidence is limited to `0..1`, and device IDs, URLs,
+intervals, and dependent firmware fields are validated in both the browser and
+backend/tooling.
+
+The generated `.env`, `server/.env`, `web/.env.local`, and firmware `sdkconfig`
+are local files ignored by Git. Never commit Wi-Fi passwords or LLM API keys.
+
+### Real device and firmware
+
+Real Device mode generates LAN-reachable MQTT and image-upload addresses.
+Firmware Operations now only handles menuconfig, build, flash, and monitor;
+repair the ESP-IDF environment from the Environment Center.
+
+Firmware “mock sensor data” still runs on a physical ESP32-S3 and replaces only
+sensor readings. “Virtual Device” is a complete host-side MQTT device simulator
+and requires no board.
+
+### Command-line development
+
+Use PowerShell 7 for manual Windows commands. Start the full AIoT stack
+(TimescaleDB, EMQX, server, web):
 
 ```powershell
 docker compose up --build
+```
+
+Run the virtual device manually after MQTT and the API are ready:
+
+```powershell
+server\.venv\Scripts\python.exe tools\simulate-device.py --scenario air-alert --device-id esp32s3-001
 ```
 
 Run the server directly (requires Docker `postgres` + `emqx` running):
@@ -85,17 +133,16 @@ pnpm install
 pnpm dev
 ```
 
-Build the firmware:
-
-For the first firmware task on a machine, or if `idf.py` cannot be found, run
-`固件：安装/修复 ESP-IDF 环境` from VS Code Tasks first. It installs or repairs
-the ESP-IDF tools and Python environment for ESP32-S3. The firmware Tasks then
-load the detected ESP-IDF environment automatically.
+Build the firmware after loading an ESP-IDF environment:
 
 ```powershell
 cd firmware\esp32s3
-idf.py -B build build
+idf.py -B build-esp32s3 build
 ```
+
+VS Code tasks remain available as shortcuts in `.vscode/tasks.json`; the visual
+panel's Environment Center is the single entry point for ESP-IDF diagnosis and
+repair.
 
 ## Quality Checks
 

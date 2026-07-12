@@ -15,6 +15,7 @@ function Get-PythonCommand {
     $candidates = @(
         @{ Exe = "python"; Args = @() },
         @{ Exe = "py"; Args = @("-3") },
+        @{ Exe = "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"; Args = @() },
         @{ Exe = "C:\Espressif\tools\python\python.exe"; Args = @() }
     )
 
@@ -34,10 +35,22 @@ function Get-PythonCommand {
 
 $python = Get-PythonCommand
 if ($null -eq $python) {
-    Write-Host "未找到 Python 3。请先安装 Python（https://www.python.org/downloads/），" -ForegroundColor Red
-    Write-Host "或运行：winget install Python.Python.3.12" -ForegroundColor Yellow
-    Read-Host "按回车键退出"
-    exit 1
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if ($null -ne $winget) {
+        Write-Host "配置面板需要 Python 3，但当前电脑尚未安装。" -ForegroundColor Yellow
+        $answer = Read-Host "是否现在通过 winget 自动安装 Python 3.12？[Y/n]"
+        if ([string]::IsNullOrWhiteSpace($answer) -or $answer -match "^(y|yes|是)$") {
+            & winget install --id Python.Python.3.12 --exact --accept-source-agreements --disable-interactivity
+            if ($LASTEXITCODE -eq 0) {
+                $python = Get-PythonCommand
+            }
+        }
+    }
+    if ($null -eq $python) {
+        Write-Host "仍未找到 Python 3。请安装 Python 3.12 后重新双击本文件。" -ForegroundColor Red
+        Read-Host "按回车键退出"
+        exit 1
+    }
 }
 
 # 端口已被占用说明面板已在运行，直接打开浏览器即可
