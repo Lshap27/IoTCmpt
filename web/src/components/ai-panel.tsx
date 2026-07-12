@@ -49,7 +49,7 @@ function AutopilotSwitch({
 }) {
   const on = enabled === true;
   return (
-    <label className="inline-flex items-center gap-2 text-xs font-medium text-ink2">
+    <label className="inline-flex min-h-9 items-center gap-2 text-sm font-medium text-ink2">
       <Bot size={14} className={on ? "text-accent" : "text-ink3"} />
       自动决策
       <Switch checked={on} disabled={enabled === null} onCheckedChange={onChange} aria-label="自动决策开关" />
@@ -89,7 +89,7 @@ export function AiPanel({
             <BrainCircuit size={34} className="animate-pulse-soft text-accent" />
             <div>
               <p className="text-sm font-semibold text-ink">AI 正在分析</p>
-              <p className="mt-1 text-xs text-ink3">{describeTrigger(analyzing)}</p>
+              <p className="mt-1 text-sm text-ink2">{describeTrigger(analyzing)}</p>
             </div>
             <div className="shimmer-bar h-1.5 w-40 animate-shimmer rounded-full" />
           </div>
@@ -105,12 +105,12 @@ export function AiPanel({
                 </span>
                 <div>
                   <p className="text-base font-semibold text-ink">{commandLabel(decision.command?.type)}</p>
-                  <p className="text-xs text-ink3">{describeTrigger(decision.trigger) || "最近一次决策"}</p>
+                  <p className="text-sm text-ink2">{describeTrigger(decision.trigger) || "最近一次决策"}</p>
                 </div>
               </div>
               <Badge
                 variant="outline"
-                className="rounded-full border-line px-2 py-0.5 text-[11px] font-medium"
+                className="rounded-full border-line px-2.5 py-1 text-xs font-medium"
                 style={
                   decision.published
                     ? { color: "var(--good)", background: "var(--good-soft)" }
@@ -121,7 +121,7 @@ export function AiPanel({
               </Badge>
             </div>
 
-            <div className="flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center justify-between gap-2 text-sm">
               <Badge
                 variant="outline"
                 className="gap-1.5 rounded-full border-line px-2 py-0.5 font-medium text-ink2"
@@ -134,7 +134,7 @@ export function AiPanel({
             </div>
 
             <div>
-              <div className="flex items-center justify-between text-xs text-ink3">
+              <div className="flex items-center justify-between text-sm text-ink2">
                 <span>置信度</span>
                 <span className="tnum font-medium text-ink2">{confidencePercent}%</span>
               </div>
@@ -149,18 +149,16 @@ export function AiPanel({
               </div>
             </div>
 
-            <p className="flex-1 rounded-lg border border-line bg-raised px-3 py-2 text-xs leading-relaxed text-ink2">
+            <p className="flex-1 rounded-xl border border-line bg-raised px-3.5 py-3 text-sm leading-relaxed text-ink2">
               {decision.reason || "（模型未给出理由）"}
             </p>
 
-            <p className="text-[11px] text-ink3">
-              模型 {decision.model || "--"} · {formatDateTime(decision.command?.created_at)}
-            </p>
+            <p className="text-xs text-ink3">{formatDateTime(decision.command?.created_at)}</p>
           </div>
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 py-6 text-center text-ink3">
             <Sparkles size={26} />
-            <p className="text-xs">暂无决策记录：等待自动触发，或立即发起一次分析</p>
+            <p className="max-w-64 text-sm leading-relaxed">暂无决策记录，可立即发起分析</p>
           </div>
         )}
 
@@ -168,8 +166,8 @@ export function AiPanel({
           type="button"
           onClick={onAnalyze}
           disabled={Boolean(analyzing)}
-          className="mt-3 w-full gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-white transition-all hover:opacity-90 disabled:opacity-50"
-          style={{ background: "linear-gradient(135deg, var(--accent), var(--m-eco2))" }}
+          className="mt-4 min-h-11 w-full gap-2 rounded-xl px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-strong))" }}
         >
           <Send size={15} />
           {analyzing ? "分析中…" : "立即 AI 分析"}

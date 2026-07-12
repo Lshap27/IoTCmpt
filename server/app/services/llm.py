@@ -5,12 +5,12 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
 from app.core.config import Settings
-from app.schemas import AiDecision, CommandMessage
+from app.schemas import AiDecision, CommandMessage, CommandType, RiskLevel
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +42,14 @@ DECISION_JSON_SCHEMA: dict[str, Any] = {
         "additionalProperties": False,
     },
 }
+
+REPORT_SYSTEM_PROMPT = (
+    "你是室内环境健康分析助手。请仅依据提供的聚合遥测、事件和数据完整性生成报告，不补造缺失数据。"
+    "只能使用输入中的 operational_thresholds 判断超标，不得虚构法规、医学结论或未提供的安全上限。"
+    "输出一个 JSON 对象，字段必须为 risk_level(low/medium/high)、risk_score(0-100)、headline、summary、"
+    "anomalies(string[])、recommendations(string[])、next_checks(string[])。建议应具体、可执行并按优先级排序；"
+    "若数据不足，必须在 summary 和 next_checks 中明确说明。"
+)
 
 SYSTEM_PROMPT = (
     "你是 ESP32-S3 室内环境设备的云端决策助手。设备位于室内，配有温湿度、TVOC/甲醛/eCO2、"
@@ -99,7 +107,22 @@ class LLMService:
 
         return self._decision_from_payload(parsed)
 
-    def _none_decision(self, reason: str, *, risk_level: str = "unknown") -> AiDecision:
+    async def generate_report(self, context: dict[str, Any]) -> dict[str, Any]:
+        if self.settings.llm_endpoint == "mock":
+            return self._mock_report(context)
+        if not self.settings.llm_endpoint or not self.settings.llm_api_key:
+            raise RuntimeError("LLM 未配置，无法生成 AI 报告")
+        messages = [
+            {"role": "system", "content": REPORT_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": "请根据以下数据生成 JSON 健康报告：\n"
+                + json.dumps(context, ensure_ascii=False, default=str),
+            },
+        ]
+        return await self._call_json(messages)
+
+    def _none_decision(self, reason: str, *, risk_level: RiskLevel = "unknown") -> AiDecision:
         return AiDecision(
             command=CommandMessage(type="none", source="llm", reason=reason),
             risk_level=risk_level,
@@ -129,13 +152,13 @@ class LLMService:
         reason = str(parsed.get("reason") or parsed.get("summary") or "")
         return AiDecision(
             command=CommandMessage(
-                type=raw_type,
+                type=cast(CommandType, raw_type),
                 parameter=parameter,
                 source="llm",
                 confidence=confidence,
                 reason=reason,
             ),
-            risk_level=risk_level,
+            risk_level=cast(RiskLevel, risk_level),
             summary=str(parsed.get("summary") or reason),
             model=self.settings.llm_model,
         )
@@ -189,15 +212,48 @@ class LLMService:
 
         return AiDecision(
             command=CommandMessage(
-                type=command_type,
+                type=cast(CommandType, command_type),
                 source="llm",
                 confidence=confidence,
                 reason=reason,
             ),
-            risk_level=risk,
+            risk_level=cast(RiskLevel, risk),
             summary=reason,
             model="mock",
         )
+
+    def _mock_report(self, context: dict[str, Any]) -> dict[str, Any]:
+        metrics = context.get("metrics") or {}
+        coverage = context.get("coverage") or {}
+        anomalies: list[str] = []
+        recommendations: list[str] = []
+        score = 10
+        if metrics.get("alert_bucket_count", 0):
+            anomalies.append(f"空气质量告警时段共 {metrics['alert_bucket_count']} 个")
+            recommendations.append("优先排查 TVOC、甲醛或 eCO₂ 的持续污染源，并加强通风")
+            score = max(score, 65)
+        if (metrics.get("eco2_max_ppm") or 0) > 1000:
+            anomalies.append(f"eCO₂ 峰值达到 {metrics['eco2_max_ppm']:.0f} ppm")
+            recommendations.append("在人员密集或睡眠时段增加定时通风")
+            score = max(score, 55)
+        if metrics.get("smoke_event_count", 0):
+            anomalies.append(f"记录到 {metrics['smoke_event_count']} 次烟雾事件")
+            recommendations.insert(0, "立即核对烟雾告警台账并检查现场安全")
+            score = max(score, 90)
+        completeness = coverage.get("completeness_percent", 0)
+        next_checks = ["继续观察下一时段趋势，并确认建议执行后的指标变化"]
+        if completeness < 80:
+            next_checks.insert(0, "先检查设备在线状态和采样间隔，补足数据后再比较趋势")
+        risk = "high" if score >= 80 else "medium" if score >= 40 else "low"
+        return {
+            "risk_level": risk,
+            "risk_score": score,
+            "headline": "环境需要关注" if risk != "low" else "环境总体稳定",
+            "summary": f"本时段共分析 {coverage.get('sample_count', 0)} 条采样，数据完整度约 {completeness:.1f}%。",
+            "anomalies": anomalies or ["未发现明显异常"],
+            "recommendations": recommendations or ["维持当前通风和巡检节奏"],
+            "next_checks": next_checks,
+        }
 
     def _build_messages(self, device_state: dict[str, Any], image_bytes: bytes | None) -> list[dict[str, Any]]:
         user_text = "当前设备状态快照与近期遥测趋势如下，请给出决策 JSON：\n" + json.dumps(
@@ -235,11 +291,16 @@ class LLMService:
     async def _call_openai_compatible(
         self, device_state: dict[str, Any], *, image_path: Path | None = None
     ) -> dict[str, Any]:
-        payload: dict[str, Any] = {
-            "model": self.settings.llm_model,
-            "messages": self._build_messages(device_state, self._read_image(image_path)),
-            "temperature": 0.1,
-        }
+        messages = self._build_messages(device_state, self._read_image(image_path))
+        return await self._call_json(messages)
+
+    async def _call_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+        payload: dict[str, Any] = {"model": self.settings.llm_model, "messages": messages}
+        if self.settings.llm_thinking_enabled:
+            payload["thinking"] = {"type": "enabled"}
+            payload["reasoning_effort"] = self.settings.llm_reasoning_effort
+        else:
+            payload["temperature"] = 0.1
         response_format = self._response_format()
         if response_format is not None:
             payload["response_format"] = response_format
@@ -250,7 +311,7 @@ class LLMService:
             response.raise_for_status()
             data = response.json()
 
-        if "type" in data or "command" in data:
+        if "type" in data or "command" in data or "headline" in data:
             return data
         content = data["choices"][0]["message"]["content"]
         return extract_json_object(content)

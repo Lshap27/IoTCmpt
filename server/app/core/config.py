@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     llm_vision_enabled: bool = True
     llm_image_max_age_seconds: float = 600.0
     llm_response_format: str = "json_object"
+    llm_thinking_enabled: bool = False
+    llm_reasoning_effort: str = "high"
 
     autopilot_enabled: bool = True
     autopilot_cooldown_seconds: float = 120.0
@@ -60,6 +62,14 @@ class Settings(BaseSettings):
         allowed = {"json_object", "json_schema", "none"}
         if value not in allowed:
             raise ValueError(f"llm_response_format must be one of {sorted(allowed)}")
+        return value
+
+    @field_validator("llm_reasoning_effort")
+    @classmethod
+    def check_reasoning_effort(cls, value: str) -> str:
+        allowed = {"high", "max"}
+        if value not in allowed:
+            raise ValueError(f"llm_reasoning_effort must be one of {sorted(allowed)}")
         return value
 
     @field_validator("base_url")

@@ -1,6 +1,6 @@
 import { MoonStar, Sun } from "lucide-react";
-import { Panel } from "@/components/panel";
 import type { TelemetryPoint } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 export function LightCard({
   isDark,
@@ -17,29 +17,28 @@ export function LightCard({
   const Icon = isDark ? MoonStar : Sun;
 
   return (
-    <Panel title="LM393 环境光照" icon={<Sun size={17} />} className={className}>
-      <div className="flex items-center gap-3 rounded-xl border border-line bg-raised p-3">
+    <div className={cn("glass-panel min-w-0 p-4", className)}>
+      <div className="flex items-center gap-2 text-sm font-medium text-ink2">
+        <span className="h-2 w-2 rounded-full bg-warn" aria-hidden />
+        环境光照
+      </div>
+      <div className="mt-3 flex items-center gap-3">
         <div
-          className="flex size-11 items-center justify-center rounded-full"
+          className="flex size-10 items-center justify-center rounded-xl"
           style={{
             background: !available ? "var(--surface)" : isDark ? "var(--accent-soft)" : "var(--warn-soft)",
             color: !available ? "var(--ink-3)" : isDark ? "var(--accent)" : "var(--warn)",
           }}
         >
-          <Icon size={22} aria-hidden />
+          <Icon size={20} aria-hidden />
         </div>
         <div>
-          <p className="text-lg font-semibold text-ink">{label}</p>
-          <p className="text-[11px] text-ink3">数字量明暗判断，不伪造 lux 数值</p>
+          <p className="text-xl font-semibold tracking-tight text-ink">{label}</p>
         </div>
       </div>
 
-      <div className="mt-3">
-        <div className="mb-1.5 flex justify-between text-[10px] text-ink3">
-          <span>最近状态</span>
-          <span>{recent.length ? `${recent.length} 条` : "暂无遥测"}</span>
-        </div>
-        <div className="flex h-6 items-end gap-1" aria-label="LM393 最近明暗历史">
+      <div className="mt-4">
+        <div className="flex h-7 items-end gap-1" aria-label="LM393 最近明暗历史">
           {recent.length ? (
             recent.map((point) => {
               const dark = point.sensors.light_is_dark;
@@ -61,6 +60,6 @@ export function LightCard({
           )}
         </div>
       </div>
-    </Panel>
+    </div>
   );
 }

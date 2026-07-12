@@ -139,6 +139,7 @@ async def run_ai_analysis(
     )
 
     try:
+
         def _collect() -> tuple[dict[str, Any], Path | None]:
             snapshot = collect_device_snapshot(db, device_id, include_trend=True)
             image_path = resolve_recent_image(settings, latest_image_asset(db, device_id))

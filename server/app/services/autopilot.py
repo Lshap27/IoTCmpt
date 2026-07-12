@@ -89,6 +89,7 @@ class AutoPilot:
             self._last_run[device_id] = time.monotonic()
             db = SessionLocal()
             try:
+
                 def _record_trigger() -> None:
                     db.add(
                         models.DeviceEvent(

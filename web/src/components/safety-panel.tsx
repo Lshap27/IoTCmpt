@@ -60,7 +60,7 @@ export function SafetyPanel({
         className={className}
         actions={
           <span
-            className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium"
+            className="inline-flex min-h-9 items-center gap-2 rounded-full px-3 text-sm font-medium"
             style={
               smokeDetected
                 ? { color: "var(--alert)", background: "var(--alert-soft)" }
@@ -78,7 +78,7 @@ export function SafetyPanel({
       >
         <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
           <div>
-            <p className="text-xs leading-relaxed text-ink3">
+            <p className="text-sm leading-relaxed text-ink2">
               烟雾上升沿由设备本地立即触发蜂鸣器与语音，云服务不可用时安全链路仍保持工作。
             </p>
             <div
@@ -98,20 +98,20 @@ export function SafetyPanel({
                   />
                 ))
               ) : (
-                <span className="m-auto text-[11px] text-ink3">暂无烟雾遥测</span>
+                <span className="m-auto text-sm text-ink3">暂无烟雾遥测</span>
               )}
             </div>
           </div>
 
           <div>
             <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-xs font-medium text-ink">告警台账 · {smokeEvents.length} 条</p>
+              <p className="text-sm font-medium text-ink">告警台账 · {smokeEvents.length} 条</p>
               <div className="flex gap-1.5">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => exportEvents(smokeEvents)}
-                  className="h-7 gap-1 px-2 text-[11px]"
+                  className="h-9 gap-1.5 rounded-lg px-3 text-xs"
                 >
                   <Download size={12} /> CSV
                 </Button>
@@ -123,18 +123,18 @@ export function SafetyPanel({
                       .filter((event) => !event.acknowledged_at)
                       .forEach((event) => onAcknowledge(event.id))
                   }
-                  className="h-7 gap-1 px-2 text-[11px]"
+                  className="h-9 gap-1.5 rounded-lg px-3 text-xs"
                 >
                   <CheckCircle2 size={12} /> 全部确认
                 </Button>
               </div>
             </div>
-            <div className="scroll-thin max-h-40 space-y-1.5 overflow-y-auto pr-1">
+            <div className="scroll-thin max-h-44 space-y-2 overflow-y-auto pr-1">
               {smokeEvents.length ? (
                 smokeEvents.map((event) => (
                   <div
                     key={event.id}
-                    className="flex items-center gap-2 rounded-lg border border-line bg-raised px-2.5 py-2 text-[11px]"
+                    className="flex items-center gap-2 rounded-xl border border-line bg-raised px-3 py-2.5 text-xs"
                   >
                     <span
                       className="shrink-0"

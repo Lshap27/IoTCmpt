@@ -261,6 +261,51 @@ class AiDecisionOut(BaseModel):
     image_attached: bool
 
 
+ReportPeriod = Literal["hour", "day", "week"]
+
+
+class AiReportIn(BaseModel):
+    period: ReportPeriod = "day"
+
+
+class ReportCoverage(BaseModel):
+    start: str
+    end: str
+    sample_count: int
+    bucket_count: int
+    expected_bucket_count: int
+    completeness_percent: float
+
+
+class ReportMetrics(BaseModel):
+    temperature_avg_c: float | None = None
+    temperature_min_c: float | None = None
+    temperature_max_c: float | None = None
+    humidity_avg_percent: float | None = None
+    tvoc_avg_ppb: float | None = None
+    hcho_avg_ug_m3: float | None = None
+    eco2_avg_ppm: float | None = None
+    eco2_max_ppm: float | None = None
+    alert_bucket_count: int = 0
+    smoke_event_count: int = 0
+
+
+class AiHealthReport(BaseModel):
+    device_id: str
+    period: ReportPeriod
+    generated_at: str
+    model: str
+    risk_level: RiskLevel
+    risk_score: int = Field(ge=0, le=100)
+    headline: str
+    summary: str
+    anomalies: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+    next_checks: list[str] = Field(default_factory=list)
+    coverage: ReportCoverage
+    metrics: ReportMetrics
+
+
 # ---- WebSocket envelope 判别联合 ----
 # 仅用于协议契约（导出到 openapi.json 供前端 codegen），运行时广播仍走
 # WebSocketEnvelope；type 字段是判别键，前端 switch 后 payload 自动窄化。

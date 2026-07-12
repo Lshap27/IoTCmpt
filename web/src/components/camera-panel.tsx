@@ -39,7 +39,7 @@ export function CameraPanel({
         <button
           type="button"
           onClick={onAnalyze}
-          className="inline-flex items-center gap-1 rounded-md border border-line bg-raised px-2 py-1 text-[11px] text-ink2 hover:text-ink"
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line bg-raised px-3 text-sm text-ink2 transition-colors hover:border-accent hover:text-ink"
         >
           <ScanSearch size={13} /> 重新识别
         </button>
@@ -56,7 +56,7 @@ export function CameraPanel({
             alt={showAnnotated ? "设备姿态骨架图" : "设备最新原始画面"}
             className="h-full w-full object-contain"
           />
-          <figcaption className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-8 text-[11px] text-white/90">
+          <figcaption className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/75 to-transparent px-3 pb-2.5 pt-8 text-xs text-white/90">
             <span className="inline-flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 animate-pulse-soft rounded-full bg-white" aria-hidden />
               OV2640
@@ -71,7 +71,7 @@ export function CameraPanel({
         </div>
       )}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-xs text-ink2">
+        <div className="flex items-center gap-2 text-sm text-ink2">
           <PersonStanding size={15} className={pose?.human_present ? "text-good" : "text-ink3"} />
           <span>{pose?.label ?? "等待姿态识别"}</span>
           {pose ? <span className="tnum text-ink3">{Math.round(pose.confidence * 100)}%</span> : null}
@@ -81,14 +81,14 @@ export function CameraPanel({
             <button
               type="button"
               onClick={() => setShowAnnotated(false)}
-              className={`rounded px-2 py-0.5 text-[11px] ${!showAnnotated ? "bg-surface text-ink" : "text-ink3"}`}
+              className={`min-h-8 rounded px-2.5 text-xs ${!showAnnotated ? "bg-surface text-ink shadow-sm" : "text-ink3"}`}
             >
               原图
             </button>
             <button
               type="button"
               onClick={() => setShowAnnotated(true)}
-              className={`rounded px-2 py-0.5 text-[11px] ${showAnnotated ? "bg-surface text-ink" : "text-ink3"}`}
+              className={`min-h-8 rounded px-2.5 text-xs ${showAnnotated ? "bg-surface text-ink shadow-sm" : "text-ink3"}`}
             >
               骨架图
             </button>

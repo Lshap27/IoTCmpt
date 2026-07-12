@@ -88,9 +88,10 @@ export function applyEnvelope(queryClient: QueryClient, deviceId: string, envelo
       const point = envelope.payload;
       queryClient.setQueryData<TelemetryPoint[]>(deviceKeys.history(deviceId), (current = []) => {
         // 重连后的 HTTP 拉取和 WS 实时推送可能包含同一点，去重避免重复 React key
-        const tail = current.length && current[current.length - 1].sampled_at === point.sampled_at
-          ? current.slice(-(HISTORY_CAP - 1))
-          : current.slice(-(HISTORY_CAP - 2));
+        const tail =
+          current.length && current[current.length - 1].sampled_at === point.sampled_at
+            ? current.slice(-(HISTORY_CAP - 1))
+            : current.slice(-(HISTORY_CAP - 2));
         return [...tail, point];
       });
       patchLatest(queryClient, deviceId, (current) => ({

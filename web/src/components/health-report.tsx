@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileText, Printer } from "lucide-react";
+import { BrainCircuit, FileText, Printer, Sparkles } from "lucide-react";
 import { Panel } from "@/components/panel";
 import { Button } from "@/components/ui/button";
-import type { EventOut, TelemetryBucketPoint } from "@/lib/api";
+import type { AiHealthReport, EventOut, ReportPeriod, TelemetryBucketPoint } from "@/lib/api";
 
-type Period = "day" | "week";
+type Period = ReportPeriod;
 
 function weightedAverage(samples: TelemetryBucketPoint[], field: keyof TelemetryBucketPoint) {
   const values = samples.flatMap((sample) => {
@@ -18,17 +18,26 @@ function weightedAverage(samples: TelemetryBucketPoint[], field: keyof Telemetry
 }
 
 export function HealthReport({
+  deviceId,
   history,
   events,
+  aiReport,
+  generating,
+  onGenerate,
   className,
 }: {
+  deviceId: string;
   history: TelemetryBucketPoint[];
   events: EventOut[];
+  aiReport: AiHealthReport | null;
+  generating: boolean;
+  onGenerate: (period: ReportPeriod) => void;
   className?: string;
 }) {
   const [period, setPeriod] = useState<Period>("day");
   const report = useMemo(() => {
-    const cutoff = Date.now() - (period === "day" ? 24 : 24 * 7) * 60 * 60 * 1000;
+    const hours = period === "hour" ? 1 : period === "day" ? 24 : 24 * 7;
+    const cutoff = Date.now() - hours * 60 * 60 * 1000;
     const samples = history.filter((point) => new Date(point.bucket).getTime() >= cutoff);
     const smokeEvents = events.filter(
       (event) => event.type === "smoke.detected" && new Date(event.created_at).getTime() >= cutoff,
@@ -89,24 +98,32 @@ export function HealthReport({
       icon={<FileText size={17} />}
       className={className}
       actions={
-        <div className="flex gap-1.5">
-          <div className="flex rounded-lg border border-line bg-raised p-0.5">
-            {(["day", "week"] as const).map((value) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-xl border border-line bg-raised p-1">
+            {(["hour", "day", "week"] as const).map((value) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => setPeriod(value)}
-                className={`rounded-md px-2 py-1 text-[11px] ${period === value ? "bg-surface text-ink" : "text-ink3"}`}
+                className={`min-h-8 rounded-lg px-3 text-xs font-medium transition-colors ${period === value ? "bg-surface text-ink shadow-sm" : "text-ink3 hover:text-ink2"}`}
               >
-                {value === "day" ? "日报" : "周报"}
+                {value === "hour" ? "小时" : value === "day" ? "日报" : "周报"}
               </button>
             ))}
           </div>
           <Button
             type="button"
+            onClick={() => onGenerate(period)}
+            disabled={generating || !report.samples.length}
+            className="h-10 gap-1.5 rounded-xl px-3 text-sm"
+          >
+            <Sparkles size={12} /> {generating ? "生成中…" : "AI 解读"}
+          </Button>
+          <Button
+            type="button"
             variant="outline"
             onClick={() => window.print()}
-            className="h-7 gap-1 px-2 text-[11px]"
+            className="h-10 gap-1.5 rounded-xl px-3 text-sm"
           >
             <Printer size={12} /> 打印
           </Button>
@@ -115,10 +132,10 @@ export function HealthReport({
     >
       {report.samples.length ? (
         <div className="space-y-4">
-          <p className="text-[11px] text-ink3">
+          <p className="text-sm text-ink2">
             报告周期：{report.start.toLocaleString("zh-CN")} — {report.end.toLocaleString("zh-CN")}
           </p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
             {[
               ["有效采样", report.sampleCount, "条"],
               ["平均温度", report.temperature?.toFixed(1) ?? "--", "°C"],
@@ -136,26 +153,57 @@ export function HealthReport({
               ["夜间 eCO₂ 超标", report.nightEco2ExceedHours, "小时桶"],
               ["烟雾告警", report.smokeEvents.length, "次"],
             ].map(([label, value, unit]) => (
-              <div key={label} className="rounded-lg border border-line bg-raised p-3">
-                <p className="text-[11px] text-ink3">{label}</p>
-                <p className="mt-1 text-lg font-semibold text-ink">
+              <div key={label} className="rounded-xl border border-line bg-raised p-3.5">
+                <p className="text-xs font-medium text-ink2">{label}</p>
+                <p className="mt-1.5 text-xl font-semibold tracking-tight text-ink">
                   {value}
-                  <span className="ml-1 text-[11px] font-normal text-ink3">{unit}</span>
+                  <span className="ml-1 text-xs font-normal text-ink3">{unit}</span>
                 </p>
               </div>
             ))}
           </div>
-          <ul className="space-y-1.5 text-xs leading-relaxed text-ink2">
+          <ul className="space-y-2 text-sm leading-relaxed text-ink2">
             {report.insights.map((insight) => (
               <li key={insight}>• {insight}</li>
             ))}
           </ul>
-          <p className="text-[11px] text-ink3">
-            本报告只统计数据库中该时段的真实采样；数据不足时不会补造缺失时段。
-          </p>
+          {aiReport && aiReport.device_id === deviceId && aiReport.period === period ? (
+            <div className="rounded-2xl border border-accent/20 bg-accent/5 p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <BrainCircuit size={16} className="text-accent" />
+                  <p className="text-sm font-semibold text-ink">{aiReport.headline}</p>
+                </div>
+                <span className="text-sm font-medium text-ink2">
+                  风险 {aiReport.risk_score}/100 · {aiReport.model}
+                </span>
+              </div>
+              <p className="mt-3 text-sm leading-relaxed text-ink2">{aiReport.summary}</p>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                {[
+                  ["异常发现", aiReport.anomalies],
+                  ["优先建议", aiReport.recommendations],
+                  ["后续检查", aiReport.next_checks],
+                ].map(([title, items]) => (
+                  <div key={title as string}>
+                    <p className="text-sm font-semibold text-ink">{title as string}</p>
+                    <ul className="mt-2 space-y-1.5 text-sm leading-relaxed text-ink2">
+                      {(items as string[]).map((item) => (
+                        <li key={item}>• {item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 text-xs text-ink3">
+                数据完整度 {aiReport.coverage.completeness_percent.toFixed(1)}% · 共{" "}
+                {aiReport.coverage.sample_count} 条采样
+              </p>
+            </div>
+          ) : null}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-line py-10 text-center text-xs text-ink3">
+        <div className="rounded-xl border border-dashed border-line py-12 text-center text-sm text-ink3">
           当前时段没有真实遥测，无法生成报告
         </div>
       )}

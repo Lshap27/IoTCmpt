@@ -151,7 +151,7 @@ function describeEvent(event: UiEvent): EventView {
 export function EventStream({ events, className }: { events: UiEvent[]; className?: string }) {
   return (
     <Panel title="实时事件流" icon={<Radio size={17} />} className={className}>
-      <div className="scroll-thin max-h-72 space-y-1.5 overflow-y-auto pr-1">
+      <div className="scroll-thin max-h-72 space-y-2 overflow-y-auto pr-1">
         {events.length === 0 ? (
           <p className="py-8 text-center text-xs text-ink3">等待实时事件…</p>
         ) : (
@@ -160,7 +160,7 @@ export function EventStream({ events, className }: { events: UiEvent[]; classNam
             return (
               <div
                 key={event.id}
-                className="flex animate-fade-slide items-start gap-2.5 rounded-lg border border-line bg-raised px-2.5 py-2"
+                className="flex animate-fade-slide items-start gap-3 rounded-xl border border-line bg-raised px-3 py-2.5"
               >
                 <span
                   className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
@@ -170,14 +170,10 @@ export function EventStream({ events, className }: { events: UiEvent[]; classNam
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
-                    <p className="truncate text-xs font-medium text-ink">{view.title}</p>
-                    <span className="tnum shrink-0 text-[10px] text-ink3">
-                      {formatClock(event.occurred_at)}
-                    </span>
+                    <p className="truncate text-sm font-medium text-ink">{view.title}</p>
+                    <span className="tnum shrink-0 text-xs text-ink3">{formatClock(event.occurred_at)}</span>
                   </div>
-                  {view.detail ? (
-                    <p className="mt-0.5 truncate text-[11px] text-ink3">{view.detail}</p>
-                  ) : null}
+                  {view.detail ? <p className="mt-0.5 truncate text-xs text-ink2">{view.detail}</p> : null}
                 </div>
               </div>
             );

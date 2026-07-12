@@ -27,7 +27,7 @@ function StateChip({ label, active }: { label: string; active: boolean | null | 
   return (
     <Badge
       variant="outline"
-      className="gap-1.5 rounded-full border-line bg-raised px-2 py-0.5 text-[11px] text-ink2"
+      className="gap-1.5 rounded-full border-line bg-raised px-2.5 py-1 text-xs text-ink2"
     >
       <span
         className="h-1.5 w-1.5 rounded-full"
@@ -80,7 +80,7 @@ export function CommandPad({
               variant="outline"
               disabled={pending}
               onClick={() => onCommand(type)}
-              className="group h-auto flex-col gap-1.5 rounded-xl border-line bg-raised px-3 py-3.5 text-sm font-medium text-ink2 transition-all hover:border-accent hover:bg-raised hover:text-ink hover:shadow-glow active:scale-[0.98] disabled:opacity-60"
+              className="group min-h-20 flex-col gap-2 rounded-xl border-line bg-raised px-3 py-3 text-sm font-medium text-ink2 transition-colors hover:border-accent hover:bg-accent/5 hover:text-ink active:bg-accent/10 disabled:opacity-60"
             >
               {pending ? (
                 <Loader2 size={20} className="animate-spin text-accent" />
@@ -92,9 +92,6 @@ export function CommandPad({
           );
         })}
       </div>
-      <p className="mt-3 text-[11px] leading-relaxed text-ink3">
-        指令经服务器持久化后经 MQTT 下发，按钮在设备回执（command_ack）前保持等待状态。
-      </p>
     </Panel>
   );
 }

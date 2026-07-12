@@ -96,6 +96,112 @@
         "title": "AiDecisionOut",
         "type": "object"
       },
+      "AiHealthReport": {
+        "properties": {
+          "anomalies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Anomalies",
+            "type": "array"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/ReportCoverage"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/ReportMetrics"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "next_checks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Next Checks",
+            "type": "array"
+          },
+          "period": {
+            "enum": [
+              "hour",
+              "day",
+              "week"
+            ],
+            "title": "Period",
+            "type": "string"
+          },
+          "recommendations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommendations",
+            "type": "array"
+          },
+          "risk_level": {
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "unknown"
+            ],
+            "title": "Risk Level",
+            "type": "string"
+          },
+          "risk_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Risk Score",
+            "type": "integer"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "period",
+          "generated_at",
+          "model",
+          "risk_level",
+          "risk_score",
+          "headline",
+          "summary",
+          "coverage",
+          "metrics"
+        ],
+        "title": "AiHealthReport",
+        "type": "object"
+      },
+      "AiReportIn": {
+        "properties": {
+          "period": {
+            "default": "day",
+            "enum": [
+              "hour",
+              "day",
+              "week"
+            ],
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "title": "AiReportIn",
+        "type": "object"
+      },
       "AiResultEnvelope": {
         "properties": {
           "device_id": {
@@ -1176,6 +1282,148 @@
         "title": "PoseSnapshot",
         "type": "object"
       },
+      "ReportCoverage": {
+        "properties": {
+          "bucket_count": {
+            "title": "Bucket Count",
+            "type": "integer"
+          },
+          "completeness_percent": {
+            "title": "Completeness Percent",
+            "type": "number"
+          },
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "expected_bucket_count": {
+            "title": "Expected Bucket Count",
+            "type": "integer"
+          },
+          "sample_count": {
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "sample_count",
+          "bucket_count",
+          "expected_bucket_count",
+          "completeness_percent"
+        ],
+        "title": "ReportCoverage",
+        "type": "object"
+      },
+      "ReportMetrics": {
+        "properties": {
+          "alert_bucket_count": {
+            "default": 0,
+            "title": "Alert Bucket Count",
+            "type": "integer"
+          },
+          "eco2_avg_ppm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eco2 Avg Ppm"
+          },
+          "eco2_max_ppm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eco2 Max Ppm"
+          },
+          "hcho_avg_ug_m3": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hcho Avg Ug M3"
+          },
+          "humidity_avg_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Humidity Avg Percent"
+          },
+          "smoke_event_count": {
+            "default": 0,
+            "title": "Smoke Event Count",
+            "type": "integer"
+          },
+          "temperature_avg_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Avg C"
+          },
+          "temperature_max_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Max C"
+          },
+          "temperature_min_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Min C"
+          },
+          "tvoc_avg_ppb": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tvoc Avg Ppb"
+          }
+        },
+        "title": "ReportMetrics",
+        "type": "object"
+      },
       "SensorPayload": {
         "properties": {
           "eco2_ppm": {
@@ -1743,6 +1991,55 @@
           }
         },
         "summary": "Analyze Device"
+      }
+    },
+    "/api/devices/{device_id}/ai/report": {
+      "post": {
+        "operationId": "create_ai_health_report",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiReportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiHealthReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Ai Health Report"
       }
     },
     "/api/devices/{device_id}/autopilot": {

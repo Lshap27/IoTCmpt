@@ -55,18 +55,18 @@ export function StatCard({
   const series = points.filter((point): point is number => typeof point === "number").slice(-20);
 
   return (
-    <div className={cn("glass-panel p-4 transition-shadow hover:shadow-glow", className)}>
-      <div className="flex items-center gap-2 text-xs text-ink3">
+    <div className={cn("glass-panel min-w-0 p-4", className)}>
+      <div className="flex items-center gap-2 text-sm font-medium text-ink2">
         <span className="h-2 w-2 rounded-full" style={{ background: color }} aria-hidden />
         {label}
       </div>
-      <div className="mt-2 flex items-baseline gap-1.5">
+      <div className="mt-3 flex items-baseline gap-1.5">
         <AnimatedNumber
           value={value}
           digits={digits}
-          className="text-3xl font-semibold tracking-tight text-ink"
+          className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
         />
-        <span className="text-xs text-ink3">{unit}</span>
+        <span className="text-sm text-ink3">{unit}</span>
       </div>
       <div className="mt-2">
         <Sparkline points={series} color={color} />

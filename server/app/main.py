@@ -83,9 +83,12 @@ def create_app() -> FastAPI:
         # 到路由层再检查时整个请求体已经被吞进临时文件，限制形同虚设。
         if request.method == "POST":
             content_length = request.headers.get("content-length")
-            if content_length and content_length.isdigit():
-                if int(content_length) > settings.max_upload_bytes + 64 * 1024:
-                    return JSONResponse(status_code=413, content={"detail": "Request body is too large"})
+            if (
+                content_length
+                and content_length.isdigit()
+                and int(content_length) > settings.max_upload_bytes + 64 * 1024
+            ):
+                return JSONResponse(status_code=413, content={"detail": "Request body is too large"})
         return await call_next(request)
 
     settings.uploads_dir.mkdir(parents=True, exist_ok=True)

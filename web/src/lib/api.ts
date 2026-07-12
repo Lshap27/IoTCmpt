@@ -11,6 +11,7 @@ import {
   telemetryHistory,
   telemetryHistoryBucketed,
   updateAutopilotState,
+  createAiHealthReport,
 } from "./api-client/sdk.gen";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -20,6 +21,7 @@ client.setConfig({ baseUrl: API_BASE_URL });
 // 所有类型均由 `pnpm codegen` 从 server/openapi.json 生成——不要手写协议类型。
 export type {
   AiDecisionOut as AiDecisionPayload,
+  AiHealthReport,
   AiResultInfo,
   AutopilotState,
   CommandOut as CommandInfo,
@@ -33,6 +35,8 @@ export type {
 
 import type {
   AiDecisionOut,
+  AiHealthReport as AiHealthReportT,
+  AiReportIn as AiReportInT,
   AutopilotState as AutopilotStateT,
   CommandOut,
   DeviceSummary as DeviceSummaryT,
@@ -41,6 +45,8 @@ import type {
   TelemetryBucketPoint as TelemetryBucketPointT,
   TelemetryPoint as TelemetryPointT,
 } from "./api-client/types.gen";
+
+export type ReportPeriod = AiReportInT["period"];
 
 /** WebSocket 信封的宽松视图；WF5 将切换到判别联合 WsMessage。 */
 export type Envelope = {
@@ -144,6 +150,15 @@ export async function requestPoseAnalysis(deviceId: string) {
 
 export async function requestAiAnalysis(deviceId: string): Promise<AiDecisionOut> {
   const { data } = await analyzeDevice({ path: { device_id: deviceId }, throwOnError: true });
+  return data;
+}
+
+export async function requestAiReport(deviceId: string, period: ReportPeriod): Promise<AiHealthReportT> {
+  const { data } = await createAiHealthReport({
+    path: { device_id: deviceId },
+    body: { period },
+    throwOnError: true,
+  });
   return data;
 }
 

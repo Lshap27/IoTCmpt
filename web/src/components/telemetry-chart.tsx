@@ -76,20 +76,20 @@ export function TelemetryChart({ history, className }: { history: TelemetryPoint
       icon={<Activity size={17} />}
       className={className}
       actions={
-        <div className="flex items-center gap-3">
+        <div className="flex max-w-full items-center gap-3 overflow-x-auto pb-0.5">
           <span className="hidden items-center gap-1.5 text-sm sm:inline-flex">
             <span className="h-2 w-2 rounded-full" style={{ background: color }} aria-hidden />
             <span className="font-semibold text-ink">{formatValue(current, metric.digits)}</span>
             <span className="text-xs text-ink3">{metric.unit}</span>
           </span>
-          <div className="flex rounded-lg border border-line bg-raised p-0.5">
+          <div className="flex shrink-0 rounded-xl border border-line bg-raised p-1">
             {METRICS.map((item) => (
               <button
                 key={item.key}
                 type="button"
                 onClick={() => setMetricKey(item.key)}
                 className={cn(
-                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                  "min-h-8 rounded-lg px-3 text-xs font-medium transition-colors",
                   item.key === metric.key ? "bg-surface text-ink shadow-panel" : "text-ink3 hover:text-ink2",
                 )}
               >
@@ -100,7 +100,7 @@ export function TelemetryChart({ history, className }: { history: TelemetryPoint
         </div>
       }
     >
-      <div className="h-64">
+      <div className="h-64 sm:h-72">
         {data.length > 1 ? (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>

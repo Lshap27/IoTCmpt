@@ -102,20 +102,20 @@
 :root {
   color-scheme: light;
 
-  --bg: #f4f7fb;
+  --bg: #f6f8fb;
   --surface: #ffffff;
   --surface-solid: #ffffff;
-  --raised: #f8fafc;
-  --line: #e2e8f0;
+  --raised: #f5f7fa;
+  --line: #e5e9ef;
 
   --ink: #0f172a;
-  --ink-2: #475569;
-  --ink-3: #94a3b8;
+  --ink-2: #526071;
+  --ink-3: #788698;
 
-  --accent: #0e7490;
-  --accent-strong: #155e75;
-  --accent-soft: rgba(14, 116, 144, 0.12);
-  --accent-glow: rgba(14, 116, 144, 0.16);
+  --accent: #0f766e;
+  --accent-strong: #115e59;
+  --accent-soft: rgba(15, 118, 110, 0.1);
+  --accent-glow: rgba(15, 118, 110, 0.14);
 
   --good: #15803d;
   --warn: #b45309;
@@ -133,13 +133,13 @@
   --m-tvoc: #047857;
   --m-eco2: #6d28d9;
 
-  --shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 28px -16px rgba(15, 23, 42, 0.16);
-  --page-glow-1: rgba(14, 116, 144, 0.05);
-  --page-glow-2: rgba(109, 40, 217, 0.04);
+  --shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.03), 0 14px 36px -24px rgba(15, 23, 42, 0.2);
+  --page-glow-1: rgba(15, 118, 110, 0.04);
+  --page-glow-2: rgba(3, 105, 161, 0.03);
 
   /* shadcn 桥接用：主按钮前景色与圆角基准 */
   --accent-contrast: #ffffff;
-  --radius: 0.75rem;
+  --radius: 0.875rem;
 }
 
 .dark {
@@ -196,8 +196,8 @@ body {
   margin: 0;
   color: var(--ink);
   background:
-    radial-gradient(1100px 480px at 88% -12%, var(--page-glow-2), transparent 60%),
-    radial-gradient(900px 560px at -8% 108%, var(--page-glow-1), transparent 55%), var(--bg);
+    radial-gradient(900px 420px at 88% -12%, var(--page-glow-2), transparent 62%),
+    radial-gradient(760px 500px at -8% 108%, var(--page-glow-1), transparent 58%), var(--bg);
   background-attachment: fixed;
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "PingFang SC",
@@ -219,7 +219,7 @@ select {
 .glass-panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 1rem;
+  border-radius: 1.125rem;
   box-shadow: var(--shadow-panel);
 }
 
@@ -261,8 +261,7 @@ select {
   background-size: 200% 100%;
 }
 
-/* Bento 网格：子项错峰上浮入场 + hover 微抬升。
-   入场用 backwards（不保留末帧），动画结束后 transform 交还给 hover 过渡。 */
+/* 首屏轻量入场，避免数据刷新时产生位移。 */
 @keyframes bento-rise {
   from {
     opacity: 0;
@@ -271,14 +270,7 @@ select {
 }
 
 .bento-grid > * {
-  animation: bento-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards;
-  transition:
-    transform 0.25s ease,
-    box-shadow 0.25s ease;
-}
-
-.bento-grid > *:hover {
-  transform: translateY(-2px);
+  animation: bento-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 .bento-grid > :nth-child(2) {
@@ -309,9 +301,16 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .bento-grid > * {
     animation: none;
-    transition: none;
   }
-  .bento-grid > *:hover {
-    transform: none;
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  button,
+  header {
+    display: none !important;
   }
 }

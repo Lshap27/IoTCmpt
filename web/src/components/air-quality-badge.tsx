@@ -22,7 +22,7 @@ export function AirQualityBadge({
   return (
     <Badge
       variant="outline"
-      className={cn("gap-1.5 rounded-full border-line px-2.5 py-1 text-xs font-medium text-ink2", className)}
+      className={cn("min-h-9 gap-2 rounded-full border-line px-3 text-sm font-medium text-ink2", className)}
       style={{ background: entry.soft }}
     >
       <Icon size={14} style={{ color: entry.color }} />

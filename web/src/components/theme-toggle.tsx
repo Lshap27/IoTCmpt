@@ -19,7 +19,7 @@ export function ThemeToggle() {
       size="icon"
       aria-label="切换深浅主题"
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="h-9 w-9 rounded-lg border-line bg-raised text-ink2 hover:border-accent hover:bg-raised hover:text-accent"
+      className="h-10 w-10 rounded-xl border-line bg-surface text-ink2 hover:border-accent hover:bg-raised hover:text-accent"
     >
       {mounted ? isDark ? <Sun size={16} /> : <Moon size={16} /> : <Moon size={16} className="opacity-0" />}
     </Button>

@@ -16,10 +16,10 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <Card className={cn("glass-panel block gap-0 rounded-2xl border-line p-4 shadow-panel", className)}>
+    <Card className={cn("glass-panel block gap-0 border-line p-4 shadow-panel sm:p-5", className)}>
       {title || actions ? (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-ink">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 text-base font-semibold tracking-tight text-ink">
             <span className="text-accent">{icon}</span>
             <h2>{title}</h2>
           </div>

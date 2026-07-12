@@ -16,6 +16,8 @@ from app.db import models
 from app.db.session import get_db
 from app.schemas import (
     AiDecisionOut,
+    AiHealthReport,
+    AiReportIn,
     AutopilotIn,
     AutopilotState,
     CommandIn,
@@ -37,6 +39,7 @@ from app.services.images import save_image
 from app.services.llm import LLMService
 from app.services.mqtt import MqttGateway
 from app.services.pose import PoseService
+from app.services.reports import generate_health_report
 from app.services.telemetry import fetch_history_bucketed, serialize_telemetry
 from app.services.websocket import manager
 
@@ -177,6 +180,19 @@ async def analyze_device(
     mqtt: MqttGateway | None = Depends(get_mqtt_gateway),
 ):
     return await run_ai_analysis(db, device_id, llm, mqtt, trigger="manual")
+
+
+@router.post("/devices/{device_id}/ai/report", response_model=AiHealthReport)
+async def create_ai_health_report(
+    device_id: str,
+    payload: AiReportIn,
+    db: Session = Depends(get_db),
+    llm: LLMService = Depends(get_llm_service),
+):
+    try:
+        return await generate_health_report(db, device_id, payload.period, llm)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/devices/{device_id}/autopilot", response_model=AutopilotState)

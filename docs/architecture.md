@@ -65,11 +65,20 @@ and CI fails when either drifts from the code.
 8. Firmware executes the command and publishes `command_ack`.
 9. Server stores the acknowledgement and broadcasts a WebSocket `command_ack`
    event.
+10. On demand, the dashboard calls `POST /api/devices/{device_id}/ai/report`
+    for an hour, day, or week. The server aggregates stored telemetry and
+    events, calculates data completeness, and asks the LLM for an auditable
+    health report with anomalies and prioritized actions.
 
 The LLM integration is OpenAI-compatible (any provider exposing
 `chat/completions`), supports optional strict `json_schema` response formats,
 and offers a deterministic `mock` mode so the full closed loop can be
 demonstrated without network access or API keys.
+
+DeepSeek V4 uses the same transport. When thinking mode is enabled the gateway
+sends `thinking.type` and `reasoning_effort` and omits temperature. DeepSeek's
+current chat models are text-only, so deployments using them should set
+`AIOT_LLM_VISION_ENABLED=false`.
 
 ## Deployment Topology
 

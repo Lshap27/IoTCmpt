@@ -115,6 +115,12 @@ def test_response_format_variants():
     assert LLMService(make_settings(llm_response_format="none"))._response_format() is None
 
 
+def test_thinking_settings_are_validated():
+    settings = make_settings(llm_thinking_enabled=True, llm_reasoning_effort="max")
+    assert settings.llm_thinking_enabled is True
+    assert settings.llm_reasoning_effort == "max"
+
+
 # ---- 视觉附图条件 ----
 
 
@@ -207,6 +213,7 @@ def test_autopilot_trigger_rules_and_cooldown():
     # 冷却期现在由 run_once 在实际执行时记账，
     # should_run 自身不再消费/重置冷却计时器
     import time
+
     pilot._last_run["dev"] = time.monotonic()
     assert pilot.should_run("dev", alert) is None  # 冷却期内不再触发
 
@@ -278,3 +285,33 @@ def test_analyze_route_broadcasts_analyzing_then_result(client):
     assert body["risk_level"] == "medium"
     # 测试环境没有真实 MQTT 连接，publish 失败时不得谎报 published
     assert body["published"] is False
+
+
+def test_ai_report_uses_real_period_data_and_mock_llm(client):
+    settings = config.get_settings()
+    settings.llm_endpoint = "mock"
+
+    from app.db.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        record_telemetry(db, TelemetryIn.model_validate({"device_id": "report-device", **ALERT_TELEMETRY}))
+    finally:
+        db.close()
+
+    response = client.post("/api/devices/report-device/ai/report", json={"period": "day"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["period"] == "day"
+    assert body["model"] == "mock"
+    assert body["coverage"]["sample_count"] == 1
+    assert body["metrics"]["eco2_max_ppm"] == 1400
+    assert body["metrics"]["alert_bucket_count"] == 1
+    assert body["risk_level"] == "medium"
+    assert body["recommendations"]
+
+
+def test_ai_report_rejects_empty_period(client):
+    response = client.post("/api/devices/no-data/ai/report", json={"period": "hour"})
+    assert response.status_code == 404
+    assert "没有遥测数据" in response.json()["detail"]

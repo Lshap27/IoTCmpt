@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Cpu } from "lucide-react";
+import { ChevronDown, CircuitBoard } from "lucide-react";
 import { AirQualityBadge } from "@/components/air-quality-badge";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { DeviceSummary } from "@/lib/api";
@@ -15,7 +15,7 @@ function LivePill({ socketState }: { socketState: SocketState }) {
         ? { label: "连接中", color: "var(--warn)", pulse: true }
         : { label: "离线重连中", color: "var(--alert)", pulse: false };
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-raised px-2.5 py-1 text-xs font-medium text-ink2">
+    <span className="inline-flex min-h-9 items-center gap-2 rounded-full border border-line bg-surface px-3 text-sm font-medium text-ink2">
       <span
         className={cn("h-2 w-2 rounded-full", config.pulse && "animate-pulse-soft")}
         style={{ background: config.color }}
@@ -47,23 +47,23 @@ export function DeviceHeader({
     : [{ device_id: deviceId, display_name: deviceId, status: deviceStatus, last_seen_at: null }, ...devices];
 
   return (
-    <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex items-center gap-3">
+    <header className="flex flex-col gap-5 border-b border-line pb-6 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex items-center gap-3.5">
         <div
-          className="flex h-11 w-11 items-center justify-center rounded-xl text-white shadow-glow"
-          style={{ background: "linear-gradient(135deg, var(--accent), var(--m-eco2))" }}
+          className="flex h-12 w-12 items-center justify-center rounded-2xl text-white shadow-glow"
+          style={{ background: "linear-gradient(145deg, var(--accent), var(--accent-strong))" }}
         >
-          <Cpu size={22} />
+          <CircuitBoard size={23} />
         </div>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-accent">ESP32-S3 AIoT</p>
-          <h1 className="text-xl font-semibold tracking-tight text-ink">宿智云 · 智能环境控制中心</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink sm:text-[1.75rem]">宿智云</h1>
+          <p className="mt-0.5 text-sm text-ink2">智能环境控制中心</p>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <AirQualityBadge level={airQuality} />
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-raised px-2.5 py-1 text-xs font-medium text-ink2">
+        <span className="inline-flex min-h-9 items-center gap-2 rounded-full border border-line bg-surface px-3 text-sm font-medium text-ink2">
           <span
             className="h-2 w-2 rounded-full"
             style={{ background: online ? "var(--good)" : "var(--ink-3)" }}
@@ -77,7 +77,7 @@ export function DeviceHeader({
           <select
             value={deviceId}
             onChange={(event) => onDeviceChange(event.target.value)}
-            className="appearance-none rounded-lg border border-line bg-raised py-1.5 pl-3 pr-8 text-xs font-medium text-ink2 outline-hidden transition-colors hover:border-accent focus:border-accent"
+            className="min-h-10 appearance-none rounded-xl border border-line bg-surface py-2 pl-3 pr-9 text-sm font-medium text-ink2 outline-hidden transition-colors hover:border-accent focus:border-accent focus:ring-2 focus:ring-accent/20"
           >
             {options.map((device) => (
               <option key={device.device_id} value={device.device_id}>

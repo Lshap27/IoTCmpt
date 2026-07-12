@@ -55,7 +55,7 @@ export default function Dashboard() {
   );
 
   return (
-    <main className="mx-auto min-h-screen max-w-[1400px] px-4 py-5 lg:px-8">
+    <main className="mx-auto min-h-dvh max-w-[1480px] px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
       <DeviceHeader
         devices={devices}
         deviceId={deviceId}
@@ -67,7 +67,7 @@ export default function Dashboard() {
 
       {live.error ? (
         <div
-          className="mt-4 rounded-lg border px-3 py-2 text-xs font-medium"
+          className="mt-5 rounded-xl border px-4 py-3 text-sm font-medium"
           style={{ borderColor: "var(--alert)", background: "var(--alert-soft)", color: "var(--alert)" }}
         >
           {live.error}
@@ -75,7 +75,7 @@ export default function Dashboard() {
       ) : null}
       {live.socketState !== "live" ? (
         <div
-          className="mt-4 rounded-lg border px-3 py-2 text-xs font-medium"
+          className="mt-5 rounded-xl border px-4 py-3 text-sm font-medium"
           style={{ borderColor: "var(--warn)", background: "var(--warn-soft)", color: "var(--warn)" }}
         >
           {live.socketState === "connecting" ? "正在连接实时通道…" : "实时通道已断开，正在自动重连"}
@@ -83,30 +83,27 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <div className="mt-4 rounded-lg border border-line bg-raised px-3 py-2 text-[11px] text-ink3">
-        室外温湿度与除湿器：未接入硬件，本页面不会用固定值或随机数据代替。
-      </div>
+      <section className="mt-8" aria-labelledby="overview-heading">
+        <h2 id="overview-heading" className="mb-4 text-lg font-semibold tracking-tight text-ink">
+          环境概览
+        </h2>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          {stats.map(({ metric, value, points }) => (
+            <StatCard
+              key={metric.key}
+              label={metric.label}
+              unit={metric.unit}
+              digits={metric.digits}
+              color={`var(${metric.cssVar})`}
+              value={value}
+              points={points}
+            />
+          ))}
+          <LightCard isDark={telemetry?.sensors.light_is_dark} history={live.history} />
+        </div>
+      </section>
 
-      {/* Bento 网格：12 列不等跨度，入场错峰上浮（见 globals.css .bento-grid） */}
-      <section className="bento-grid mt-5 grid grid-cols-12 gap-4">
-        {stats.map(({ metric, value, points }) => (
-          <StatCard
-            key={metric.key}
-            label={metric.label}
-            unit={metric.unit}
-            digits={metric.digits}
-            color={`var(${metric.cssVar})`}
-            value={value}
-            points={points}
-            className="col-span-12 sm:col-span-6 xl:col-span-3"
-          />
-        ))}
-        <LightCard
-          isDark={telemetry?.sensors.light_is_dark}
-          history={live.history}
-          className="col-span-12 sm:col-span-6 xl:col-span-3"
-        />
-
+      <section className="bento-grid mt-5 grid grid-cols-12 gap-4 lg:gap-5">
         <TelemetryChart history={live.history} className="col-span-12 xl:col-span-8" />
         <AiPanel
           analyzing={live.analyzing}
@@ -139,12 +136,16 @@ export default function Dashboard() {
           onAcknowledge={live.acknowledgeEvent}
           className="col-span-12"
         />
-        <HealthReport history={live.reportHistory} events={live.ledger} className="col-span-12" />
+        <HealthReport
+          deviceId={deviceId}
+          history={live.reportHistory}
+          events={live.ledger}
+          aiReport={live.healthReport}
+          generating={live.reportGenerating}
+          onGenerate={live.generateReport}
+          className="col-span-12"
+        />
       </section>
-
-      <footer className="mt-6 pb-4 text-center text-[11px] text-ink3">
-        宿智云 AIoT · MQTT + FastAPI + LLM 多模态自动决策闭环 · {deviceId}
-      </footer>
     </main>
   );
 }

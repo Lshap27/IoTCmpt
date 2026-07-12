@@ -169,6 +169,28 @@ Response:
 The same pipeline runs automatically when telemetry matches the autopilot
 trigger rules (see below); those results carry `trigger = "auto:<rule>"`.
 
+## AI Health Report
+
+```text
+POST /api/devices/{device_id}/ai/report
+```
+
+Request body selects a real database window:
+
+```json
+{ "period": "hour" }
+```
+
+`period` accepts `hour`, `day`, or `week`. The server calculates coverage and
+aggregate metrics from stored telemetry and events, then asks the configured
+LLM for a structured report containing a risk level, 0–100 risk score,
+headline, summary, anomalies, prioritized recommendations, and follow-up
+checks. The response always includes the deterministic source metrics so the
+model's conclusions remain auditable. A period with no telemetry returns 404.
+
+`AIOT_LLM_ENDPOINT=mock` also supports reports, which keeps the report flow
+testable without network access.
+
 ## Autopilot
 
 ```text

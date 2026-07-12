@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { EventOut, LatestState } from "@/lib/api";
+import type { AiHealthReport, EventOut, LatestState, ReportPeriod } from "@/lib/api";
 import {
   acknowledgeDeviceEvent,
   fetchDeviceEvents,
@@ -10,6 +10,7 @@ import {
   fetchHistoryBucketed,
   fetchLatest,
   requestAiAnalysis,
+  requestAiReport,
   requestPoseAnalysis,
   sendCommand,
   updateAutopilot,
@@ -45,6 +46,7 @@ function removePendingCommand(queryClient: ReturnType<typeof useQueryClient>, de
 export function useDeviceLive(deviceId: string) {
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState("");
+  const [healthReport, setHealthReport] = useState<AiHealthReport | null>(null);
 
   const latestQuery = useQuery({
     queryKey: deviceKeys.latest(deviceId),
@@ -128,6 +130,13 @@ export function useDeviceLive(deviceId: string) {
     },
   });
 
+  const reportMutation = useMutation({
+    mutationFn: (period: ReportPeriod) => requestAiReport(deviceId, period),
+    onMutate: () => setActionError(""),
+    onSuccess: (report) => setHealthReport(report),
+    onError: (err) => setActionError(err instanceof Error ? err.message : "AI 报告生成失败"),
+  });
+
   const commandMutation = useMutation({
     mutationFn: (type: string) => sendCommand(deviceId, type),
     onMutate: (type) => {
@@ -183,9 +192,7 @@ export function useDeviceLive(deviceId: string) {
       if (context?.previous) {
         // 只回滚 autopilot 字段，不覆盖并发 WS 推送的 telemetry/command/status
         queryClient.setQueryData<LatestState>(deviceKeys.latest(deviceId), (current) =>
-          current
-            ? { ...current, autopilot: context.previous?.autopilot ?? null }
-            : current,
+          current ? { ...current, autopilot: context.previous?.autopilot ?? null } : current,
         );
       }
       setActionError(err instanceof Error ? err.message : "自动决策开关设置失败");
@@ -194,8 +201,7 @@ export function useDeviceLive(deviceId: string) {
 
   const latest = latestQuery.data ?? null;
   const ai = aiQuery.data ?? EMPTY_AI;
-  const queryError =
-    latestQuery.error ?? historyQuery.error ?? reportHistoryQuery.error ?? ledgerQuery.error;
+  const queryError = latestQuery.error ?? historyQuery.error ?? reportHistoryQuery.error ?? ledgerQuery.error;
 
   return {
     latest,
@@ -206,10 +212,13 @@ export function useDeviceLive(deviceId: string) {
     socketState,
     analyzing: ai.analyzing,
     decision: ai.decision,
+    healthReport,
+    reportGenerating: reportMutation.isPending,
     autopilotEnabled: latest?.autopilot?.enabled ?? null,
     pendingCommands: pendingQuery.data ?? {},
     error: actionError || (queryError instanceof Error ? queryError.message : ""),
     triggerAnalysis: useCallback(() => analyzeMutation.mutate(), [analyzeMutation]),
+    generateReport: useCallback((period: ReportPeriod) => reportMutation.mutate(period), [reportMutation]),
     dispatchCommand: useCallback((type: string) => commandMutation.mutate(type), [commandMutation]),
     acknowledgeEvent: useCallback(
       (eventId: number) => acknowledgeMutation.mutate(eventId),

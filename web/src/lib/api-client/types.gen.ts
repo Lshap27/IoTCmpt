@@ -69,6 +69,68 @@ export type AiDecisionOut = {
 };
 
 /**
+ * AiHealthReport
+ */
+export type AiHealthReport = {
+    /**
+     * Anomalies
+     */
+    anomalies?: Array<string>;
+    coverage: ReportCoverage;
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Generated At
+     */
+    generated_at: string;
+    /**
+     * Headline
+     */
+    headline: string;
+    metrics: ReportMetrics;
+    /**
+     * Model
+     */
+    model: string;
+    /**
+     * Next Checks
+     */
+    next_checks?: Array<string>;
+    /**
+     * Period
+     */
+    period: 'hour' | 'day' | 'week';
+    /**
+     * Recommendations
+     */
+    recommendations?: Array<string>;
+    /**
+     * Risk Level
+     */
+    risk_level: 'low' | 'medium' | 'high' | 'unknown';
+    /**
+     * Risk Score
+     */
+    risk_score: number;
+    /**
+     * Summary
+     */
+    summary: string;
+};
+
+/**
+ * AiReportIn
+ */
+export type AiReportIn = {
+    /**
+     * Period
+     */
+    period?: 'hour' | 'day' | 'week';
+};
+
+/**
  * AiResultEnvelope
  */
 export type AiResultEnvelope = {
@@ -736,6 +798,82 @@ export type PoseSnapshot = {
 };
 
 /**
+ * ReportCoverage
+ */
+export type ReportCoverage = {
+    /**
+     * Bucket Count
+     */
+    bucket_count: number;
+    /**
+     * Completeness Percent
+     */
+    completeness_percent: number;
+    /**
+     * End
+     */
+    end: string;
+    /**
+     * Expected Bucket Count
+     */
+    expected_bucket_count: number;
+    /**
+     * Sample Count
+     */
+    sample_count: number;
+    /**
+     * Start
+     */
+    start: string;
+};
+
+/**
+ * ReportMetrics
+ */
+export type ReportMetrics = {
+    /**
+     * Alert Bucket Count
+     */
+    alert_bucket_count?: number;
+    /**
+     * Eco2 Avg Ppm
+     */
+    eco2_avg_ppm?: number | null;
+    /**
+     * Eco2 Max Ppm
+     */
+    eco2_max_ppm?: number | null;
+    /**
+     * Hcho Avg Ug M3
+     */
+    hcho_avg_ug_m3?: number | null;
+    /**
+     * Humidity Avg Percent
+     */
+    humidity_avg_percent?: number | null;
+    /**
+     * Smoke Event Count
+     */
+    smoke_event_count?: number;
+    /**
+     * Temperature Avg C
+     */
+    temperature_avg_c?: number | null;
+    /**
+     * Temperature Max C
+     */
+    temperature_max_c?: number | null;
+    /**
+     * Temperature Min C
+     */
+    temperature_min_c?: number | null;
+    /**
+     * Tvoc Avg Ppb
+     */
+    tvoc_avg_ppb?: number | null;
+};
+
+/**
  * SensorPayload
  */
 export type SensorPayload = {
@@ -1023,6 +1161,36 @@ export type AnalyzeDeviceResponses = {
 };
 
 export type AnalyzeDeviceResponse = AnalyzeDeviceResponses[keyof AnalyzeDeviceResponses];
+
+export type CreateAiHealthReportData = {
+    body: AiReportIn;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+    };
+    query?: never;
+    url: '/api/devices/{device_id}/ai/report';
+};
+
+export type CreateAiHealthReportErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateAiHealthReportError = CreateAiHealthReportErrors[keyof CreateAiHealthReportErrors];
+
+export type CreateAiHealthReportResponses = {
+    /**
+     * Successful Response
+     */
+    200: AiHealthReport;
+};
+
+export type CreateAiHealthReportResponse = CreateAiHealthReportResponses[keyof CreateAiHealthReportResponses];
 
 export type GetAutopilotStateData = {
     body?: never;
