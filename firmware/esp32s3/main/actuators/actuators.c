@@ -122,10 +122,10 @@ esp_err_t actuator_init(void) {
         control_state_set_window_open(false);
         ESP_LOGI(TAG, "舵机 GPIO%d、蜂鸣器 GPIO%d 初始化完成", CONFIG_APP_SERVO_GPIO, CONFIG_APP_BEEP_GPIO);
     } else {
-        ESP_LOGW(TAG, "舵机和蜂鸣器已禁用；LED 逻辑控制仍可用");
+        ESP_LOGW(TAG, "舵机和蜂鸣器已禁用；LED 模块仍可独立控制");
     }
 
-    if (CONFIG_APP_LED_MODE_GPIO) {
+    if (CONFIG_APP_LED_ENABLED) {
         gpio_config_t led = {
             .pin_bit_mask = 1ULL << CONFIG_APP_LED_GPIO,
             .mode = GPIO_MODE_OUTPUT,
@@ -135,18 +135,22 @@ esp_err_t actuator_init(void) {
         };
         gpio_config(&led);
         gpio_set_level(CONFIG_APP_LED_GPIO, CONFIG_APP_LED_ACTIVE_LOW ? 1 : 0);
+        ESP_LOGI(TAG, "LED GPIO%d 初始化完成", CONFIG_APP_LED_GPIO);
+    } else {
+        ESP_LOGW(TAG, "LED 模块已禁用");
     }
     control_state_set_led(false);
     return ESP_OK;
 }
 
 static esp_err_t set_led(bool on) {
-    if (CONFIG_APP_LED_MODE_GPIO) {
-        const int active = CONFIG_APP_LED_ACTIVE_LOW ? 0 : 1;
-        gpio_set_level(CONFIG_APP_LED_GPIO, on ? active : !active);
+    if (!CONFIG_APP_LED_ENABLED) {
+        return ESP_ERR_NOT_SUPPORTED;
     }
+    const int active = CONFIG_APP_LED_ACTIVE_LOW ? 0 : 1;
+    gpio_set_level(CONFIG_APP_LED_GPIO, on ? active : !active);
     control_state_set_led(on);
-    ESP_LOGI(TAG, "LED %s（%s模式）", on ? "开启" : "关闭", CONFIG_APP_LED_MODE_GPIO ? "GPIO" : "逻辑");
+    ESP_LOGI(TAG, "LED %s（GPIO%d）", on ? "开启" : "关闭", CONFIG_APP_LED_GPIO);
     return ESP_OK;
 }
 

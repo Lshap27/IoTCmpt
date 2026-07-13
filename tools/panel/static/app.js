@@ -241,8 +241,8 @@ loadEnvironment();
 
 // ------------------------------------------------------------------ 环境配置
 const ONLINE_LLM_DEFAULTS = {
-  endpoint: "https://api.openai.com/v1/chat/completions",
-  model: "gpt-4o-mini",
+  endpoint: "https://api.deepseek.com",
+  model: "deepseek-v4-flash",
 };
 let onlineLlmDraft = { ...ONLINE_LLM_DEFAULTS };
 
@@ -324,8 +324,10 @@ async function loadEnvConfig() {
           .map((item) => item.trim())
           .includes(input.value);
       });
-    if (compose.AIOT_DEMO_DEVICE_ID)
+    if (compose.AIOT_DEMO_DEVICE_ID) {
       $("#deviceId").value = compose.AIOT_DEMO_DEVICE_ID;
+      $("#dataDeviceId").value = compose.AIOT_DEMO_DEVICE_ID;
+    }
     if (compose.AIOT_DEMO_SCENARIO)
       $("#simulatorScenario").value = compose.AIOT_DEMO_SCENARIO;
     $("#autopilotEnabled").checked = server.AIOT_AUTOPILOT_ENABLED !== "false";
@@ -493,6 +495,7 @@ const FW_BOOL_KEYS = [
   "CONFIG_APP_BUTTON_ENABLED",
   "CONFIG_APP_MQ2_ENABLED",
   "CONFIG_APP_VOICE_ENABLED",
+  "CONFIG_APP_LED_ENABLED",
   "CONFIG_APP_LED_ACTIVE_LOW",
 ];
 const FW_TEXT_KEYS = [
@@ -518,7 +521,6 @@ async function loadFirmwareConfig() {
       const el = $("#fw_" + key);
       if (el && v[key] !== undefined) el.checked = !!v[key];
     }
-    $("#fw_LED_MODE").value = v.CONFIG_APP_LED_MODE_GPIO === false ? "logical" : "gpio";
     syncFirmwareFields();
   } catch (_) {}
 }
@@ -537,17 +539,20 @@ function syncFirmwareFields() {
     '[data-for-firmware="image"]',
     $("#fw_CONFIG_APP_IMAGE_UPLOAD_ENABLED").checked,
   );
-  setModeFields('[data-for-firmware="led-gpio"]', $("#fw_LED_MODE").value === "gpio");
+  setModeFields(
+    '[data-for-firmware="led-gpio"]',
+    $("#fw_CONFIG_APP_LED_ENABLED").checked,
+  );
 }
 
 [
   "#fw_CONFIG_APP_WIFI_ENABLED",
   "#fw_CONFIG_APP_MQTT_ENABLED",
   "#fw_CONFIG_APP_IMAGE_UPLOAD_ENABLED",
+  "#fw_CONFIG_APP_LED_ENABLED",
 ].forEach((selector) =>
   $(selector).addEventListener("change", syncFirmwareFields),
 );
-$("#fw_LED_MODE").addEventListener("change", syncFirmwareFields);
 
 $("#btnFwAutofill").addEventListener("click", () => {
   const deviceId = $("#fw_CONFIG_APP_DEVICE_ID").value || "esp32s3-001";
@@ -591,8 +596,6 @@ $("#btnSaveFw").addEventListener("click", async () => {
     const el = $("#fw_" + key);
     if (el) values[key] = el.checked;
   }
-  values.CONFIG_APP_LED_MODE_GPIO = $("#fw_LED_MODE").value === "gpio";
-  values.CONFIG_APP_LED_MODE_LOGICAL = $("#fw_LED_MODE").value === "logical";
   try {
     const result = await post("/api/config/firmware", { values });
     msg.className = "msg ok";
@@ -602,6 +605,186 @@ $("#btnSaveFw").addEventListener("click", async () => {
     msg.textContent = "✘ 写入失败：" + e.message;
   }
 });
+
+// ------------------------------------------------------------------ 数据工具
+const DATA_COUNT_IDS = {
+  telemetry: "#dataCountTelemetry",
+  events: "#dataCountEvents",
+  ai: "#dataCountAi",
+  notifications: "#dataCountNotifications",
+};
+let latestDataPreview = null;
+
+function localDateTimeValue(date) {
+  const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return shifted.toISOString().slice(0, 19);
+}
+
+function setDataLast24Hours() {
+  const end = new Date();
+  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+  $("#dataStartAt").value = localDateTimeValue(start);
+  $("#dataEndAt").value = localDateTimeValue(end);
+  latestDataPreview = null;
+}
+
+function dataRangePayload() {
+  const controls = [$("#dataDeviceId"), $("#dataStartAt"), $("#dataEndAt")];
+  const invalid = controls.find((control) => !control.reportValidity());
+  if (invalid) throw new Error("请先填写有效的设备和时间范围");
+  const start = new Date($("#dataStartAt").value);
+  const end = new Date($("#dataEndAt").value);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
+    throw new Error("开始时间或结束时间无效");
+  }
+  if (start >= end) throw new Error("结束时间必须晚于开始时间");
+  return {
+    deviceId: $("#dataDeviceId").value.trim(),
+    startAt: start.toISOString(),
+    endAt: end.toISOString(),
+  };
+}
+
+function renderDataPreview(result) {
+  latestDataPreview = result;
+  for (const [key, selector] of Object.entries(DATA_COUNT_IDS)) {
+    $(selector).textContent = Number(result.counts?.[key] || 0).toLocaleString(
+      "zh-CN",
+    );
+  }
+}
+
+async function previewDataRange({ quiet = false } = {}) {
+  const result = await post("/api/data/preview", dataRangePayload());
+  renderDataPreview(result);
+  if (!quiet) {
+    const msg = $("#dataMsg");
+    msg.className = "msg ok";
+    msg.textContent = "✔ 已读取所选时段的数据统计";
+  }
+  return result;
+}
+
+function setDataMessage(message, error = false) {
+  const msg = $("#dataMsg");
+  msg.className = "msg " + (error ? "err" : "ok");
+  msg.textContent = (error ? "✘ " : "✔ ") + message;
+}
+
+function showDataConfirmation({ title, text, warning, action, body, danger }) {
+  const dialog = $("#dataConfirmDialog");
+  $("#dataConfirmTitle").textContent = title;
+  $("#dataConfirmText").textContent = text;
+  $("#dataConfirmWarning").textContent = warning;
+  const confirm = $("#btnDataConfirm");
+  confirm.className = danger ? "danger-solid" : "primary";
+  dialog.dataset.action = action;
+  dialog.dataset.body = JSON.stringify(body);
+  dialog.showModal();
+}
+
+$("#btnDataLast24h").addEventListener("click", setDataLast24Hours);
+$("#btnDataPreview").addEventListener("click", async () => {
+  try {
+    await previewDataRange();
+  } catch (error) {
+    setDataMessage(error.message, true);
+  }
+});
+
+$("#btnDataCleanup").addEventListener("click", async () => {
+  try {
+    const categories = [...$$('input[name="dataCategory"]:checked')].map(
+      (input) => input.value,
+    );
+    if (!categories.length) throw new Error("请至少选择一种要清理的数据");
+    const preview = await previewDataRange({ quiet: true });
+    const labels = {
+      telemetry: "遥测",
+      events: "事件",
+      ai: "AI 决策 / 命令",
+      notifications: "通知",
+    };
+    const total = categories.reduce(
+      (sum, category) => sum + Number(preview.counts?.[category] || 0),
+      0,
+    );
+    showDataConfirmation({
+      title: "确认清理所选数据？",
+      text: `设备 ${preview.deviceId}，${categories.map((item) => labels[item]).join("、")}，共命中 ${total.toLocaleString("zh-CN")} 条。`,
+      warning:
+        "删除后无法从面板撤销；设备、图片、姿态结果和范围外数据不会被删除。",
+      action: "cleanup",
+      body: { ...dataRangePayload(), categories },
+      danger: true,
+    });
+  } catch (error) {
+    setDataMessage(error.message, true);
+  }
+});
+
+$("#btnDataDemo").addEventListener("click", () => {
+  try {
+    const body = dataRangePayload();
+    const interval = Number($("#dataIntervalSeconds").value);
+    if (
+      !$("#dataIntervalSeconds").reportValidity() ||
+      !Number.isFinite(interval)
+    ) {
+      throw new Error("请填写 2.5 到 3600 秒之间的采样间隔");
+    }
+    const sampleCount = Math.ceil(
+      (new Date(body.endAt) - new Date(body.startAt)) / 1000 / interval,
+    );
+    if (sampleCount > 10_000) {
+      throw new Error(
+        `预计生成 ${sampleCount.toLocaleString("zh-CN")} 条，超过 10,000 条上限`,
+      );
+    }
+    body.intervalSeconds = interval;
+    showDataConfirmation({
+      title: "确认生成全状态演示数据？",
+      text: `设备 ${body.deviceId} 将生成约 ${sampleCount.toLocaleString("zh-CN")} 条遥测和 5 条阶段事件。`,
+      warning: "所选时段内已有的遥测和事件会被替换，其他类别数据保持不变。",
+      action: "demo",
+      body,
+      danger: false,
+    });
+  } catch (error) {
+    setDataMessage(error.message, true);
+  }
+});
+
+const dataConfirmDialog = $("#dataConfirmDialog");
+dataConfirmDialog.addEventListener("close", async () => {
+  if (dataConfirmDialog.returnValue !== "confirm") return;
+  const action = dataConfirmDialog.dataset.action;
+  const body = JSON.parse(dataConfirmDialog.dataset.body || "{}");
+  const msg = $("#dataMsg");
+  msg.className = "msg";
+  msg.textContent = action === "cleanup" ? "正在清理……" : "正在生成演示数据……";
+  try {
+    const result = await post(`/api/data/${action}`, body);
+    if (action === "cleanup") {
+      const total = Object.entries(result.deleted || {})
+        .filter(([key]) => !["commands", "aiResults"].includes(key))
+        .reduce((sum, [, count]) => sum + Number(count || 0), 0);
+      setDataMessage(
+        `已清理 ${total.toLocaleString("zh-CN")} 条数据，请刷新业务控制台`,
+      );
+    } else {
+      setDataMessage(
+        `已生成 ${Number(result.generated?.telemetry || 0).toLocaleString("zh-CN")} 条遥测和 ${result.generated?.events || 0} 条事件，请刷新业务控制台`,
+      );
+    }
+    await previewDataRange({ quiet: true });
+  } catch (error) {
+    setDataMessage(error.message, true);
+  }
+});
+
+setDataLast24Hours();
+$("#dataDeviceId").value = $("#deviceId").value || "esp32s3-001";
 
 // ------------------------------------------------------------------ 串口
 async function refreshComPorts() {

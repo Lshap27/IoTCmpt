@@ -133,25 +133,18 @@ menu "AIoT MQTT 固件主线"
             bool "蜂鸣器低电平触发"
             default y
 
-        choice APP_LED_MODE
-            prompt "LED 控制模式"
-            default APP_LED_MODE_GPIO
-
-            config APP_LED_MODE_GPIO
-                bool "驱动物理 GPIO"
-
-            config APP_LED_MODE_LOGICAL
-                bool "仅维护逻辑状态（未确认 GPIO）"
-        endchoice
+        config APP_LED_ENABLED
+            bool "启用 LED 灯"
+            default n
 
         config APP_LED_GPIO
             int "LED GPIO 引脚"
-            depends on APP_LED_MODE_GPIO
+            depends on APP_LED_ENABLED
             default 41
 
         config APP_LED_ACTIVE_LOW
             bool "LED 低电平点亮"
-            depends on APP_LED_MODE_GPIO
+            depends on APP_LED_ENABLED
             default n
     endmenu
 

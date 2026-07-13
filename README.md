@@ -58,7 +58,7 @@ fails on drift).
 
 On Windows, double-click `启动配置面板.cmd`. The local-only panel at
 `127.0.0.1:8765` provides environment checks, project configuration, service
-control, firmware configuration, and firmware operations.
+control, firmware configuration, firmware operations, and local data tools.
 
 1. Run the Environment Center check. It can install missing prerequisites,
    test Docker Hub access, select the official registry/a public mirror, and
@@ -73,6 +73,11 @@ control, firmware configuration, and firmware operations.
    MQTT and the API, then starts the host simulator automatically.
 5. Open `http://localhost:3000`. Health is at `http://localhost:8000/health`;
    EMQX is at `http://localhost:18083` (`admin / public`).
+
+The Data Tools page can preview or selectively clean a device's records in a
+local time range, and can replace telemetry/events in that range with a
+deterministic five-stage demo. It runs only through the loopback-only setup
+panel and does not expose a public FastAPI administration route.
 
 The four supported combinations are Virtual Device + Mock AI (recommended
 offline demo), Virtual Device + Online LLM, Real ESP32-S3 + Mock AI, and Real

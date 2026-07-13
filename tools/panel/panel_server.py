@@ -394,7 +394,8 @@ def save_env_config(body):
             raise ApiError(400, "设备来源必须是 Simulator 或 Real")
         if ai_mode not in ("Mock", "Online"):
             raise ApiError(400, "AI 模式必须是 Mock 或 Online")
-        endpoint = str(body.get("llmEndpoint") or "").strip()
+        endpoint = str(body.get("llmEndpoint") or "").strip().rstrip("/")
+        body["llmEndpoint"] = endpoint
         if ai_mode == "Online" and (not endpoint or endpoint == "mock"):
             raise ApiError(400, "在线大模型需要填写真实 LLM 接口地址")
         if ai_mode == "Online":
@@ -500,12 +501,32 @@ FIRMWARE_KEYS = {
     "CONFIG_APP_BUTTON_ENABLED": "bool",
     "CONFIG_APP_MQ2_ENABLED": "bool",
     "CONFIG_APP_VOICE_ENABLED": "bool",
-    "CONFIG_APP_LED_MODE_GPIO": "bool",
-    "CONFIG_APP_LED_MODE_LOGICAL": "bool",
+    "CONFIG_APP_LED_ENABLED": "bool",
     "CONFIG_APP_LED_GPIO": "int",
     "CONFIG_APP_LED_ACTIVE_LOW": "bool",
     "CONFIG_APP_CAMERA_UPLOAD_INTERVAL_MS": "int",
 }
+
+PANEL_FIRMWARE_DEFAULTS = {
+    "CONFIG_APP_DEVICE_ID": "esp32s3-001",
+    "CONFIG_APP_SENSOR_MOCK_ENABLED": False,
+    "CONFIG_APP_SENSOR_INTERVAL_MS": "2500",
+    "CONFIG_APP_WIFI_ENABLED": True,
+    "CONFIG_APP_MQTT_ENABLED": True,
+    "CONFIG_APP_IMAGE_UPLOAD_ENABLED": True,
+    "CONFIG_APP_CAMERA_ENABLED": True,
+    "CONFIG_APP_DISPLAY_ENABLED": True,
+    "CONFIG_APP_ACTUATOR_ENABLED": True,
+    "CONFIG_APP_BUTTON_ENABLED": True,
+    "CONFIG_APP_MQ2_ENABLED": True,
+    "CONFIG_APP_VOICE_ENABLED": True,
+    "CONFIG_APP_LED_ENABLED": True,
+    "CONFIG_APP_LED_GPIO": "41",
+    "CONFIG_APP_LED_ACTIVE_LOW": False,
+    "CONFIG_APP_CAMERA_UPLOAD_INTERVAL_MS": "2000",
+}
+
+LEGACY_LED_KEYS = ("CONFIG_APP_LED_MODE_GPIO", "CONFIG_APP_LED_MODE_LOGICAL")
 
 
 def read_sdkconfig_values():
@@ -526,7 +547,9 @@ def read_sdkconfig_values():
                 values[key] = raw
         elif re.search(r"^# {} is not set$".format(re.escape(key)), text, re.M):
             values[key] = False
-    return values
+    if SDKCONFIG.exists():
+        return {**PANEL_FIRMWARE_DEFAULTS, **values}
+    return {**values, **PANEL_FIRMWARE_DEFAULTS}
 
 
 def format_sdk_line(key, kind, value):
@@ -560,7 +583,7 @@ def save_firmware_config(body):
         interval = int(values["CONFIG_APP_CAMERA_UPLOAD_INTERVAL_MS"])
         if not 1000 <= interval <= 60000:
             raise ApiError(400, "摄像头上传间隔必须在 1000 到 60000 毫秒之间")
-    if values.get("CONFIG_APP_LED_MODE_GPIO"):
+    if values.get("CONFIG_APP_LED_ENABLED"):
         led_gpio = int(values.get("CONFIG_APP_LED_GPIO", 41))
         if not 0 <= led_gpio <= 48:
             raise ApiError(400, "LED GPIO 必须在 0 到 48 之间")
@@ -583,6 +606,12 @@ def save_firmware_config(body):
         text = SDKCONFIG_DEFAULTS.read_text(encoding="utf-8", errors="replace")
     else:
         text = ""
+
+    for legacy_key in LEGACY_LED_KEYS:
+        pattern = r"^(?:{0}=.*|# {0} is not set)\r?\n?".format(
+            re.escape(legacy_key)
+        )
+        text = re.sub(pattern, "", text, flags=re.M)
 
     for key, value in values.items():
         kind = FIRMWARE_KEYS[key]
@@ -723,6 +752,87 @@ def get_environment():
         raise ApiError(500, "环境检查返回了无效数据")
 
 
+# ---------------------------------------------------------------- data tools
+
+
+def run_data_tool(operation, body):
+    payload = json.dumps(body or {}, ensure_ascii=False)
+    try:
+        container = subprocess.run(
+            [
+                "docker",
+                "compose",
+                "ps",
+                "--status",
+                "running",
+                "-q",
+                "server",
+            ],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+        container_running = container.returncode == 0 and bool(
+            container.stdout.strip()
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        container_running = False
+    if container_running:
+        command = [
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "server",
+            "python",
+            "-m",
+            "app.tools.data_manager",
+            operation,
+        ]
+        cwd = REPO
+    else:
+        venv_python = REPO / "server" / ".venv" / "Scripts" / "python.exe"
+        command = (
+            [str(venv_python), "-m", "app.tools.data_manager", operation]
+            if venv_python.exists()
+            else ["uv", "run", "python", "-m", "app.tools.data_manager", operation]
+        )
+        cwd = REPO / "server"
+    try:
+        result = subprocess.run(
+            command,
+            cwd=str(cwd),
+            input=payload,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+        )
+    except FileNotFoundError as exc:
+        raise ApiError(503, "数据工具需要运行中的 Docker server 或本机 uv 环境") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ApiError(504, "数据操作超时，请缩短时间范围后重试") from exc
+
+    output = result.stdout.strip()
+    try:
+        data = json.loads(output) if output else {}
+    except ValueError as exc:
+        raise ApiError(
+            500,
+            "数据工具返回了无效结果：{}".format(result.stderr.strip() or output),
+        ) from exc
+    if result.returncode != 0:
+        detail = data.get("detail") or result.stderr.strip() or "数据操作失败"
+        if "No module named 'app.tools'" in detail:
+            detail = "运行中的 server 镜像尚未包含数据工具，请重新构建 Docker 演示栈"
+        raise ApiError(400 if result.returncode == 2 else 500, detail)
+    return data
+
+
 # ---------------------------------------------------------------- http
 
 CONTENT_TYPES = {
@@ -858,6 +968,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(save_env_config(body))
             elif path == "/api/config/firmware":
                 self.send_json(save_firmware_config(body))
+            elif path == "/api/data/preview":
+                self.send_json(run_data_tool("preview", body))
+            elif path == "/api/data/cleanup":
+                self.send_json(run_data_tool("cleanup", body))
+            elif path == "/api/data/demo":
+                self.send_json(run_data_tool("demo", body))
             else:
                 m = re.fullmatch(r"/api/actions/([\w-]+)(/stop)?", path)
                 if not m:

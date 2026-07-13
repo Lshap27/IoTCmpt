@@ -6,6 +6,7 @@ import logging
 import re
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -70,6 +71,18 @@ SYSTEM_PROMPT = (
 
 class VisionUnsupportedError(RuntimeError):
     pass
+
+
+def resolve_chat_completions_url(endpoint: str) -> str:
+    """Accept an OpenAI-compatible base URL or a legacy full endpoint."""
+    normalized = endpoint.strip().rstrip("/")
+    parsed = urlsplit(normalized)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("LLM endpoint must be a valid HTTP(S) URL")
+    path = parsed.path.rstrip("/")
+    if not path.endswith("/chat/completions"):
+        path += "/chat/completions"
+    return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment))
 
 
 def extract_json_object(content: Any) -> dict[str, Any]:
@@ -318,7 +331,9 @@ class LLMService:
 
         headers = {"Authorization": f"Bearer {self.settings.llm_api_key}"}
         async with httpx.AsyncClient(timeout=self.settings.llm_timeout_seconds) as client:
-            response = await client.post(self.settings.llm_endpoint, json=payload, headers=headers)
+            response = await client.post(
+                resolve_chat_completions_url(self.settings.llm_endpoint), json=payload, headers=headers
+            )
             if response.status_code in {400, 415, 422} and any(
                 marker in response.text.lower() for marker in ("image", "vision", "multimodal", "image_url")
             ):

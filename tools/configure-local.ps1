@@ -371,8 +371,8 @@ switch ($Preset) {
     }
     "LlmDemo" {
         Write-Host "Configuring local demo with a real OpenAI-compatible LLM endpoint." -ForegroundColor Cyan
-        $llmEndpointValue = Resolve-Value -Bound $LlmEndpoint -Prompt "LLM endpoint" -Default "https://api.openai.com/v1/chat/completions"
-        $llmModelValue = Resolve-Value -Bound $LlmModel -Prompt "LLM model" -Default "gpt-4o-mini"
+        $llmEndpointValue = Resolve-Value -Bound $LlmEndpoint -Prompt "LLM base URL" -Default "https://api.deepseek.com"
+        $llmModelValue = Resolve-Value -Bound $LlmModel -Prompt "LLM model" -Default "deepseek-v4-flash"
         if ([string]::IsNullOrWhiteSpace($LlmApiKey) -and -not $NonInteractive) {
             $enteredKey = Read-SecretPlainText -Prompt "LLM API key (input hidden, leave empty to keep existing)"
             if (-not [string]::IsNullOrWhiteSpace($enteredKey)) {
@@ -386,6 +386,15 @@ switch ($Preset) {
 
 if ($DemoDeviceMode) { $demoDeviceModeValue = $DemoDeviceMode }
 if ($DemoAiMode) { $demoAiModeValue = $DemoAiMode }
+if ($llmEndpointValue -ne "mock") {
+    $llmEndpointValue = $llmEndpointValue.Trim().TrimEnd("/")
+    $llmUri = $null
+    $isAbsoluteHttpUrl = [Uri]::TryCreate($llmEndpointValue, [UriKind]::Absolute, [ref]$llmUri) -and
+        $llmUri.Scheme -in @("http", "https") -and -not [string]::IsNullOrWhiteSpace($llmUri.Host)
+    if (-not $isAbsoluteHttpUrl) {
+        throw "LLM base URL must be an absolute HTTP(S) URL."
+    }
+}
 
 if ($deviceIdValue -notmatch "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$") {
     throw "Device ID must be 1-64 characters and use only letters, numbers, dot, underscore, or hyphen."

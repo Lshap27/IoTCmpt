@@ -64,6 +64,9 @@
         <button class="tab" data-tab="fwops">
           <i>5</i><span>固件操作</span>
         </button>
+        <button class="tab" data-tab="data">
+          <i>6</i><span>数据工具</span>
+        </button>
       </nav>
 
       <!-- ① 环境中心 -->
@@ -204,12 +207,18 @@
             ></label
           >
           <label data-for-ai="online"
-            >LLM 接口地址
-            <input id="llmEndpoint" type="url" placeholder="https://..."
+            >LLM Base URL
+            <input
+              id="llmEndpoint"
+              type="url"
+              placeholder="https://api.deepseek.com"
           /></label>
           <label data-for-ai="online"
             >LLM 模型
-            <input id="llmModel" placeholder="gpt-4o-mini" maxlength="128"
+            <input
+              id="llmModel"
+              placeholder="deepseek-v4-flash"
+              maxlength="128"
           /></label>
           <label data-for-ai="online"
             >LLM API Key
@@ -416,23 +425,30 @@
             ><input type="checkbox" id="fw_CONFIG_APP_VOICE_ENABLED" /> SYN6288
             语音播报</label
           >
+          <label class="check"
+            ><input type="checkbox" id="fw_CONFIG_APP_LED_ENABLED" /> LED
+            灯</label
+          >
         </div>
         <h3 class="group-title">LED 与摄像头</h3>
         <div class="grid">
-          <label>LED 控制模式
-            <select id="fw_LED_MODE">
-              <option value="gpio">驱动物理 GPIO</option>
-              <option value="logical">仅维护逻辑状态</option>
-            </select>
-          </label>
-          <label data-for-firmware="led-gpio">LED GPIO
+          <label data-for-firmware="led-gpio"
+            >LED GPIO
             <input id="fw_CONFIG_APP_LED_GPIO" type="number" min="0" max="48" />
           </label>
           <label class="check" data-for-firmware="led-gpio">
-            <input type="checkbox" id="fw_CONFIG_APP_LED_ACTIVE_LOW" /> LED 低电平点亮
+            <input type="checkbox" id="fw_CONFIG_APP_LED_ACTIVE_LOW" /> LED
+            低电平点亮
           </label>
-          <label>摄像头上传间隔（毫秒）
-            <input id="fw_CONFIG_APP_CAMERA_UPLOAD_INTERVAL_MS" type="number" min="1000" max="60000" step="100" />
+          <label
+            >摄像头上传间隔（毫秒）
+            <input
+              id="fw_CONFIG_APP_CAMERA_UPLOAD_INTERVAL_MS"
+              type="number"
+              min="1000"
+              max="60000"
+              step="100"
+            />
           </label>
         </div>
         <div class="actions">
@@ -480,6 +496,131 @@
         </div>
       </section>
 
+      <!-- ⑥ 数据工具 -->
+      <section id="tab-data" class="panel">
+        <h2>
+          数据初始化与清理<small class="h-note"
+            >仅操作所选设备和时间段，不删除设备、图片或数据库卷</small
+          >
+        </h2>
+        <div class="grid data-range-grid">
+          <label
+            >设备 ID
+            <input
+              id="dataDeviceId"
+              pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
+              maxlength="64"
+              required
+          /></label>
+          <label
+            >开始时间
+            <input id="dataStartAt" type="datetime-local" step="1" required
+          /></label>
+          <label
+            >结束时间
+            <input id="dataEndAt" type="datetime-local" step="1" required
+          /></label>
+          <label
+            >演示采样间隔（秒）
+            <input
+              id="dataIntervalSeconds"
+              type="number"
+              min="2.5"
+              max="3600"
+              step="0.5"
+              value="60"
+              required
+          /></label>
+        </div>
+        <div class="row data-range-actions">
+          <button id="btnDataLast24h">设为最近 24 小时</button>
+          <button id="btnDataPreview">预览命中数据</button>
+          <span class="hint-inline"
+            >时间范围按本机时区解释，结束时间不包含在内。</span
+          >
+        </div>
+
+        <div class="data-counts" aria-label="时间段数据统计" aria-live="polite">
+          <article class="data-count-card">
+            <span>环境遥测</span><b id="dataCountTelemetry">—</b>
+          </article>
+          <article class="data-count-card">
+            <span>设备事件</span><b id="dataCountEvents">—</b>
+          </article>
+          <article class="data-count-card">
+            <span>AI 决策 / 命令</span><b id="dataCountAi">—</b>
+          </article>
+          <article class="data-count-card">
+            <span>通知</span><b id="dataCountNotifications">—</b>
+          </article>
+        </div>
+
+        <div class="data-tool-grid">
+          <article class="data-tool-card danger-zone">
+            <div>
+              <h3>清理所选时段</h3>
+              <p>先预览数量，再按分类删除；所选范围外的数据保持不变。</p>
+            </div>
+            <fieldset class="choice-field">
+              <legend>数据类别</legend>
+              <div class="choice-row">
+                <label class="check compact-check"
+                  ><input
+                    type="checkbox"
+                    name="dataCategory"
+                    value="telemetry"
+                    checked
+                  />遥测</label
+                >
+                <label class="check compact-check"
+                  ><input
+                    type="checkbox"
+                    name="dataCategory"
+                    value="events"
+                    checked
+                  />事件</label
+                >
+                <label class="check compact-check"
+                  ><input type="checkbox" name="dataCategory" value="ai" />AI
+                  决策 / 命令</label
+                >
+                <label class="check compact-check"
+                  ><input
+                    type="checkbox"
+                    name="dataCategory"
+                    value="notifications"
+                  />通知</label
+                >
+              </div>
+            </fieldset>
+            <button class="danger" id="btnDataCleanup">清理所选数据</button>
+          </article>
+
+          <article class="data-tool-card demo-zone">
+            <div>
+              <h3>构造全状态演示</h3>
+              <p>
+                覆盖遥测与事件，并依次生成正常、关注、空气告警、烟雾告警和恢复阶段。
+              </p>
+            </div>
+            <ol class="stage-flow" aria-label="演示数据阶段">
+              <li>正常</li>
+              <li>关注</li>
+              <li>告警</li>
+              <li>烟雾</li>
+              <li>恢复</li>
+            </ol>
+            <button class="primary" id="btnDataDemo">生成全状态演示数据</button>
+          </article>
+        </div>
+        <div class="actions compact-actions">
+          <div class="msg" id="dataMsg" role="status" aria-live="polite"></div>
+          <span class="hint-inline"
+            >操作完成后刷新业务控制台，即可重新读取历史图表和告警记录。</span
+          >
+        </div>
+      </section>
+
       <footer>
         仅监听 127.0.0.1 · 环境配置写入 .env，固件配置写入 sdkconfig
       </footer>
@@ -498,6 +639,20 @@
         <div class="row dialog-actions">
           <button value="cancel">取消</button>
           <button value="confirm" class="danger-solid">确认卸载</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dataConfirmDialog" aria-labelledby="dataConfirmTitle">
+      <form method="dialog" class="dialog-card">
+        <h2 id="dataConfirmTitle">确认数据操作？</h2>
+        <p id="dataConfirmText"></p>
+        <div class="dialog-warning" id="dataConfirmWarning"></div>
+        <div class="row dialog-actions">
+          <button value="cancel">取消</button>
+          <button value="confirm" id="btnDataConfirm" class="danger-solid">
+            确认执行
+          </button>
         </div>
       </form>
     </dialog>

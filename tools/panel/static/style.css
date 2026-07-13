@@ -283,7 +283,7 @@ nav {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--line);
@@ -293,14 +293,14 @@ nav {
   animation: page-rise 0.5s var(--ease-out) 60ms backwards;
 }
 
-/* 滑动指示器：等宽四段，:has 驱动，无需 JS */
+/* 滑动指示器：等宽六段，:has 驱动，无需 JS */
 .tabs-ind {
   position: absolute;
   z-index: -1;
   top: 4px;
   bottom: 4px;
   left: 4px;
-  width: calc((100% - 8px - 16px) / 5);
+  width: calc((100% - 8px - 20px) / 6);
   border-radius: 999px;
   background: linear-gradient(135deg, var(--accent), var(--accent-deep));
   box-shadow: 0 4px 12px -3px var(--accent-glow);
@@ -318,6 +318,9 @@ nav:has(.tab:nth-of-type(4).active) .tabs-ind {
 }
 nav:has(.tab:nth-of-type(5).active) .tabs-ind {
   transform: translateX(calc(400% + 16px));
+}
+nav:has(.tab:nth-of-type(6).active) .tabs-ind {
+  transform: translateX(calc(500% + 20px));
 }
 
 .tab {
@@ -793,6 +796,135 @@ button.danger:hover {
   padding-top: 14px;
 }
 
+/* ------------------------------------------------------------ 数据工具 */
+
+.data-range-actions {
+  margin: 10px 0 18px;
+}
+
+.data-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0 22px;
+}
+
+.data-count-card {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--card-soft);
+}
+
+.data-count-card span {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.data-count-card b {
+  color: var(--accent-deep);
+  font-family: var(--font-mono);
+  font-size: 20px;
+}
+
+.data-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.data-tool-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--card-soft);
+}
+
+.data-tool-card h3 {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.data-tool-card p {
+  margin: 0;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+
+.data-tool-card .choice-field {
+  width: 100%;
+}
+
+.data-tool-card > button {
+  margin-top: auto;
+}
+
+.danger-zone {
+  border-color: color-mix(in srgb, var(--err) 28%, var(--line));
+}
+
+.demo-zone {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  background: linear-gradient(145deg, var(--card-soft), var(--accent-soft));
+}
+
+.stage-flow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage-flow li {
+  position: relative;
+  padding: 28px 3px 0;
+  color: var(--ink-2);
+  font-size: 11px;
+  text-align: center;
+}
+
+.stage-flow li::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  border: 3px solid var(--card-soft);
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateX(-50%);
+}
+
+.stage-flow li::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  width: 100%;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.stage-flow li:last-child::after {
+  display: none;
+}
+
 /* ------------------------------------------------------------ 环境中心 */
 
 .health-summary {
@@ -1248,12 +1380,31 @@ footer {
   }
   nav {
     border-radius: 14px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .tabs-ind {
+    display: none;
+  }
+  .tab.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent-deep));
   }
   .tab {
     flex-direction: column;
     gap: 1px;
   }
   .network-grid {
+    grid-template-columns: 1fr;
+  }
+  .data-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .data-tool-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .data-counts {
     grid-template-columns: 1fr;
   }
 }
