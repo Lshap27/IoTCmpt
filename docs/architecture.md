@@ -55,8 +55,9 @@ and CI fails when either drifts from the code.
      the per-device switch is on, and the cooldown has expired; or
    - manually: the frontend calls `POST /api/devices/{device_id}/ai/analyze`.
 6. Server broadcasts `ai_analyzing`, then calls the LLM provider with the
-   device snapshot, a recent telemetry trend, and — when fresh — the latest
-   JPEG as an OpenAI-compatible vision message. The validated decision is
+   device snapshot and a recent telemetry trend. Ordinary analysis is always
+   text-only; only explicit or periodic vision analysis attaches a fresh JPEG.
+   The validated decision is
    stored as an `ai_result` plus a command.
 7. If the command type is executable and its confidence passes the configured
    gate, the server publishes it to `devices/{device_id}/command`; otherwise it
@@ -77,8 +78,9 @@ demonstrated without network access or API keys.
 
 DeepSeek V4 uses the same transport. When thinking mode is enabled the gateway
 sends `thinking.type` and `reasoning_effort` and omits temperature. DeepSeek's
-current chat models are text-only, so deployments using them should set
-`AIOT_LLM_VISION_ENABLED=false`.
+text-only. If a provider rejects image input, the gateway marks that model as
+vision-unsupported and disables image-only controls instead of silently
+returning a text-only result.
 
 ## Deployment Topology
 

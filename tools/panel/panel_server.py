@@ -382,7 +382,6 @@ ENV_PARAM_FLAGS = [
 ]
 
 ENV_BOOL_FLAGS = [
-    ("llmVisionEnabled", "-LlmVisionEnabled"),
     ("autopilotEnabled", "-AutopilotEnabled"),
 ]
 
@@ -501,6 +500,11 @@ FIRMWARE_KEYS = {
     "CONFIG_APP_BUTTON_ENABLED": "bool",
     "CONFIG_APP_MQ2_ENABLED": "bool",
     "CONFIG_APP_VOICE_ENABLED": "bool",
+    "CONFIG_APP_LED_MODE_GPIO": "bool",
+    "CONFIG_APP_LED_MODE_LOGICAL": "bool",
+    "CONFIG_APP_LED_GPIO": "int",
+    "CONFIG_APP_LED_ACTIVE_LOW": "bool",
+    "CONFIG_APP_CAMERA_UPLOAD_INTERVAL_MS": "int",
 }
 
 
@@ -552,6 +556,14 @@ def save_firmware_config(body):
             raise ApiError(400, "传感器采集间隔必须是整数")
         if not 1000 <= interval <= 60000:
             raise ApiError(400, "传感器采集间隔必须在 1000 到 60000 毫秒之间")
+    if "CONFIG_APP_CAMERA_UPLOAD_INTERVAL_MS" in values:
+        interval = int(values["CONFIG_APP_CAMERA_UPLOAD_INTERVAL_MS"])
+        if not 1000 <= interval <= 60000:
+            raise ApiError(400, "摄像头上传间隔必须在 1000 到 60000 毫秒之间")
+    if values.get("CONFIG_APP_LED_MODE_GPIO"):
+        led_gpio = int(values.get("CONFIG_APP_LED_GPIO", 41))
+        if not 0 <= led_gpio <= 48:
+            raise ApiError(400, "LED GPIO 必须在 0 到 48 之间")
     if (
         values.get("CONFIG_APP_WIFI_ENABLED")
         and not str(values.get("CONFIG_APP_WIFI_SSID") or "").strip()

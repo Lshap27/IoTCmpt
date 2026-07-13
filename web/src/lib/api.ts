@@ -1,6 +1,7 @@
 import { client } from "./api-client/client.gen";
 import {
   analyzeDevice,
+  analyzeDeviceImage,
   ackDeviceEvent,
   analyzeLatestPose,
   deviceEvents,
@@ -104,7 +105,11 @@ export async function fetchHistoryBucketed(
   return data;
 }
 
-export async function sendCommand(deviceId: string, type: string): Promise<CommandOut> {
+export async function sendCommand(
+  deviceId: string,
+  type: string,
+  parameter: Record<string, unknown> = {},
+): Promise<CommandOut> {
   const { data } = await sendCommandSdk({
     path: { device_id: deviceId },
     body: {
@@ -116,8 +121,12 @@ export async function sendCommand(deviceId: string, type: string): Promise<Comma
         | "alarm.off"
         | "led.on"
         | "led.off"
+        | "control.set_priority"
+        | "control.resume_auto"
+        | "alarm.silence"
+        | "voice.speak"
         | "display.message",
-      parameter: {},
+      parameter,
       reason: "dashboard command",
     },
     throwOnError: true,
@@ -153,6 +162,11 @@ export async function requestAiAnalysis(deviceId: string): Promise<AiDecisionOut
   return data;
 }
 
+export async function requestAiImageAnalysis(deviceId: string): Promise<AiDecisionOut> {
+  const { data } = await analyzeDeviceImage({ path: { device_id: deviceId }, throwOnError: true });
+  return data;
+}
+
 export async function requestAiReport(deviceId: string, period: ReportPeriod): Promise<AiHealthReportT> {
   const { data } = await createAiHealthReport({
     path: { device_id: deviceId },
@@ -171,10 +185,19 @@ export async function fetchAutopilot(deviceId: string): Promise<AutopilotStateT>
   return data;
 }
 
-export async function updateAutopilot(deviceId: string, enabled: boolean): Promise<AutopilotStateT> {
+export async function updateAutopilot(
+  deviceId: string,
+  values: {
+    enabled?: boolean;
+    vision_interval_enabled?: boolean;
+    vision_interval_seconds?: number;
+    sedentary_threshold_seconds?: number;
+    smoke_silence_seconds?: number;
+  },
+): Promise<AutopilotStateT> {
   const { data } = await updateAutopilotState({
     path: { device_id: deviceId },
-    body: { enabled },
+    body: values,
     throwOnError: true,
   });
   return data;

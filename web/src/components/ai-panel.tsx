@@ -19,7 +19,7 @@ import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import type { AiDecisionPayload } from "@/lib/api";
+import type { AiDecisionPayload, LatestState } from "@/lib/api";
 import { commandLabel, describeTrigger, formatDateTime } from "@/lib/utils";
 
 const COMMAND_ICONS: Record<string, typeof DoorOpen> = {
@@ -60,14 +60,14 @@ function AutopilotSwitch({
 export function AiPanel({
   analyzing,
   decision,
-  autopilotEnabled,
+  autopilot,
   onToggleAutopilot,
   onAnalyze,
   className,
 }: {
   analyzing: string | null;
   decision: AiDecisionPayload | null;
-  autopilotEnabled: boolean | null;
+  autopilot: LatestState["autopilot"];
   onToggleAutopilot: (enabled: boolean) => void;
   onAnalyze: () => void;
   className?: string;
@@ -81,7 +81,7 @@ export function AiPanel({
       title="AI 决策"
       icon={<BrainCircuit size={17} />}
       className={className}
-      actions={<AutopilotSwitch enabled={autopilotEnabled} onChange={onToggleAutopilot} />}
+      actions={<AutopilotSwitch enabled={autopilot?.enabled ?? null} onChange={onToggleAutopilot} />}
     >
       <div className="flex min-h-[15.5rem] flex-col">
         {analyzing ? (
@@ -130,7 +130,7 @@ export function AiPanel({
                 <risk.Icon size={13} style={{ color: risk.color }} />
                 {risk.label}
               </Badge>
-              {decision.image_attached ? <span className="text-ink3">已结合摄像头画面</span> : null}
+              {decision.scene_summary ? <span className="text-ink3">{decision.scene_summary}</span> : null}
             </div>
 
             <div>
@@ -152,6 +152,11 @@ export function AiPanel({
             <p className="flex-1 rounded-xl border border-line bg-raised px-3.5 py-3 text-sm leading-relaxed text-ink2">
               {decision.reason || "（模型未给出理由）"}
             </p>
+            {decision.speech ? (
+              <p className="rounded-xl border border-accent/30 bg-accent/5 px-3.5 py-2.5 text-sm text-ink2">
+                语音建议：{decision.speech}
+              </p>
+            ) : null}
 
             <p className="text-xs text-ink3">{formatDateTime(decision.command?.created_at)}</p>
           </div>

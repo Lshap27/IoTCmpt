@@ -44,6 +44,7 @@ esp_err_t app_config_load(app_config_t *out_config) {
     copy_config_string(out_config->image_upload_url, sizeof(out_config->image_upload_url), CONFIG_APP_IMAGE_UPLOAD_URL);
 
     out_config->camera_enabled = CONFIG_APP_CAMERA_ENABLED;
+    out_config->camera_upload_interval_ms = CONFIG_APP_CAMERA_UPLOAD_INTERVAL_MS;
     out_config->display_enabled = CONFIG_APP_DISPLAY_ENABLED;
     out_config->actuator_enabled = CONFIG_APP_ACTUATOR_ENABLED;
     out_config->button_enabled = CONFIG_APP_BUTTON_ENABLED;

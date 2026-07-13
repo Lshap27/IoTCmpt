@@ -73,6 +73,16 @@ static void handle_command_payload(const char *payload) {
         envelope.command.confidence = (float)confidence->valuedouble;
     }
 
+    char source[24] = {0};
+    copy_json_string(source, sizeof(source), root, "source");
+    if (strcmp(source, "llm") == 0) {
+        envelope.command.source = CLOUD_COMMAND_SOURCE_LLM;
+    } else if (strcmp(source, "rule") == 0) {
+        envelope.command.source = CLOUD_COMMAND_SOURCE_RULE;
+    } else {
+        envelope.command.source = CLOUD_COMMAND_SOURCE_FRONTEND;
+    }
+
     const cJSON *parameter = cJSON_GetObjectItemCaseSensitive(root, "parameter");
     if (parameter) {
         char *parameter_json = cJSON_PrintUnformatted(parameter);
@@ -115,8 +125,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_DATA: {
         /* 超过客户端缓冲区的消息会拆成多个 DATA 事件，单个分片不是完整 JSON，直接丢弃 */
         if (event->current_data_offset != 0 || event->data_len != event->total_data_len) {
-            ESP_LOGW(TAG, "discarding fragmented MQTT message (offset=%d len=%d total=%d)",
-                     event->current_data_offset, event->data_len, event->total_data_len);
+            ESP_LOGW(TAG, "discarding fragmented MQTT message (offset=%d len=%d total=%d)", event->current_data_offset,
+                     event->data_len, event->total_data_len);
             break;
         }
         char *payload = malloc((size_t)event->data_len + 1);
@@ -239,6 +249,10 @@ static char *build_telemetry_json(const sensor_sample_t *sample, const fusion_st
     cJSON_AddBoolToObject(state, "window_open", control.window_open);
     cJSON_AddBoolToObject(state, "alarm_on", control.alarm_on);
     cJSON_AddBoolToObject(state, "manual_override", control.manual_override);
+    cJSON_AddBoolToObject(state, "manual_window_override", control.manual_window_override);
+    cJSON_AddBoolToObject(state, "manual_led_override", control.manual_led_override);
+    cJSON_AddStringToObject(state, "control_priority", control_priority_name(control.priority));
+    cJSON_AddBoolToObject(state, "smoke_silenced", control.smoke_silenced);
     cJSON_AddBoolToObject(state, "led_on", control.led_on);
 
     cJSON_AddStringToObject(fusion_json, "air_quality", fusion_air_quality_name(fusion->air_quality));

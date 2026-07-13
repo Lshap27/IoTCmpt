@@ -19,6 +19,7 @@ export const EMPTY_AI: AiPanelState = { analyzing: null, decision: null };
 // 首次拉取与实时追加共用的历史窗口大小（use-device-live 的 fetchHistory 也用它）
 export const HISTORY_CAP = 120;
 const EVENT_CAP = 30;
+const TELEMETRY_EVENT_CAP = 12;
 
 let eventSeq = 0;
 
@@ -71,17 +72,28 @@ export function applyEnvelope(queryClient: QueryClient, deviceId: string, envelo
   if (envelope.device_id !== deviceId) return;
 
   eventSeq += 1;
-  queryClient.setQueryData<UiEvent[]>(deviceKeys.events(deviceId), (current = []) =>
-    [
-      {
-        id: eventSeq,
-        type: envelope.type,
-        payload: envelope.payload as Record<string, unknown>,
-        occurred_at: envelope.occurred_at,
-      },
-      ...current,
-    ].slice(0, EVENT_CAP),
-  );
+  let eventPayload = envelope.payload as Record<string, unknown>;
+  if (envelope.type === "command_ack") {
+    const commandId = envelope.payload.command_id;
+    const pending = queryClient.getQueryData<Record<string, string>>(deviceKeys.pendingCommands(deviceId));
+    const latest = queryClient.getQueryData<LatestState>(deviceKeys.latest(deviceId));
+    const commandType =
+      pending?.[commandId] ?? (latest?.command?.command_id === commandId ? latest.command.type : undefined);
+    eventPayload = { ...eventPayload, command_type: commandType };
+  }
+  const uiEvent: UiEvent = {
+    id: eventSeq,
+    type: envelope.type,
+    payload: eventPayload,
+    occurred_at: envelope.occurred_at,
+  };
+  queryClient.setQueryData<UiEvent[]>(deviceKeys.events(deviceId), (current = []) => {
+    // 高频遥测保留一个短窗口，但设置独立上限，避免挤掉控制、AI 和安全事件。
+    let telemetryCount = 0;
+    return [uiEvent, ...current]
+      .filter((event) => event.type !== "telemetry" || ++telemetryCount <= TELEMETRY_EVENT_CAP)
+      .slice(0, EVENT_CAP);
+  });
 
   switch (envelope.type) {
     case "telemetry": {
@@ -161,7 +173,14 @@ export function applyEnvelope(queryClient: QueryClient, deviceId: string, envelo
     case "autopilot": {
       patchLatest(queryClient, deviceId, (current) => ({
         ...current,
-        autopilot: { enabled: envelope.payload.enabled },
+        autopilot: {
+          enabled: envelope.payload.enabled,
+          vision_capability: envelope.payload.vision_capability,
+          vision_interval_enabled: envelope.payload.vision_interval_enabled,
+          vision_interval_seconds: envelope.payload.vision_interval_seconds,
+          sedentary_threshold_seconds: envelope.payload.sedentary_threshold_seconds,
+          smoke_silence_seconds: envelope.payload.smoke_silence_seconds,
+        },
       }));
       break;
     }

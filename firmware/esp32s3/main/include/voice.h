@@ -5,4 +5,4 @@
 #include "esp_err.h"
 
 esp_err_t voice_init(void);
-void voice_update(bool smoke_detected, bool air_bad);
+esp_err_t voice_speak_base64(const char *encoded);

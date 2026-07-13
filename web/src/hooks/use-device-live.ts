@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AiHealthReport, EventOut, LatestState, ReportPeriod } from "@/lib/api";
+import type { AiHealthReport, AutopilotState, EventOut, LatestState, ReportPeriod } from "@/lib/api";
 import {
   acknowledgeDeviceEvent,
   fetchDeviceEvents,
@@ -10,6 +10,7 @@ import {
   fetchHistoryBucketed,
   fetchLatest,
   requestAiAnalysis,
+  requestAiImageAnalysis,
   requestAiReport,
   requestPoseAnalysis,
   sendCommand,
@@ -130,6 +131,28 @@ export function useDeviceLive(deviceId: string) {
     },
   });
 
+  const imageAnalyzeMutation = useMutation({
+    mutationFn: () => requestAiImageAnalysis(deviceId),
+    onMutate: () => {
+      setActionError("");
+      queryClient.setQueryData<AiPanelState>(deviceKeys.ai(deviceId), (current = EMPTY_AI) => ({
+        ...current,
+        analyzing: current.analyzing ?? "manual:vision",
+      }));
+    },
+    onSuccess: (result) => {
+      queryClient.setQueryData<AiPanelState>(deviceKeys.ai(deviceId), { analyzing: null, decision: result });
+    },
+    onError: (err) => {
+      setActionError(err instanceof Error ? err.message : "图片分析失败");
+      queryClient.setQueryData<AiPanelState>(deviceKeys.ai(deviceId), (current = EMPTY_AI) => ({
+        ...current,
+        analyzing: null,
+      }));
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.latest(deviceId) });
+    },
+  });
+
   const reportMutation = useMutation({
     mutationFn: (period: ReportPeriod) => requestAiReport(deviceId, period),
     onMutate: () => setActionError(""),
@@ -138,20 +161,21 @@ export function useDeviceLive(deviceId: string) {
   });
 
   const commandMutation = useMutation({
-    mutationFn: (type: string) => sendCommand(deviceId, type),
-    onMutate: (type) => {
+    mutationFn: ({ type, parameter = {} }: { type: string; parameter?: Record<string, unknown> }) =>
+      sendCommand(deviceId, type, parameter),
+    onMutate: ({ type }) => {
       setActionError("");
       const localId = makeLocalCommandId();
       addPendingCommand(queryClient, deviceId, localId, type);
       return { localId };
     },
-    onSuccess: (command, type, context) => {
+    onSuccess: (command, { type }, context) => {
       removePendingCommand(queryClient, deviceId, context.localId);
       if (command?.command_id && !isAckedCommand(command.command_id)) {
         addPendingCommand(queryClient, deviceId, command.command_id, type);
       }
     },
-    onError: (err, _type, context) => {
+    onError: (err, _variables, context) => {
       if (context) removePendingCommand(queryClient, deviceId, context.localId);
       setActionError(err instanceof Error ? err.message : "指令下发失败");
     },
@@ -173,19 +197,27 @@ export function useDeviceLive(deviceId: string) {
   });
 
   const autopilotMutation = useMutation({
-    mutationFn: (enabled: boolean) => updateAutopilot(deviceId, enabled),
-    onMutate: async (enabled) => {
+    mutationFn: (values: Parameters<typeof updateAutopilot>[1]) => updateAutopilot(deviceId, values),
+    onMutate: async () => {
       setActionError("");
-      await queryClient.cancelQueries({ queryKey: deviceKeys.latest(deviceId) });
       const previous = queryClient.getQueryData<LatestState>(deviceKeys.latest(deviceId));
-      queryClient.setQueryData<LatestState>(deviceKeys.latest(deviceId), (current) =>
-        current ? { ...current, autopilot: { enabled } } : current,
-      );
       return { previous };
     },
     onSuccess: (state) => {
       queryClient.setQueryData<LatestState>(deviceKeys.latest(deviceId), (current) =>
-        current ? { ...current, autopilot: { enabled: state.enabled } } : current,
+        current
+          ? {
+              ...current,
+              autopilot: {
+                enabled: state.enabled,
+                vision_capability: state.vision_capability,
+                vision_interval_enabled: state.vision_interval_enabled,
+                vision_interval_seconds: state.vision_interval_seconds,
+                sedentary_threshold_seconds: state.sedentary_threshold_seconds,
+                smoke_silence_seconds: state.smoke_silence_seconds,
+              },
+            }
+          : current,
       );
     },
     onError: (err, _enabled, context) => {
@@ -218,15 +250,34 @@ export function useDeviceLive(deviceId: string) {
     pendingCommands: pendingQuery.data ?? {},
     error: actionError || (queryError instanceof Error ? queryError.message : ""),
     triggerAnalysis: useCallback(() => analyzeMutation.mutate(), [analyzeMutation]),
+    triggerImageAnalysis: useCallback(() => imageAnalyzeMutation.mutate(), [imageAnalyzeMutation]),
+    imageAnalyzing: imageAnalyzeMutation.isPending,
     generateReport: useCallback((period: ReportPeriod) => reportMutation.mutate(period), [reportMutation]),
-    dispatchCommand: useCallback((type: string) => commandMutation.mutate(type), [commandMutation]),
+    dispatchCommand: useCallback(
+      (type: string, parameter?: Record<string, unknown>) => commandMutation.mutate({ type, parameter }),
+      [commandMutation],
+    ),
     acknowledgeEvent: useCallback(
       (eventId: number) => acknowledgeMutation.mutate(eventId),
       [acknowledgeMutation],
     ),
     requestPose: useCallback(() => poseMutation.mutate(), [poseMutation]),
     toggleAutopilot: useCallback(
-      (enabled: boolean) => autopilotMutation.mutate(enabled),
+      (enabled: boolean) => autopilotMutation.mutate({ enabled }),
+      [autopilotMutation],
+    ),
+    updateAutomation: useCallback(
+      (
+        values: Partial<
+          Pick<
+            AutopilotState,
+            | "vision_interval_enabled"
+            | "vision_interval_seconds"
+            | "sedentary_threshold_seconds"
+            | "smoke_silence_seconds"
+          >
+        >,
+      ) => autopilotMutation.mutate(values),
       [autopilotMutation],
     ),
   };

@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AckDeviceEventData, AckDeviceEventErrors, AckDeviceEventResponses, AnalyzeDeviceData, AnalyzeDeviceErrors, AnalyzeDeviceResponses, AnalyzeLatestPoseData, AnalyzeLatestPoseErrors, AnalyzeLatestPoseResponses, CreateAiHealthReportData, CreateAiHealthReportErrors, CreateAiHealthReportResponses, DeviceEventsData, DeviceEventsErrors, DeviceEventsResponses, GetAutopilotStateData, GetAutopilotStateErrors, GetAutopilotStateResponses, HealthData, HealthResponses, LatestDeviceStateData, LatestDeviceStateErrors, LatestDeviceStateResponses, ListDevicesData, ListDevicesResponses, SendCommandData, SendCommandErrors, SendCommandResponses, TelemetryHistoryBucketedData, TelemetryHistoryBucketedErrors, TelemetryHistoryBucketedResponses, TelemetryHistoryData, TelemetryHistoryErrors, TelemetryHistoryResponses, UpdateAutopilotStateData, UpdateAutopilotStateErrors, UpdateAutopilotStateResponses, UploadImageData, UploadImageErrors, UploadImageResponses } from './types.gen';
+import type { AckDeviceEventData, AckDeviceEventErrors, AckDeviceEventResponses, AnalyzeDeviceData, AnalyzeDeviceErrors, AnalyzeDeviceImageData, AnalyzeDeviceImageErrors, AnalyzeDeviceImageResponses, AnalyzeDeviceResponses, AnalyzeLatestPoseData, AnalyzeLatestPoseErrors, AnalyzeLatestPoseResponses, CreateAiHealthReportData, CreateAiHealthReportErrors, CreateAiHealthReportResponses, DeviceEventsData, DeviceEventsErrors, DeviceEventsResponses, GetAutopilotStateData, GetAutopilotStateErrors, GetAutopilotStateResponses, HealthData, HealthResponses, LatestDeviceStateData, LatestDeviceStateErrors, LatestDeviceStateResponses, ListDevicesData, ListDevicesResponses, SendCommandData, SendCommandErrors, SendCommandResponses, TelemetryHistoryBucketedData, TelemetryHistoryBucketedErrors, TelemetryHistoryBucketedResponses, TelemetryHistoryData, TelemetryHistoryErrors, TelemetryHistoryResponses, UpdateAutopilotStateData, UpdateAutopilotStateErrors, UpdateAutopilotStateResponses, UploadImageData, UploadImageErrors, UploadImageResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -27,6 +27,11 @@ export const listDevices = <ThrowOnError extends boolean = false>(options?: Opti
  * Analyze Device
  */
 export const analyzeDevice = <ThrowOnError extends boolean = false>(options: Options<AnalyzeDeviceData, ThrowOnError>): RequestResult<AnalyzeDeviceResponses, AnalyzeDeviceErrors, ThrowOnError> => (options.client ?? client).post<AnalyzeDeviceResponses, AnalyzeDeviceErrors, ThrowOnError>({ url: '/api/devices/{device_id}/ai/analyze', ...options });
+
+/**
+ * Analyze Device Image
+ */
+export const analyzeDeviceImage = <ThrowOnError extends boolean = false>(options: Options<AnalyzeDeviceImageData, ThrowOnError>): RequestResult<AnalyzeDeviceImageResponses, AnalyzeDeviceImageErrors, ThrowOnError> => (options.client ?? client).post<AnalyzeDeviceImageResponses, AnalyzeDeviceImageErrors, ThrowOnError>({ url: '/api/devices/{device_id}/ai/analyze-image', ...options });
 
 /**
  * Create Ai Health Report

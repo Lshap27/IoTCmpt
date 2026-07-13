@@ -4,8 +4,14 @@
 
 #include "esp_err.h"
 
-#define CLOUD_COMMAND_RAW_MAX_LEN   192
-#define CLOUD_COMMAND_PARAM_MAX_LEN 64
+#define CLOUD_COMMAND_RAW_MAX_LEN   512
+#define CLOUD_COMMAND_PARAM_MAX_LEN 384
+
+typedef enum {
+    CLOUD_COMMAND_SOURCE_FRONTEND = 0,
+    CLOUD_COMMAND_SOURCE_LLM,
+    CLOUD_COMMAND_SOURCE_RULE,
+} cloud_command_source_t;
 
 typedef enum {
     CLOUD_COMMAND_NONE = 0,
@@ -15,11 +21,16 @@ typedef enum {
     CLOUD_COMMAND_ALARM_OFF,
     CLOUD_COMMAND_LED_ON,
     CLOUD_COMMAND_LED_OFF,
+    CLOUD_COMMAND_CONTROL_SET_PRIORITY,
+    CLOUD_COMMAND_CONTROL_RESUME_AUTO,
+    CLOUD_COMMAND_ALARM_SILENCE,
+    CLOUD_COMMAND_VOICE_SPEAK,
     CLOUD_COMMAND_UNKNOWN,
 } cloud_command_type_t;
 
 typedef struct {
     cloud_command_type_t type;
+    cloud_command_source_t source;
     char parameter[CLOUD_COMMAND_PARAM_MAX_LEN];
     float confidence;
     char raw[CLOUD_COMMAND_RAW_MAX_LEN];

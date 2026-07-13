@@ -51,6 +51,12 @@ menu "AIoT MQTT 固件主线"
             bool "启用 OV2640 摄像头任务"
             default n
 
+        config APP_CAMERA_UPLOAD_INTERVAL_MS
+            int "摄像头上传间隔（毫秒）"
+            default 2000
+            range 1000 60000
+            depends on APP_CAMERA_ENABLED
+
         config APP_DISPLAY_ENABLED
             bool "启用 ST7735 显示屏任务"
             default n

@@ -215,10 +215,6 @@
             >LLM API Key
             <input id="llmApiKey" type="password" placeholder="留空则不修改"
           /></label>
-          <label class="check" data-for-ai="online"
-            ><input type="checkbox" id="llmVisionEnabled" checked /> AI
-            分析时附带最新照片</label
-          >
           <label class="check"
             ><input type="checkbox" id="autopilotEnabled" checked />
             启用自动处置（autopilot）</label
@@ -420,6 +416,24 @@
             ><input type="checkbox" id="fw_CONFIG_APP_VOICE_ENABLED" /> SYN6288
             语音播报</label
           >
+        </div>
+        <h3 class="group-title">LED 与摄像头</h3>
+        <div class="grid">
+          <label>LED 控制模式
+            <select id="fw_LED_MODE">
+              <option value="gpio">驱动物理 GPIO</option>
+              <option value="logical">仅维护逻辑状态</option>
+            </select>
+          </label>
+          <label data-for-firmware="led-gpio">LED GPIO
+            <input id="fw_CONFIG_APP_LED_GPIO" type="number" min="0" max="48" />
+          </label>
+          <label class="check" data-for-firmware="led-gpio">
+            <input type="checkbox" id="fw_CONFIG_APP_LED_ACTIVE_LOW" /> LED 低电平点亮
+          </label>
+          <label>摄像头上传间隔（毫秒）
+            <input id="fw_CONFIG_APP_CAMERA_UPLOAD_INTERVAL_MS" type="number" min="1000" max="60000" step="100" />
+          </label>
         </div>
         <div class="actions">
           <button id="btnFwAutofill">一键填充网络地址</button>

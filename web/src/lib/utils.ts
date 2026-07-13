@@ -13,6 +13,10 @@ export const COMMAND_LABELS: Record<string, string> = {
   "alarm.off": "关闭报警",
   "led.on": "开启 LED",
   "led.off": "关闭 LED",
+  "control.set_priority": "切换控制优先级",
+  "control.resume_auto": "释放手动锁定",
+  "alarm.silence": "限时静音",
+  "voice.speak": "语音播报",
   "display.message": "屏显消息",
 };
 

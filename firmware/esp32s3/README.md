@@ -49,5 +49,6 @@ When Wi-Fi and MQTT are enabled, the firmware:
 - publishes retained `online` status;
 - publishes periodic telemetry from real or mock sensors;
 - subscribes to `devices/{device_id}/command`;
-- executes `window.open`, `window.close`, `alarm.on`, and `alarm.off`;
+- executes window, LED, manual alarm, runtime control-priority, smoke-silence,
+  and server-encoded SYN6288 speech commands;
 - publishes command ACKs with `executed`, `rejected`, or `failed` status.

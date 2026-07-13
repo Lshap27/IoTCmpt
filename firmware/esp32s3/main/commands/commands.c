@@ -35,6 +35,14 @@ esp_err_t command_from_name(const char *name, cloud_command_t *out_command) {
         out_command->type = CLOUD_COMMAND_LED_ON;
     } else if (strcmp(name, "led.off") == 0 || strcmp(name, "led_off") == 0) {
         out_command->type = CLOUD_COMMAND_LED_OFF;
+    } else if (strcmp(name, "control.set_priority") == 0) {
+        out_command->type = CLOUD_COMMAND_CONTROL_SET_PRIORITY;
+    } else if (strcmp(name, "control.resume_auto") == 0) {
+        out_command->type = CLOUD_COMMAND_CONTROL_RESUME_AUTO;
+    } else if (strcmp(name, "alarm.silence") == 0) {
+        out_command->type = CLOUD_COMMAND_ALARM_SILENCE;
+    } else if (strcmp(name, "voice.speak") == 0) {
+        out_command->type = CLOUD_COMMAND_VOICE_SPEAK;
     } else {
         out_command->type = CLOUD_COMMAND_UNKNOWN;
         app_string_copy(out_command->raw, sizeof(out_command->raw), name);
@@ -71,6 +79,12 @@ esp_err_t command_apply(const cloud_command_t *command) {
     case CLOUD_COMMAND_LED_OFF:
         ESP_LOGI(TAG, "执行命令：关闭 LED");
         return ESP_OK;
+    case CLOUD_COMMAND_CONTROL_SET_PRIORITY:
+    case CLOUD_COMMAND_CONTROL_RESUME_AUTO:
+    case CLOUD_COMMAND_ALARM_SILENCE:
+    case CLOUD_COMMAND_VOICE_SPEAK:
+        ESP_LOGI(TAG, "执行扩展控制命令：%s", command_type_name(command->type));
+        return ESP_OK;
     case CLOUD_COMMAND_UNKNOWN:
     default:
         ESP_LOGW(TAG, "拒绝不支持的命令：%s", command->raw);
@@ -94,6 +108,14 @@ const char *command_type_name(cloud_command_type_t type) {
         return "led.on";
     case CLOUD_COMMAND_LED_OFF:
         return "led.off";
+    case CLOUD_COMMAND_CONTROL_SET_PRIORITY:
+        return "control.set_priority";
+    case CLOUD_COMMAND_CONTROL_RESUME_AUTO:
+        return "control.resume_auto";
+    case CLOUD_COMMAND_ALARM_SILENCE:
+        return "alarm.silence";
+    case CLOUD_COMMAND_VOICE_SPEAK:
+        return "voice.speak";
     case CLOUD_COMMAND_UNKNOWN:
     default:
         return "unknown";

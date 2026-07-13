@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -29,14 +31,19 @@ def latest_image_asset(db: Session, device_id: str) -> models.ImageAsset | None:
     )
 
 
-def resolve_recent_image(settings: Settings, asset: models.ImageAsset | None) -> Path | None:
-    """返回可以喂给视觉模型的本地图片路径；图片过期、缺失或视觉关闭时返回 None。"""
-    if asset is None or not settings.llm_vision_enabled:
+def resolve_recent_image(
+    settings: Settings,
+    asset: models.ImageAsset | None,
+    *,
+    max_age_seconds: float | None = None,
+) -> Path | None:
+    """返回新鲜的本地图片路径；调用方决定普通分析或强制视觉分析的时效。"""
+    if asset is None:
         return None
     if asset.created_at is None:
         return None
     age = datetime.now(UTC).replace(tzinfo=None) - asset.created_at
-    if age.total_seconds() > settings.llm_image_max_age_seconds:
+    if age.total_seconds() > (max_age_seconds or settings.llm_image_max_age_seconds):
         return None
     path = Path(settings.uploads_dir) / asset.device_id / asset.filename
     if not path.is_file():
@@ -85,6 +92,8 @@ def collect_device_snapshot(db: Session, device_id: str, *, include_trend: bool 
             "reason": ai_result.reason,
             "summary": ai_result.summary,
             "model": ai_result.model,
+            "speech": ai_result.speech,
+            "scene_summary": ai_result.scene_summary,
         }
         if ai_result
         else None,
@@ -111,6 +120,24 @@ def collect_device_snapshot(db: Session, device_id: str, *, include_trend: bool 
             }
             for row in reversed(rows)
         ]
+        levels = {"unknown": 0, "good": 1, "watch": 2, "alert": 3}
+        if len(rows) >= 2:
+            oldest, newest = rows[-1], rows[0]
+            old_level = levels.get(oldest.air_quality or "unknown", 0)
+            new_level = levels.get(newest.air_quality or "unknown", 0)
+            rising_pollutants = any(
+                old is not None and new is not None and new > old * 1.1
+                for old, new in ((oldest.tvoc_ppb, newest.tvoc_ppb), (oldest.eco2_ppm, newest.eco2_ppm))
+            )
+            snapshot["air_trend"] = (
+                "worsening"
+                if new_level > old_level or rising_pollutants
+                else ("improving" if new_level < old_level else "stable")
+            )
+        else:
+            snapshot["air_trend"] = "stable"
+        state = (snapshot.get("telemetry") or {}).get("state") or {}
+        snapshot["actions_already_taken"] = ["窗户已经打开"] if state.get("window_open") else []
 
     return snapshot
 
@@ -122,8 +149,10 @@ async def run_ai_analysis(
     mqtt_service: MqttGateway | None,
     *,
     trigger: str = "manual",
+    image_path: Path | None = None,
+    analysis_intent: str = "general",
 ) -> dict[str, Any]:
-    """完整分析管线：广播分析中 -> LLM 决策(可带图) -> 落库 -> 置信度门槛决定是否下发 -> 广播结果。
+    """完整分析管线：广播分析中 -> LLM 决策 -> 落库 -> 置信度门槛决定是否下发 -> 广播结果。
 
     DB 查询/提交都是同步阻塞调用，必须借 asyncio.to_thread 移出事件循环，
     否则 Postgres 卡顿时整个网关（WS/HTTP/MQTT）都会跟着冻结。
@@ -140,14 +169,36 @@ async def run_ai_analysis(
 
     try:
 
-        def _collect() -> tuple[dict[str, Any], Path | None]:
+        def _collect() -> dict[str, Any]:
             snapshot = collect_device_snapshot(db, device_id, include_trend=True)
-            image_path = resolve_recent_image(settings, latest_image_asset(db, device_id))
-            return snapshot, image_path
+            snapshot["analysis_intent"] = analysis_intent
+            return snapshot
 
-        snapshot, image_path = await asyncio.to_thread(_collect)
+        snapshot = await asyncio.to_thread(_collect)
         decision = await llm.analyze(snapshot, image_path=image_path)
         message = decision.command
+        state = (snapshot.get("telemetry") or {}).get("state") or {}
+        if state.get("window_open") and message.type == "window.open":
+            message.type = "none"
+            message.reason = "窗户已经打开，空气仍未改善，应检查污染源和通风路径"
+        if snapshot.get("air_trend") == "worsening" and message.type == "window.close":
+            message.type = "none"
+            message.reason = "空气质量仍在恶化，当前不应关闭窗户"
+        if analysis_intent == "lighting":
+            pose = snapshot.get("pose") or {}
+            sensors = (snapshot.get("telemetry") or {}).get("sensors") or {}
+            expected_on = bool(pose.get("human_present") and sensors.get("light_is_dark"))
+            allowed = {"led.on", "none"} if expected_on else {"led.off", "none"}
+            if message.type not in allowed:
+                message.type = "none"
+                message.reason = "自动照明决策已按有人状态和环境亮度约束"
+        forbidden_open_advice = state.get("window_open") and re.search(
+            r"(?:建议|请|应当|应该).{0,4}(?:开窗|打开窗户)", f"{message.reason} {decision.speech}"
+        )
+        if forbidden_open_advice:
+            message.type = "none"
+            message.reason = "AI 建议与当前已开窗状态冲突，已阻止执行"
+            decision.speech = ""
 
         def _persist() -> tuple[models.Command, models.AiResult]:
             command = create_command(
@@ -168,10 +219,12 @@ async def run_ai_analysis(
                 model=decision.model or settings.llm_model,
                 confidence=message.confidence,
                 reason=message.reason,
+                speech=decision.speech,
+                scene_summary=decision.scene_summary,
                 raw_payload={
                     "trigger": trigger,
                     "decision": decision.model_dump(mode="json"),
-                    "image_attached": image_path is not None,
+                    "vision_analysis": image_path is not None,
                 },
             )
             db.add(ai_result)
@@ -192,6 +245,28 @@ async def run_ai_analysis(
             if published:
                 await asyncio.to_thread(mark_published, db, command)
 
+        if decision.speech and mqtt_service is not None:
+            encoded = base64.b64encode(decision.speech.encode("gb2312", errors="replace")).decode("ascii")
+
+            def _create_voice() -> models.Command:
+                return create_command(
+                    db,
+                    device_id,
+                    "voice.speak",
+                    parameter={"gb2312_base64": encoded},
+                    source="llm",
+                    confidence=message.confidence,
+                    reason=decision.speech,
+                    raw_payload={"trigger": trigger, "speech": decision.speech},
+                )
+
+            voice_command = await asyncio.to_thread(_create_voice)
+            voice_published = await mqtt_service.publish_json(
+                f"devices/{device_id}/command", serialize_command(voice_command), qos=1
+            )
+            if voice_published:
+                await asyncio.to_thread(mark_published, db, voice_command)
+
         payload = {
             "command": serialize_command(command),
             "risk_level": decision.risk_level,
@@ -200,7 +275,8 @@ async def run_ai_analysis(
             "model": ai_result.model,
             "trigger": trigger,
             "published": published,
-            "image_attached": image_path is not None,
+            "speech": decision.speech,
+            "scene_summary": decision.scene_summary,
         }
     except Exception:
         await manager.broadcast(

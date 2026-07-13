@@ -51,6 +51,10 @@ devices/{device_id}/log
     "window_open": false,
     "alarm_on": false,
     "manual_override": false,
+    "manual_window_override": false,
+    "manual_led_override": false,
+    "control_priority": "manual_first",
+    "smoke_silenced": false,
     "led_on": false
   },
   "fusion": {
@@ -85,7 +89,19 @@ Allowed command types:
 - `alarm.off`
 - `led.on`
 - `led.off`
+- `control.set_priority` with `parameter.priority = manual_first|auto_first`
+- `control.resume_auto`
+- `alarm.silence` with `parameter.seconds = 10..600`
+- `voice.speak` with server-generated `parameter.gb2312_base64`
 - `display.message`
+
+`control.set_priority` is persisted by firmware in NVS and acknowledged as
+`executed` only after the NVS commit succeeds. Smoke is the only automatic
+beeper source; manual `alarm.on/off` remains available for testing.
+`manual_first` lets subsequent frontend window/LED actions establish actuator
+locks. `auto_first` clears existing locks and does not create new locks from
+manual actions. `control.resume_auto` is not a third priority mode; it only
+releases active window/LED locks while preserving the selected priority.
 
 ## Safety Events
 

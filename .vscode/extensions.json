@@ -15,6 +15,5 @@
     "redhat.vscode-yaml",
     "humao.rest-client",
     "ms-azuretools.vscode-docker",
-    "darthminos.workspace-tasks"
   ]
 }

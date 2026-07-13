@@ -25,6 +25,8 @@ from app.services.websocket import manager
  ①烟雾报警器联通
  ②下发通知，可选调用voice
 """
+
+
 def _ingest_sync(topic: str, payload: dict[str, Any]) -> WebSocketEnvelope | None:
     db = SessionLocal()
     try:
@@ -44,6 +46,7 @@ async def lifespan(app: FastAPI):
     mqtt_service = MqttGateway(settings)
     pose_service = PoseService(settings)
     autopilot.mqtt_service = mqtt_service
+    pose_service.result_handler = autopilot.on_pose_result
 
     async def handle_mqtt_message(topic: str, payload: dict[str, Any]) -> None:
         # DB writes stay on a worker thread; broadcast and autopilot run on the event loop.
@@ -53,6 +56,8 @@ async def lifespan(app: FastAPI):
         await manager.broadcast(envelope.device_id, envelope.model_dump(mode="json"))
         if envelope.type == "telemetry":
             autopilot.maybe_trigger(envelope.device_id, envelope.payload)
+        elif envelope.type == "event" and envelope.payload.get("type") == "smoke.detected":
+            autopilot.trigger_smoke(envelope.device_id)
 
     mqtt_service.start(handle_mqtt_message)
     await pose_service.start()

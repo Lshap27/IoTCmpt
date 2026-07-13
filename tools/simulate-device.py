@@ -4,7 +4,9 @@ import argparse
 import asyncio
 import base64
 import json
+import math
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -34,36 +36,54 @@ class SimulatedDevice:
             "window_open": False,
             "alarm_on": args.scenario == "smoke",
             "manual_override": False,
+            "manual_window_override": False,
+            "manual_led_override": False,
+            "control_priority": "manual_first",
+            "smoke_silenced": False,
             "led_on": False,
         }
+        self.manual_alarm_on = False
+        self.smoke_silenced_until = 0.0
         self.sequence = 0
 
     def telemetry(self) -> dict[str, Any]:
         self.sequence += 1
         scenario = self.args.scenario
+        slow = math.sin(self.sequence * 0.43)
+        fast = math.sin(self.sequence * 0.91 + 0.7)
+        smoke_active = scenario == "smoke"
+        self.state["smoke_silenced"] = (
+            smoke_active and time.monotonic() < self.smoke_silenced_until
+        )
+        self.state["alarm_on"] = self.manual_alarm_on or (
+            smoke_active and not self.state["smoke_silenced"]
+        )
+        self.state["manual_override"] = bool(
+            self.state["manual_window_override"] or self.state["manual_led_override"]
+        )
         if scenario == "air-alert":
             sensors = {
-                "temperature_c": 31.5,
-                "humidity_percent": 78.0,
-                "tvoc_ppb": 720,
-                "hcho_ug_m3": 110,
-                "eco2_ppm": 1650,
+                "temperature_c": round(31.5 + slow * 0.7, 1),
+                "humidity_percent": round(77.0 + fast * 2.0, 1),
+                "tvoc_ppb": round(720 + slow * 48),
+                "hcho_ug_m3": round(110 + fast * 9),
+                "eco2_ppm": round(1650 + slow * 95),
                 "light_is_dark": True,
                 "smoke_detected": False,
             }
             fusion = {
                 "air_quality": "alert",
                 "recommend_open_window": True,
-                "alarm_enabled": True,
+                "alarm_enabled": False,
                 "reason": "模拟空气污染告警",
             }
         elif scenario == "smoke":
             sensors = {
-                "temperature_c": 25.0,
-                "humidity_percent": 55.0,
-                "tvoc_ppb": 180,
-                "hcho_ug_m3": 25,
-                "eco2_ppm": 520,
+                "temperature_c": round(25.0 + slow * 0.4, 1),
+                "humidity_percent": round(55.0 + fast * 1.5, 1),
+                "tvoc_ppb": round(180 + slow * 18),
+                "hcho_ug_m3": round(25 + fast * 3),
+                "eco2_ppm": round(520 + slow * 32),
                 "light_is_dark": False,
                 "smoke_detected": True,
             }
@@ -74,13 +94,12 @@ class SimulatedDevice:
                 "reason": "MQ-2 检测到烟雾",
             }
         else:
-            drift = (self.sequence % 6) * 0.2
             sensors = {
-                "temperature_c": 24.5 + drift,
-                "humidity_percent": 52.0,
-                "tvoc_ppb": 140,
-                "hcho_ug_m3": 20,
-                "eco2_ppm": 480,
+                "temperature_c": round(24.8 + slow * 0.6, 1),
+                "humidity_percent": round(52.0 + fast * 2.2, 1),
+                "tvoc_ppb": round(140 + slow * 16),
+                "hcho_ug_m3": round(20 + fast * 3),
+                "eco2_ppm": round(480 + slow * 38),
                 "light_is_dark": False,
                 "smoke_detected": False,
             }
@@ -97,6 +116,70 @@ class SimulatedDevice:
             "state": self.state,
             "fusion": fusion,
         }
+
+    def apply_command(self, payload: dict[str, Any]) -> tuple[str, str]:
+        command = str(payload.get("type") or "")
+        parameter = payload.get("parameter") or {}
+        source = str(payload.get("source") or "frontend")
+        status, detail = "executed", f"{command} applied by simulator"
+        if command in {"window.open", "window.close"}:
+            automatic_blocked = (
+                source != "frontend"
+                and self.state["control_priority"] == "manual_first"
+                and self.state["manual_window_override"]
+            )
+            if automatic_blocked:
+                return "rejected", "manual window override is active"
+            self.state["window_open"] = command == "window.open"
+            if (
+                source == "frontend"
+                and self.state["control_priority"] == "manual_first"
+            ):
+                self.state["manual_window_override"] = True
+        elif command in {"led.on", "led.off"}:
+            automatic_blocked = (
+                source != "frontend"
+                and self.state["control_priority"] == "manual_first"
+                and self.state["manual_led_override"]
+            )
+            if automatic_blocked:
+                return "rejected", "manual LED override is active"
+            self.state["led_on"] = command == "led.on"
+            if (
+                source == "frontend"
+                and self.state["control_priority"] == "manual_first"
+            ):
+                self.state["manual_led_override"] = True
+        elif command == "alarm.on":
+            self.manual_alarm_on = True
+        elif command == "alarm.off":
+            self.manual_alarm_on = False
+        elif command == "control.set_priority":
+            priority = parameter.get("priority")
+            if priority not in {"manual_first", "auto_first"}:
+                return "rejected", "priority must be manual_first or auto_first"
+            self.state["control_priority"] = priority
+            if priority == "auto_first":
+                self.state["manual_window_override"] = False
+                self.state["manual_led_override"] = False
+        elif command == "control.resume_auto":
+            self.state["manual_window_override"] = False
+            self.state["manual_led_override"] = False
+        elif command == "alarm.silence":
+            if self.args.scenario != "smoke":
+                return "rejected", "no active smoke alarm"
+            seconds = max(10, min(600, int(parameter.get("seconds", 60))))
+            self.smoke_silenced_until = time.monotonic() + seconds
+            self.state["smoke_silenced"] = True
+            self.state["alarm_on"] = self.manual_alarm_on
+        elif command in {"voice.speak", "display.message", "none"}:
+            pass
+        else:
+            status, detail = "rejected", f"unsupported command: {command}"
+        self.state["manual_override"] = bool(
+            self.state["manual_window_override"] or self.state["manual_led_override"]
+        )
+        return status, detail
 
     async def publish_loop(self, client: aiomqtt.Client) -> None:
         prefix = f"devices/{self.args.device_id}"
@@ -129,26 +212,7 @@ class SimulatedDevice:
         await client.subscribe(topic, qos=1)
         async for message in client.messages:
             payload = json.loads(bytes(message.payload))
-            command = str(payload.get("type") or "")
-            status, detail = "executed", f"{command} applied by simulator"
-            if command == "window.open":
-                self.state["window_open"] = True
-                self.state["manual_override"] = True
-            elif command == "window.close":
-                self.state["window_open"] = False
-                self.state["manual_override"] = True
-            elif command == "alarm.on":
-                self.state["alarm_on"] = True
-            elif command == "alarm.off":
-                self.state["alarm_on"] = False
-            elif command == "led.on":
-                self.state["led_on"] = True
-            elif command == "led.off":
-                self.state["led_on"] = False
-            elif command == "none":
-                pass
-            else:
-                status, detail = "rejected", f"unsupported command: {command}"
+            status, detail = self.apply_command(payload)
             if self.args.ack_delay:
                 await asyncio.sleep(self.args.ack_delay)
             ack = {

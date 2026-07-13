@@ -31,12 +31,12 @@ from app.schemas import (
     TelemetryPoint,
     WebSocketEnvelope,
 )
-from app.services.analysis import collect_device_snapshot, run_ai_analysis
+from app.services.analysis import collect_device_snapshot, latest_image_asset, resolve_recent_image, run_ai_analysis
 from app.services.autopilot import AutoPilot
 from app.services.commands import create_command, mark_published, serialize_command
 from app.services.events import acknowledge_event, serialize_event
 from app.services.images import save_image
-from app.services.llm import LLMService
+from app.services.llm import LLMService, VisionUnsupportedError
 from app.services.mqtt import MqttGateway
 from app.services.pose import PoseService
 from app.services.reports import generate_health_report
@@ -67,7 +67,7 @@ def latest_device_state(
     autopilot: AutoPilot | None = Depends(get_autopilot_or_none),
 ):
     snapshot = collect_device_snapshot(db, device_id)
-    snapshot["autopilot"] = {"enabled": autopilot.is_enabled(device_id)} if autopilot else None
+    snapshot["autopilot"] = autopilot.describe(device_id) if autopilot else None
     return snapshot
 
 
@@ -101,6 +101,7 @@ async def upload_image(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     pose: PoseService = Depends(get_pose_service),
+    autopilot: AutoPilot = Depends(get_autopilot),
 ):
     asset = save_image(db, get_settings(), device_id, file)
     envelope = WebSocketEnvelope(
@@ -110,6 +111,7 @@ async def upload_image(
     )
     await manager.broadcast(device_id, envelope.model_dump(mode="json"))
     await pose.enqueue(device_id, asset.id)
+    autopilot.maybe_trigger_vision(device_id, get_settings().uploads_dir / device_id / asset.filename)
     return {"id": asset.id, "device_id": asset.device_id, "url": asset.url, "created_at": iso_utc(asset.created_at)}
 
 
@@ -179,7 +181,48 @@ async def analyze_device(
     llm: LLMService = Depends(get_llm_service),
     mqtt: MqttGateway | None = Depends(get_mqtt_gateway),
 ):
-    return await run_ai_analysis(db, device_id, llm, mqtt, trigger="manual")
+    return await run_ai_analysis(db, device_id, llm, mqtt, trigger="manual", analysis_intent="general")
+
+
+@router.post("/devices/{device_id}/ai/analyze-image", response_model=AiDecisionOut)
+async def analyze_device_image(
+    device_id: str,
+    db: Session = Depends(get_db),
+    llm: LLMService = Depends(get_llm_service),
+    mqtt: MqttGateway | None = Depends(get_mqtt_gateway),
+    autopilot: AutoPilot = Depends(get_autopilot),
+):
+    settings = get_settings()
+    image_path = resolve_recent_image(
+        settings,
+        latest_image_asset(db, device_id),
+        max_age_seconds=settings.vision_image_max_age_seconds,
+    )
+    if image_path is None:
+        raise HTTPException(status_code=409, detail={"code": "image_unavailable", "message": "没有可用的最新画面"})
+    if autopilot.describe(device_id)["vision_capability"] == "unsupported":
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "vision_unsupported", "message": "当前模型不支持图片分析，请更换视觉模型"},
+        )
+    try:
+        result = await run_ai_analysis(
+            db,
+            device_id,
+            llm,
+            mqtt,
+            trigger="manual:vision",
+            image_path=image_path,
+            analysis_intent="vision",
+        )
+    except VisionUnsupportedError as exc:
+        autopilot.set_vision_capability("unsupported")
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "vision_unsupported", "message": str(exc)},
+        ) from exc
+    autopilot.set_vision_capability("supported")
+    return result
 
 
 @router.post("/devices/{device_id}/ai/report", response_model=AiHealthReport)
@@ -206,7 +249,7 @@ async def update_autopilot_state(
     payload: AutopilotIn,
     autopilot: AutoPilot = Depends(get_autopilot),
 ):
-    autopilot.set_enabled(device_id, payload.enabled)
+    autopilot.update(device_id, **payload.model_dump(exclude_none=True))
     state = autopilot.describe(device_id)
     envelope = WebSocketEnvelope(type="autopilot", device_id=device_id, payload=state)
     await manager.broadcast(device_id, envelope.model_dump(mode="json"))

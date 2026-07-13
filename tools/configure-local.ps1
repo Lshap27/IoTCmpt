@@ -9,7 +9,6 @@ param(
     [string] $LlmEndpoint,
     [string] $LlmModel,
     [string] $LlmApiKey,
-    [string] $LlmVisionEnabled,
     [string] $AutopilotEnabled,
     [string] $AutopilotMinConfidence,
     [string] $AutopilotTriggerLevels,
@@ -196,7 +195,6 @@ function New-ServerEnvLines {
         "AIOT_LLM_API_KEY",
         "AIOT_LLM_MODEL",
         "AIOT_LLM_TIMEOUT_SECONDS",
-        "AIOT_LLM_VISION_ENABLED",
         "AIOT_LLM_IMAGE_MAX_AGE_SECONDS",
         "AIOT_LLM_RESPONSE_FORMAT",
         "AIOT_AUTOPILOT_ENABLED",
@@ -234,7 +232,6 @@ function New-ComposeEnvLines {
         "AIOT_LLM_ENDPOINT",
         "AIOT_LLM_API_KEY",
         "AIOT_LLM_MODEL",
-        "AIOT_LLM_VISION_ENABLED",
         "AIOT_LLM_RESPONSE_FORMAT",
         "AIOT_AUTOPILOT_ENABLED",
         "AIOT_AUTOPILOT_COOLDOWN_SECONDS",
@@ -334,7 +331,6 @@ if ([string]::IsNullOrWhiteSpace($llmApiKeyValue)) {
     $llmApiKeyValue = Get-ExistingEnvValue -Path $ServerEnvPath -Key "AIOT_LLM_API_KEY"
 }
 $llmModelValue = if ([string]::IsNullOrWhiteSpace($LlmModel)) { "demo-model" } else { $LlmModel.Trim() }
-$llmVisionValue = if ([string]::IsNullOrWhiteSpace($LlmVisionEnabled)) { "true" } else { $LlmVisionEnabled.Trim().ToLowerInvariant() }
 $autopilotEnabledValue = if ([string]::IsNullOrWhiteSpace($AutopilotEnabled)) { "true" } else { $AutopilotEnabled.Trim().ToLowerInvariant() }
 $autopilotMinConfidenceValue = if ([string]::IsNullOrWhiteSpace($AutopilotMinConfidence)) { "0.6" } else { $AutopilotMinConfidence.Trim() }
 $autopilotTriggerLevelsValue = if ([string]::IsNullOrWhiteSpace($AutopilotTriggerLevels)) { "alert" } else { $AutopilotTriggerLevels.Trim() }
@@ -367,7 +363,6 @@ switch ($Preset) {
                 }
             }
         }
-        $llmVisionValue = if (Resolve-Bool -Bound $LlmVisionEnabled -Prompt "Attach latest JPEG to LLM requests?" -Default $true) { "true" } else { "false" }
         $autopilotEnabledValue = if (Resolve-Bool -Bound $AutopilotEnabled -Prompt "Enable autopilot by default?" -Default $true) { "true" } else { "false" }
         $autopilotMinConfidenceValue = Resolve-Value -Bound $AutopilotMinConfidence -Prompt "Autopilot minimum confidence" -Default "0.6"
         $autopilotTriggerLevelsValue = Resolve-Value -Bound $AutopilotTriggerLevels -Prompt "Autopilot trigger levels (comma-separated good/watch/alert)" -Default "alert"
@@ -384,7 +379,6 @@ switch ($Preset) {
                 $llmApiKeyValue = $enteredKey
             }
         }
-        $llmVisionValue = if (Resolve-Bool -Bound $LlmVisionEnabled -Prompt "Attach latest JPEG to LLM requests?" -Default $true) { "true" } else { "false" }
         $demoDeviceModeValue = "Simulator"
         $demoAiModeValue = "Online"
     }
@@ -440,7 +434,6 @@ $serverConfig = @{
     AIOT_LLM_API_KEY = $llmApiKeyValue
     AIOT_LLM_MODEL = $llmModelValue
     AIOT_LLM_TIMEOUT_SECONDS = "12"
-    AIOT_LLM_VISION_ENABLED = $llmVisionValue
     AIOT_LLM_IMAGE_MAX_AGE_SECONDS = "600"
     AIOT_LLM_RESPONSE_FORMAT = "json_object"
     AIOT_AUTOPILOT_ENABLED = $autopilotEnabledValue

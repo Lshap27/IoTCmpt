@@ -27,6 +27,7 @@ typedef struct {
     char image_upload_url[APP_CONFIG_HTTP_URL_MAX_LEN + 1];
 
     bool camera_enabled;
+    uint32_t camera_upload_interval_ms;
     bool display_enabled;
     bool actuator_enabled;
     bool button_enabled;

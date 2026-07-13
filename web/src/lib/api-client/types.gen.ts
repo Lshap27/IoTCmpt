@@ -43,10 +43,6 @@ export type AiDecisionOut = {
      */
     confidence: number;
     /**
-     * Image Attached
-     */
-    image_attached: boolean;
-    /**
      * Model
      */
     model: string;
@@ -62,6 +58,14 @@ export type AiDecisionOut = {
      * Risk Level
      */
     risk_level: 'low' | 'medium' | 'high' | 'unknown';
+    /**
+     * Scene Summary
+     */
+    scene_summary?: string;
+    /**
+     * Speech
+     */
+    speech?: string;
     /**
      * Trigger
      */
@@ -174,6 +178,14 @@ export type AiResultInfo = {
      */
     risk_level: string;
     /**
+     * Scene Summary
+     */
+    scene_summary?: string;
+    /**
+     * Speech
+     */
+    speech?: string;
+    /**
      * Summary
      */
     summary: string;
@@ -187,6 +199,26 @@ export type AutopilotEnabled = {
      * Enabled
      */
     enabled: boolean;
+    /**
+     * Sedentary Threshold Seconds
+     */
+    sedentary_threshold_seconds?: number;
+    /**
+     * Smoke Silence Seconds
+     */
+    smoke_silence_seconds?: number;
+    /**
+     * Vision Capability
+     */
+    vision_capability?: 'unknown' | 'supported' | 'unsupported';
+    /**
+     * Vision Interval Enabled
+     */
+    vision_interval_enabled?: boolean;
+    /**
+     * Vision Interval Seconds
+     */
+    vision_interval_seconds?: number;
 };
 
 /**
@@ -215,7 +247,23 @@ export type AutopilotIn = {
     /**
      * Enabled
      */
-    enabled: boolean;
+    enabled?: boolean | null;
+    /**
+     * Sedentary Threshold Seconds
+     */
+    sedentary_threshold_seconds?: number | null;
+    /**
+     * Smoke Silence Seconds
+     */
+    smoke_silence_seconds?: number | null;
+    /**
+     * Vision Interval Enabled
+     */
+    vision_interval_enabled?: boolean | null;
+    /**
+     * Vision Interval Seconds
+     */
+    vision_interval_seconds?: number | null;
 };
 
 /**
@@ -239,9 +287,33 @@ export type AutopilotState = {
      */
     min_confidence: number;
     /**
+     * Sedentary Threshold Seconds
+     */
+    sedentary_threshold_seconds: number;
+    /**
+     * Smoke Silence Seconds
+     */
+    smoke_silence_seconds: number;
+    /**
      * Trigger Levels
      */
     trigger_levels: Array<string>;
+    /**
+     * Vision Capability
+     */
+    vision_capability: 'unknown' | 'supported' | 'unsupported';
+    /**
+     * Vision Interval Effective
+     */
+    vision_interval_effective: boolean;
+    /**
+     * Vision Interval Enabled
+     */
+    vision_interval_enabled: boolean;
+    /**
+     * Vision Interval Seconds
+     */
+    vision_interval_seconds: number;
 };
 
 /**
@@ -336,7 +408,7 @@ export type CommandIn = {
     /**
      * Type
      */
-    type: 'none' | 'window.open' | 'window.close' | 'alarm.on' | 'alarm.off' | 'led.on' | 'led.off' | 'display.message';
+    type: 'none' | 'window.open' | 'window.close' | 'alarm.on' | 'alarm.off' | 'led.on' | 'led.off' | 'control.set_priority' | 'control.resume_auto' | 'alarm.silence' | 'voice.speak' | 'display.message';
 };
 
 /**
@@ -396,13 +468,29 @@ export type DeviceStatePayload = {
      */
     alarm_on?: boolean | null;
     /**
+     * Control Priority
+     */
+    control_priority?: 'manual_first' | 'auto_first' | null;
+    /**
      * Led On
      */
     led_on?: boolean | null;
     /**
+     * Manual Led Override
+     */
+    manual_led_override?: boolean | null;
+    /**
      * Manual Override
      */
     manual_override?: boolean | null;
+    /**
+     * Manual Window Override
+     */
+    manual_window_override?: boolean | null;
+    /**
+     * Smoke Silenced
+     */
+    smoke_silenced?: boolean | null;
     /**
      * Window Open
      */
@@ -1161,6 +1249,36 @@ export type AnalyzeDeviceResponses = {
 };
 
 export type AnalyzeDeviceResponse = AnalyzeDeviceResponses[keyof AnalyzeDeviceResponses];
+
+export type AnalyzeDeviceImageData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+    };
+    query?: never;
+    url: '/api/devices/{device_id}/ai/analyze-image';
+};
+
+export type AnalyzeDeviceImageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AnalyzeDeviceImageError = AnalyzeDeviceImageErrors[keyof AnalyzeDeviceImageErrors];
+
+export type AnalyzeDeviceImageResponses = {
+    /**
+     * Successful Response
+     */
+    200: AiDecisionOut;
+};
+
+export type AnalyzeDeviceImageResponse = AnalyzeDeviceImageResponses[keyof AnalyzeDeviceImageResponses];
 
 export type CreateAiHealthReportData = {
     body: AiReportIn;

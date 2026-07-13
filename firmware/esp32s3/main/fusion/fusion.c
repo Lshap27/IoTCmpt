@@ -113,7 +113,8 @@ esp_err_t fusion_evaluate(const sensor_sample_t *sample, fusion_state_t *out_sta
     if (bad) {
         out_state->air_quality = FUSION_AIR_QUALITY_ALERT;
         out_state->recommend_open_window = ventilation_needed;
-        out_state->alarm_enabled = true;
+        /* 蜂鸣器自动来源仅保留给 MQ-2 烟雾；普通空气质量恶化由窗户和语音处理。 */
+        out_state->alarm_enabled = sample->smoke_valid && sample->smoke_detected;
     } else if (watch) {
         out_state->air_quality = FUSION_AIR_QUALITY_WATCH;
         out_state->recommend_open_window = true;

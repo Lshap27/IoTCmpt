@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   BellOff,
   BellRing,
@@ -8,6 +9,8 @@ import {
   Lightbulb,
   LightbulbOff,
   Loader2,
+  Check,
+  LockKeyholeOpen,
   SlidersHorizontal,
 } from "lucide-react";
 import { Panel } from "@/components/panel";
@@ -46,16 +49,32 @@ export function CommandPad({
   windowOpen,
   alarmOn,
   ledOn,
+  controlPriority,
+  manualWindowOverride,
+  manualLedOverride,
   className,
 }: {
-  onCommand: (type: string) => void;
+  onCommand: (type: string, parameter?: Record<string, unknown>) => void;
   pendingCommands: Record<string, string>;
   windowOpen: boolean | null | undefined;
   alarmOn: boolean | null | undefined;
   ledOn: boolean | null | undefined;
+  controlPriority: "manual_first" | "auto_first" | null | undefined;
+  manualWindowOverride: boolean | null | undefined;
+  manualLedOverride: boolean | null | undefined;
   className?: string;
 }) {
   const pendingTypes = new Set(Object.values(pendingCommands));
+  const priorityPending = pendingTypes.has("control.set_priority");
+  const resumePending = pendingTypes.has("control.resume_auto");
+  const [pendingPriority, setPendingPriority] = useState<"manual_first" | "auto_first" | null>(null);
+  const hasManualLock = Boolean(
+    controlPriority === "manual_first" && (manualWindowOverride || manualLedOverride),
+  );
+
+  useEffect(() => {
+    if (!priorityPending) setPendingPriority(null);
+  }, [priorityPending]);
 
   return (
     <Panel
@@ -70,6 +89,71 @@ export function CommandPad({
         </div>
       }
     >
+      <div className="mb-3 rounded-xl border border-line bg-raised p-3">
+        <div>
+          <p className="text-sm font-medium text-ink">控制优先级</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-ink3">
+            手动优先会保留人工操作；自动优先允许环境策略覆盖人工状态。
+          </p>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="控制优先级">
+          {(
+            [
+              ["manual_first", "手动优先"],
+              ["auto_first", "自动优先"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={controlPriority === value}
+              disabled={priorityPending || controlPriority === value}
+              onClick={() => {
+                setPendingPriority(value);
+                onCommand("control.set_priority", { priority: value });
+              }}
+              className={`flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-medium transition-all ${
+                controlPriority === value
+                  ? "border-accent bg-accent text-white shadow-sm"
+                  : pendingPriority === value
+                    ? "border-accent/60 bg-accent/10 text-accent"
+                    : "border-line bg-surface text-ink2 hover:border-accent/60 hover:text-ink"
+              }`}
+            >
+              {pendingPriority === value && priorityPending ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : controlPriority === value ? (
+                <Check size={15} />
+              ) : null}
+              {pendingPriority === value && priorityPending ? "等待设备确认" : label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 flex min-h-6 items-center justify-between gap-2 text-xs text-ink3">
+          <span>
+            当前：
+            {controlPriority === "auto_first"
+              ? "自动优先"
+              : controlPriority === "manual_first"
+                ? "手动优先"
+                : "等待设备回显"}
+          </span>
+          {hasManualLock ? (
+            <button
+              type="button"
+              disabled={resumePending}
+              onClick={() => onCommand("control.resume_auto")}
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-accent hover:bg-accent/10 disabled:opacity-50"
+            >
+              {resumePending ? <Loader2 size={13} className="animate-spin" /> : <LockKeyholeOpen size={13} />}
+              {resumePending ? "正在释放…" : "释放手动锁定"}
+            </button>
+          ) : (
+            <span className="text-good">无手动锁定</span>
+          )}
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         {COMMANDS.map(({ type, label, Icon }) => {
           const pending = pendingTypes.has(type);

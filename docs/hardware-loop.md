@@ -2,6 +2,8 @@
 
 The simulator exercises the production MQTT, HTTP, database, WebSocket, and
 command-ack paths. It does not bypass the gateway with browser-only mock data.
+Every scenario produces bounded, deterministic fluctuations for temperature,
+humidity, TVOC, formaldehyde, and eCO2 instead of publishing frozen values.
 
 1. Start the stack with `AIOT_LLM_ENDPOINT=mock docker compose up --build`.
 2. In another PowerShell 7 terminal, run:
@@ -13,8 +15,9 @@ command-ack paths. It does not bypass the gateway with browser-only mock data.
    ```
 
 3. Open `http://localhost:3000` and verify telemetry, image upload, pose state,
-   smoke events, LED/window/alarm commands, command acknowledgements, and the
-   report generated from persisted samples.
+   smoke events, LED/window/alarm commands, control-priority changes, manual
+   lock release, command acknowledgements, and the report generated from
+   persisted samples.
 
 The one-pixel built-in JPEG verifies image transport and the no-person pose
 path. Pass `--image <jpeg>` to exercise a real person/posture image.

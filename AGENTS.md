@@ -68,8 +68,8 @@
 
 - Keep all LLM provider integration in `server/`; firmware and frontend must
   not call external LLM providers directly.
-- LLM integration is OpenAI-compatible `chat/completions` and may attach a fresh
-  JPEG as a vision message when `AIOT_LLM_VISION_ENABLED=true`.
+- LLM integration is OpenAI-compatible `chat/completions`. Ordinary analysis is
+  text-only; only explicit and scheduled vision analysis may attach a fresh JPEG.
 - `AIOT_LLM_ENDPOINT=mock` is the deterministic offline/demo mode and should
   keep the full AI decision loop testable without network access or API keys.
 - AI-generated commands are persisted before publishing. Only executable

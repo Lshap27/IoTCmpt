@@ -1,17 +1,16 @@
 #include "actuators.h"
 
+#include <string.h>
+
 #include "app_config_defaults.h"
+#include "cJSON.h"
 #include "control_state.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-
-
-/** TODO： 
- * 1、应当有一个“手动模式优先”和“自动模式优先”的配置选项，决定在手动开窗和自动开窗冲突时的行为。
- */
+#include "voice.h"
 
 static const char *TAG = "ACTUATOR";
 
@@ -34,18 +33,6 @@ static void beep_set(bool on) {
     }
     const int active = CONFIG_APP_BEEP_ACTIVE_LOW ? 0 : 1;
     gpio_set_level(CONFIG_APP_BEEP_GPIO, on ? active : !active);
-}
-
-static void beep_alarm_loop(uint32_t total_ms) {
-    /* 参考硬件：100ms 鸣响 / 200ms 静默周期，低电平触发 */
-    const uint32_t start = xTaskGetTickCount() * portTICK_PERIOD_MS;
-    while ((xTaskGetTickCount() * portTICK_PERIOD_MS) - start < total_ms) {
-        beep_set(true);
-        vTaskDelay(pdMS_TO_TICKS(100));
-        beep_set(false);
-        vTaskDelay(pdMS_TO_TICKS(200));
-    }
-    beep_set(false);
 }
 
 static void servo_set_pulse(uint16_t pulse_us) {
@@ -163,6 +150,39 @@ static esp_err_t set_led(bool on) {
     return ESP_OK;
 }
 
+static cJSON *command_parameter(const cloud_command_t *command) {
+    return command && command->parameter[0] ? cJSON_Parse(command->parameter) : NULL;
+}
+
+static esp_err_t apply_priority(const cloud_command_t *command) {
+    cJSON *parameter = command_parameter(command);
+    const cJSON *value = parameter ? cJSON_GetObjectItemCaseSensitive(parameter, "priority") : NULL;
+    esp_err_t err = ESP_ERR_INVALID_ARG;
+    if (cJSON_IsString(value) && strcmp(value->valuestring, "manual_first") == 0) {
+        err = control_state_set_priority(CONTROL_PRIORITY_MANUAL_FIRST);
+    } else if (cJSON_IsString(value) && strcmp(value->valuestring, "auto_first") == 0) {
+        err = control_state_set_priority(CONTROL_PRIORITY_AUTO_FIRST);
+    }
+    cJSON_Delete(parameter);
+    return err;
+}
+
+static esp_err_t silence_smoke(const cloud_command_t *command) {
+    cJSON *parameter = command_parameter(command);
+    const cJSON *value = parameter ? cJSON_GetObjectItemCaseSensitive(parameter, "seconds") : NULL;
+    const uint32_t seconds = cJSON_IsNumber(value) ? (uint32_t)value->valuedouble : 60;
+    cJSON_Delete(parameter);
+    return control_state_silence_smoke(seconds);
+}
+
+static esp_err_t speak_command(const cloud_command_t *command) {
+    cJSON *parameter = command_parameter(command);
+    const cJSON *value = parameter ? cJSON_GetObjectItemCaseSensitive(parameter, "gb2312_base64") : NULL;
+    esp_err_t err = cJSON_IsString(value) ? voice_speak_base64(value->valuestring) : ESP_ERR_INVALID_ARG;
+    cJSON_Delete(parameter);
+    return err;
+}
+
 void actuator_refresh_alarm(void) {
     control_state_t state;
     control_state_get(&state);
@@ -177,20 +197,23 @@ esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *s
     control_state_t local;
     control_state_get(&local);
 
-    bool target_open = local.manual_override ? local.manual_open : state->recommend_open_window;
-    bool manual_request = false;
+    bool target_open = local.manual_window_override ? local.manual_open : state->recommend_open_window;
 
     if (command) {
         switch (command->type) {
         case CLOUD_COMMAND_WINDOW_OPEN:
+            if (command->source != CLOUD_COMMAND_SOURCE_FRONTEND && !control_state_is_automatic_source_allowed(false)) {
+                return ESP_ERR_INVALID_STATE;
+            }
             target_open = true;
-            manual_request = true;
-            control_state_set_manual(true, true);
+            control_state_set_manual_window(command->source == CLOUD_COMMAND_SOURCE_FRONTEND, true);
             break;
         case CLOUD_COMMAND_WINDOW_CLOSE:
+            if (command->source != CLOUD_COMMAND_SOURCE_FRONTEND && !control_state_is_automatic_source_allowed(false)) {
+                return ESP_ERR_INVALID_STATE;
+            }
             target_open = false;
-            manual_request = true;
-            control_state_set_manual(true, false);
+            control_state_set_manual_window(command->source == CLOUD_COMMAND_SOURCE_FRONTEND, false);
             break;
         case CLOUD_COMMAND_ALARM_ON:
             if (!s_actuator_ready) {
@@ -205,10 +228,26 @@ esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *s
             control_state_set_alarm_source(CONTROL_ALARM_COMMAND, false);
             break;
         case CLOUD_COMMAND_LED_ON:
+            if (command->source != CLOUD_COMMAND_SOURCE_FRONTEND && !control_state_is_automatic_source_allowed(true)) {
+                return ESP_ERR_INVALID_STATE;
+            }
+            control_state_set_manual_led(command->source == CLOUD_COMMAND_SOURCE_FRONTEND, true);
             return set_led(true);
         case CLOUD_COMMAND_LED_OFF:
+            if (command->source != CLOUD_COMMAND_SOURCE_FRONTEND && !control_state_is_automatic_source_allowed(true)) {
+                return ESP_ERR_INVALID_STATE;
+            }
+            control_state_set_manual_led(command->source == CLOUD_COMMAND_SOURCE_FRONTEND, false);
             return set_led(false);
-            break;
+        case CLOUD_COMMAND_CONTROL_SET_PRIORITY:
+            return apply_priority(command);
+        case CLOUD_COMMAND_CONTROL_RESUME_AUTO:
+            control_state_resume_auto();
+            return ESP_OK;
+        case CLOUD_COMMAND_ALARM_SILENCE:
+            return silence_smoke(command);
+        case CLOUD_COMMAND_VOICE_SPEAK:
+            return speak_command(command);
         case CLOUD_COMMAND_NONE:
             break;
         case CLOUD_COMMAND_UNKNOWN:
@@ -219,11 +258,6 @@ esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *s
 
     if (!s_actuator_ready) {
         return command ? ESP_ERR_INVALID_STATE : ESP_OK;
-    }
-
-    /* 仅自动联动开窗需要 3 秒预警音；手动/云端指令开窗立即执行 */
-    if (!local.window_open && target_open && !local.manual_override && !manual_request) {
-        beep_alarm_loop(3000);
     }
 
     esp_err_t err = set_window(target_open);

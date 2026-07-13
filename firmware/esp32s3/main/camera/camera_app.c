@@ -41,7 +41,7 @@ static esp_err_t camera_init_once(void) {
         .ledc_timer = LEDC_TIMER_0,
         .ledc_channel = LEDC_CHANNEL_0,
         .pixel_format = PIXFORMAT_JPEG,
-        .frame_size = FRAMESIZE_QVGA,
+        .frame_size = FRAMESIZE_CIF,
         .jpeg_quality = 8,
         .fb_count = 1,
         .fb_location = CAMERA_FB_IN_DRAM,
@@ -55,8 +55,11 @@ static esp_err_t camera_init_once(void) {
 
     sensor_t *sensor = esp_camera_sensor_get();
     if (sensor) {
-        sensor->set_contrast(sensor, 1);
-        sensor->set_brightness(sensor, 1);
+        sensor->set_contrast(sensor, 0);
+        sensor->set_brightness(sensor, 0);
+        sensor->set_whitebal(sensor, 1);
+        sensor->set_exposure_ctrl(sensor, 1);
+        sensor->set_gain_ctrl(sensor, 1);
         sensor->set_bpc(sensor, 1);
         sensor->set_wpc(sensor, 1);
         sensor->set_gainceiling(sensor, GAINCEILING_4X);

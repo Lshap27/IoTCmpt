@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from contextlib import suppress
 from typing import Any
 from uuid import uuid4
@@ -121,6 +122,8 @@ class PoseService:
         self.queue: asyncio.Queue[tuple[str, int]] = asyncio.Queue(maxsize=1)
         self.worker: asyncio.Task[None] | None = None
         self.detector: Any = None
+        self.result_handler: Callable[[str, dict[str, Any]], None] | None = None
+        self._presence_counts: dict[str, tuple[int, int, bool]] = {}
 
     async def start(self) -> None:
         if self.settings.pose_enabled and self.worker is None:
@@ -154,6 +157,8 @@ class PoseService:
                     device_id,
                     WebSocketEnvelope(type="pose_result", device_id=device_id, payload=payload).model_dump(mode="json"),
                 )
+                if self.result_handler:
+                    self.result_handler(device_id, payload)
             except Exception:
                 LOGGER.exception("pose analysis failed for image %s", source_image_id)
             finally:
@@ -164,18 +169,17 @@ class PoseService:
             raise FileNotFoundError(f"pose model not found: {self.settings.pose_model_path}")
         import cv2
         import numpy as np
-        from mediapipe import Image, ImageFormat
-        from mediapipe.tasks import python as mp_python
-        from mediapipe.tasks.python import vision
+        from mediapipe import Image, ImageFormat  # type: ignore[import-untyped]
+        from mediapipe.tasks import python as mp_python  # type: ignore[import-untyped]
+        from mediapipe.tasks.python import vision  # type: ignore[import-untyped]
 
         if self.detector is None:
             options = vision.PoseLandmarkerOptions(
                 base_options=mp_python.BaseOptions(model_asset_path=str(self.settings.pose_model_path)),
                 running_mode=vision.RunningMode.IMAGE,
                 num_poses=1,
-                min_pose_detection_confidence=self.settings.pose_min_confidence,
-                min_pose_presence_confidence=self.settings.pose_min_confidence,
-                min_tracking_confidence=self.settings.pose_min_confidence,
+                min_pose_detection_confidence=self.settings.pose_detection_confidence,
+                min_pose_presence_confidence=self.settings.pose_presence_confidence,
             )
             self.detector = vision.PoseLandmarker.create_from_options(options)
         return cv2, np, vision, Image, ImageFormat
@@ -194,15 +198,25 @@ class PoseService:
             rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             result = self.detector.detect(mp_image_type(image_format=mp_image_format.SRGB, data=rgb))
 
+            enhanced = False
+            if not result.pose_landmarks:
+                lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+                light, a_channel, b_channel = cv2.split(lab)
+                light = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(light)
+                enhanced_bgr = cv2.cvtColor(cv2.merge((light, a_channel, b_channel)), cv2.COLOR_LAB2BGR)
+                enhanced_rgb = cv2.cvtColor(enhanced_bgr, cv2.COLOR_BGR2RGB)
+                result = self.detector.detect(mp_image_type(image_format=mp_image_format.SRGB, data=enhanced_rgb))
+                enhanced = bool(result.pose_landmarks)
+
             annotated_asset = None
             if not result.pose_landmarks:
-                label, confidence, human_present = "未检测到人体", 0.0, False
-                raw = {"landmarks_count": 0}
+                label, confidence, raw_present = "未检测到人体", 0.0, False
+                raw = {"landmarks_count": 0, "enhanced_retry": True, "enhanced_detected": False}
             else:
                 landmarks = result.pose_landmarks[0]
                 label = _pose_label(np, landmarks)
                 confidence = sum(float(point.visibility) for point in landmarks) / len(landmarks)
-                human_present = True
+                raw_present = True
                 height, width = image.shape[:2]
                 for first, second in POSE_CONNECTIONS:
                     a, b = landmarks[first], landmarks[second]
@@ -229,7 +243,29 @@ class PoseService:
                 )
                 db.add(annotated_asset)
                 db.flush()
-                raw = {"landmarks_count": len(landmarks)}
+                raw = {"landmarks_count": len(landmarks), "enhanced_retry": enhanced, "enhanced_detected": enhanced}
+
+            hits, misses, stable = self._presence_counts.get(device_id, (0, 0, False))
+            if raw_present:
+                hits, misses = hits + 1, 0
+                if hits >= 2:
+                    stable = True
+            else:
+                hits, misses = 0, misses + 1
+                if misses >= 3:
+                    stable = False
+            self._presence_counts[device_id] = (hits, misses, stable)
+            human_present = stable
+            raw.update(
+                {
+                    "raw_human_present": raw_present,
+                    "stable_human_present": stable,
+                    "hit_count": hits,
+                    "miss_count": misses,
+                }
+            )
+            if stable and not raw_present:
+                label = "人体短暂丢失（保持有人）"
 
             pose = models.PoseResult(
                 device_id=device_id,

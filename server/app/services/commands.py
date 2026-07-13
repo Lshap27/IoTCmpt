@@ -19,6 +19,10 @@ ALLOWED_COMMANDS: set[str] = {
     "alarm.off",
     "led.on",
     "led.off",
+    "control.set_priority",
+    "control.resume_auto",
+    "alarm.silence",
+    "voice.speak",
     "display.message",
 }
 

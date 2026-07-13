@@ -126,12 +126,16 @@ active device-side smoke alarm.
 POST /api/devices/{device_id}/ai/analyze
 ```
 
-The server builds an LLM request from the latest device snapshot, a compact
-recent-telemetry trend, and — when the newest uploaded image is fresh enough —
-the JPEG itself (OpenAI-compatible vision message with a base64 data URL). The
+The server builds a text-only LLM request from the latest device snapshot,
+current actuator/control-priority state, and a compact recent-telemetry trend. The
 LLM must return a JSON decision. Commands outside the executable set
-(`none`, `window.open`, `window.close`, `alarm.on`, `alarm.off`, `led.on`, `led.off`) are downgraded
+(`none`, `window.open`, `window.close`, `led.on`, `led.off`) are downgraded
 to `none`.
+
+Images are accepted only by `POST /api/devices/{device_id}/ai/analyze-image`.
+That endpoint requires a capture no older than 15 seconds and never falls back
+to text-only analysis. It returns structured `image_unavailable` or
+`vision_unsupported` errors when appropriate.
 
 The generated command is always persisted. It is published to MQTT only when
 `type != "none"` and `confidence >= AIOT_AUTOPILOT_MIN_CONFIDENCE`; otherwise it
@@ -162,7 +166,8 @@ Response:
   "model": "qwen-vl-plus",
   "trigger": "manual",
   "published": true,
-  "image_attached": true
+  "speech": "",
+  "scene_summary": "室内空气质量需要关注"
 }
 ```
 
@@ -214,7 +219,13 @@ Response (both methods):
   "enabled": true,
   "cooldown_seconds": 120,
   "min_confidence": 0.6,
-  "trigger_levels": ["alert"]
+  "trigger_levels": ["alert"],
+  "vision_capability": "unknown",
+  "vision_interval_enabled": false,
+  "vision_interval_effective": false,
+  "vision_interval_seconds": 300,
+  "sedentary_threshold_seconds": 7200,
+  "smoke_silence_seconds": 60
 }
 ```
 

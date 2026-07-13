@@ -40,7 +40,8 @@ export default function Dashboard() {
       model: latest.ai_result.model ?? "",
       trigger: "restored",
       published: latest.command.status !== "pending",
-      image_attached: false,
+      speech: latest.ai_result.speech,
+      scene_summary: latest.ai_result.scene_summary,
     };
   }, [live.decision, live.latest]);
 
@@ -108,7 +109,7 @@ export default function Dashboard() {
         <AiPanel
           analyzing={live.analyzing}
           decision={decision}
-          autopilotEnabled={live.autopilotEnabled}
+          autopilot={live.latest?.autopilot}
           onToggleAutopilot={live.toggleAutopilot}
           onAnalyze={live.triggerAnalysis}
           className="col-span-12 xl:col-span-4"
@@ -118,6 +119,11 @@ export default function Dashboard() {
           image={live.latest?.image}
           pose={live.latest?.pose}
           onAnalyze={live.requestPose}
+          onAiAnalyze={live.triggerImageAnalysis}
+          aiAnalyzing={live.imageAnalyzing}
+          visionCapability={live.latest?.autopilot?.vision_capability ?? "unknown"}
+          autopilot={live.latest?.autopilot}
+          onUpdateAutomation={live.updateAutomation}
           className="col-span-12 md:col-span-6 xl:col-span-4"
         />
         <CommandPad
@@ -126,6 +132,9 @@ export default function Dashboard() {
           windowOpen={telemetry?.state.window_open}
           alarmOn={telemetry?.state.alarm_on}
           ledOn={telemetry?.state.led_on}
+          controlPriority={telemetry?.state.control_priority}
+          manualWindowOverride={telemetry?.state.manual_window_override}
+          manualLedOverride={telemetry?.state.manual_led_override}
           className="col-span-12 md:col-span-6 xl:col-span-4"
         />
         <EventStream events={live.events} className="col-span-12 xl:col-span-4" />
@@ -134,6 +143,14 @@ export default function Dashboard() {
           events={live.ledger}
           history={live.history}
           onAcknowledge={live.acknowledgeEvent}
+          onSilence={() =>
+            live.dispatchCommand("alarm.silence", {
+              seconds: live.latest?.autopilot?.smoke_silence_seconds ?? 60,
+            })
+          }
+          silenceSeconds={live.latest?.autopilot?.smoke_silence_seconds ?? 60}
+          smokeSilenced={telemetry?.state.smoke_silenced}
+          onUpdateSilenceSeconds={(seconds) => live.updateAutomation({ smoke_silence_seconds: seconds })}
           className="col-span-12"
         />
         <HealthReport

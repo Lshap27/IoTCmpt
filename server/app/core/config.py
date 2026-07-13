@@ -21,8 +21,9 @@ class Settings(BaseSettings):
     max_images_per_device: int = 100
 
     pose_enabled: bool = False
-    pose_model_path: Path = Path("models/pose_landmarker_lite.task")
-    pose_min_confidence: float = 0.3
+    pose_model_path: Path = Path("models/pose_landmarker_full.task")
+    pose_detection_confidence: float = Field(default=0.3, ge=0.0, le=1.0)
+    pose_presence_confidence: float = Field(default=0.3, ge=0.0, le=1.0)
 
     mqtt_enabled: bool = False
     mqtt_host: str = "127.0.0.1"
@@ -38,7 +39,6 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "demo-model"
     llm_timeout_seconds: float = 12.0
-    llm_vision_enabled: bool = True
     llm_image_max_age_seconds: float = 600.0
     llm_response_format: str = "json_object"
     llm_thinking_enabled: bool = False
@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     autopilot_cooldown_seconds: float = 120.0
     autopilot_min_confidence: float = Field(default=0.6, ge=0.0, le=1.0)
     autopilot_trigger_levels: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["alert"])
+    vision_interval_enabled: bool = False
+    vision_interval_seconds: float = Field(default=300.0, ge=30.0, le=3600.0)
+    vision_image_max_age_seconds: float = Field(default=15.0, ge=1.0, le=120.0)
+    sedentary_threshold_seconds: float = Field(default=7200.0, ge=30.0, le=28800.0)
+    smoke_silence_seconds: int = Field(default=60, ge=10, le=600)
 
     @field_validator("cors_origins", "autopilot_trigger_levels", mode="before")
     @classmethod

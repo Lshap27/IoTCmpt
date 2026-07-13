@@ -34,12 +34,20 @@ export function SafetyPanel({
   events,
   history,
   onAcknowledge,
+  onSilence,
+  silenceSeconds,
+  smokeSilenced,
+  onUpdateSilenceSeconds,
   className,
 }: {
   smokeDetected: boolean | null | undefined;
   events: EventOut[];
   history: TelemetryPoint[];
   onAcknowledge: (eventId: number) => void;
+  onSilence: () => void;
+  silenceSeconds: number;
+  smokeSilenced: boolean | null | undefined;
+  onUpdateSilenceSeconds: (seconds: number) => void;
   className?: string;
 }) {
   const smokeEvents = useMemo(() => events.filter((event) => event.type.startsWith("smoke.")), [events]);
@@ -79,8 +87,37 @@ export function SafetyPanel({
         <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
           <div>
             <p className="text-sm leading-relaxed text-ink2">
-              烟雾上升沿由设备本地立即触发蜂鸣器与语音，云服务不可用时安全链路仍保持工作。
+              烟雾上升沿由设备本地立即触发蜂鸣器；AI
+              语音建议由云端生成。限时静音到期后，若烟雾仍存在会自动恢复蜂鸣。
             </p>
+            <label className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-line bg-raised p-3 text-sm text-ink2">
+              <span>
+                <span className="block font-medium">静音时长</span>
+                <span className="text-xs text-ink3">烟雾未解除时到期自动恢复</span>
+              </span>
+              <span className="flex items-center gap-2 text-xs text-ink3">
+                <input
+                  key={`mute-${silenceSeconds}`}
+                  type="number"
+                  min={10}
+                  max={600}
+                  defaultValue={silenceSeconds}
+                  onBlur={(event) => onUpdateSilenceSeconds(Number(event.currentTarget.value))}
+                  className="h-9 w-20 rounded-md border border-line bg-surface px-2 text-sm text-ink"
+                />
+                秒
+              </span>
+            </label>
+            {smokeDetected ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onSilence}
+                className="mt-3 min-h-10 rounded-xl"
+              >
+                {smokeSilenced ? "烟雾蜂鸣已限时静音" : `静音 ${silenceSeconds} 秒`}
+              </Button>
+            ) : null}
             <div
               className="mt-4 flex h-14 items-end gap-0.5 rounded-lg border border-line bg-raised p-2"
               aria-label="最近烟雾遥测"

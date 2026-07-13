@@ -55,7 +55,8 @@ switching on `type` (`web/src/lib/ws-dispatcher.ts`).
     "model": "qwen-vl-plus",
     "trigger": "auto:air_quality=alert",
     "published": true,
-    "image_attached": true
+    "speech": "空气质量正在变差，请检查污染源并保持有效通风。",
+    "scene_summary": "窗户已打开但空气质量仍在恶化"
   }
   ```
 

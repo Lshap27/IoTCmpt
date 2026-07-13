@@ -39,6 +39,10 @@ these aggregates without inventing samples for missing periods.
 - `window_open`
 - `alarm_on`
 - `manual_override`
+- `manual_window_override`
+- `manual_led_override`
+- `control_priority`
+- `smoke_silenced`
 - `led_on`
 - `air_quality`
 - `recommend_open_window`
@@ -84,6 +88,8 @@ these aggregates without inventing samples for missing periods.
 - `model`
 - `confidence`
 - `reason`
+- `speech`
+- `scene_summary`
 - `raw_payload`
 - `created_at`
 

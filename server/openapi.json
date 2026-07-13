@@ -52,10 +52,6 @@
             "title": "Confidence",
             "type": "number"
           },
-          "image_attached": {
-            "title": "Image Attached",
-            "type": "boolean"
-          },
           "model": {
             "title": "Model",
             "type": "string"
@@ -78,6 +74,16 @@
             "title": "Risk Level",
             "type": "string"
           },
+          "scene_summary": {
+            "default": "",
+            "title": "Scene Summary",
+            "type": "string"
+          },
+          "speech": {
+            "default": "",
+            "title": "Speech",
+            "type": "string"
+          },
           "trigger": {
             "title": "Trigger",
             "type": "string"
@@ -90,8 +96,7 @@
           "reason",
           "model",
           "trigger",
-          "published",
-          "image_attached"
+          "published"
         ],
         "title": "AiDecisionOut",
         "type": "object"
@@ -253,6 +258,16 @@
             "title": "Risk Level",
             "type": "string"
           },
+          "scene_summary": {
+            "default": "",
+            "title": "Scene Summary",
+            "type": "string"
+          },
+          "speech": {
+            "default": "",
+            "title": "Speech",
+            "type": "string"
+          },
           "summary": {
             "title": "Summary",
             "type": "string"
@@ -274,6 +289,36 @@
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
+          },
+          "sedentary_threshold_seconds": {
+            "default": 7200,
+            "title": "Sedentary Threshold Seconds",
+            "type": "number"
+          },
+          "smoke_silence_seconds": {
+            "default": 60,
+            "title": "Smoke Silence Seconds",
+            "type": "integer"
+          },
+          "vision_capability": {
+            "default": "unknown",
+            "enum": [
+              "unknown",
+              "supported",
+              "unsupported"
+            ],
+            "title": "Vision Capability",
+            "type": "string"
+          },
+          "vision_interval_enabled": {
+            "default": false,
+            "title": "Vision Interval Enabled",
+            "type": "boolean"
+          },
+          "vision_interval_seconds": {
+            "default": 300,
+            "title": "Vision Interval Seconds",
+            "type": "number"
           }
         },
         "required": [
@@ -314,13 +359,67 @@
       "AutopilotIn": {
         "properties": {
           "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "sedentary_threshold_seconds": {
+            "anyOf": [
+              {
+                "maximum": 28800.0,
+                "minimum": 30.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sedentary Threshold Seconds"
+          },
+          "smoke_silence_seconds": {
+            "anyOf": [
+              {
+                "maximum": 600.0,
+                "minimum": 10.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smoke Silence Seconds"
+          },
+          "vision_interval_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Interval Enabled"
+          },
+          "vision_interval_seconds": {
+            "anyOf": [
+              {
+                "maximum": 3600.0,
+                "minimum": 30.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Interval Seconds"
           }
         },
-        "required": [
-          "enabled"
-        ],
         "title": "AutopilotIn",
         "type": "object"
       },
@@ -342,12 +441,41 @@
             "title": "Min Confidence",
             "type": "number"
           },
+          "sedentary_threshold_seconds": {
+            "title": "Sedentary Threshold Seconds",
+            "type": "number"
+          },
+          "smoke_silence_seconds": {
+            "title": "Smoke Silence Seconds",
+            "type": "integer"
+          },
           "trigger_levels": {
             "items": {
               "type": "string"
             },
             "title": "Trigger Levels",
             "type": "array"
+          },
+          "vision_capability": {
+            "enum": [
+              "unknown",
+              "supported",
+              "unsupported"
+            ],
+            "title": "Vision Capability",
+            "type": "string"
+          },
+          "vision_interval_effective": {
+            "title": "Vision Interval Effective",
+            "type": "boolean"
+          },
+          "vision_interval_enabled": {
+            "title": "Vision Interval Enabled",
+            "type": "boolean"
+          },
+          "vision_interval_seconds": {
+            "title": "Vision Interval Seconds",
+            "type": "number"
           }
         },
         "required": [
@@ -355,7 +483,13 @@
           "enabled",
           "cooldown_seconds",
           "min_confidence",
-          "trigger_levels"
+          "trigger_levels",
+          "vision_capability",
+          "vision_interval_enabled",
+          "vision_interval_effective",
+          "vision_interval_seconds",
+          "sedentary_threshold_seconds",
+          "smoke_silence_seconds"
         ],
         "title": "AutopilotState",
         "type": "object"
@@ -494,6 +628,10 @@
               "alarm.off",
               "led.on",
               "led.off",
+              "control.set_priority",
+              "control.resume_auto",
+              "alarm.silence",
+              "voice.speak",
               "display.message"
             ],
             "title": "Type",
@@ -592,6 +730,22 @@
             "default": null,
             "title": "Alarm On"
           },
+          "control_priority": {
+            "anyOf": [
+              {
+                "enum": [
+                  "manual_first",
+                  "auto_first"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Control Priority"
+          },
           "led_on": {
             "anyOf": [
               {
@@ -604,6 +758,18 @@
             "default": null,
             "title": "Led On"
           },
+          "manual_led_override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Manual Led Override"
+          },
           "manual_override": {
             "anyOf": [
               {
@@ -615,6 +781,30 @@
             ],
             "default": null,
             "title": "Manual Override"
+          },
+          "manual_window_override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Manual Window Override"
+          },
+          "smoke_silenced": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Smoke Silenced"
           },
           "window_open": {
             "anyOf": [
@@ -1991,6 +2181,45 @@
           }
         },
         "summary": "Analyze Device"
+      }
+    },
+    "/api/devices/{device_id}/ai/analyze-image": {
+      "post": {
+        "operationId": "analyze_device_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiDecisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analyze Device Image"
       }
     },
     "/api/devices/{device_id}/ai/report": {

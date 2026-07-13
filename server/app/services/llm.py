@@ -19,8 +19,6 @@ EXECUTABLE_COMMANDS: list[str] = [
     "none",
     "window.open",
     "window.close",
-    "alarm.on",
-    "alarm.off",
     "led.on",
     "led.off",
 ]
@@ -37,8 +35,10 @@ DECISION_JSON_SCHEMA: dict[str, Any] = {
             "confidence": {"type": "number", "minimum": 0, "maximum": 1},
             "risk_level": {"type": "string", "enum": sorted(RISK_LEVELS)},
             "reason": {"type": "string"},
+            "speech": {"type": "string", "maxLength": 60},
+            "scene_summary": {"type": "string"},
         },
-        "required": ["type", "confidence", "risk_level", "reason"],
+        "required": ["type", "confidence", "risk_level", "reason", "speech", "scene_summary"],
         "additionalProperties": False,
     },
 }
@@ -56,14 +56,20 @@ SYSTEM_PROMPT = (
     "光照和烟雾传感器，以及舵机窗户、LED 和蜂鸣器报警。你会收到设备最新状态快照（含 fusion 空气质量评估）、"
     "近期遥测趋势，可能还有一张刚拍摄的室内照片。\n"
     f"可执行的命令类型只有：{json.dumps(EXECUTABLE_COMMANDS)}。\n"
-    "决策原则：空气质量 alert 且窗户未开时倾向 window.open；环境恢复正常且窗户为自动打开状态时"
-    "可以 window.close；出现明显危险（浓烟、明火、有人晕倒等图像异常，或污染物极高）时 alarm.on；"
-    "危险解除时 alarm.off；光照不足且有人时可以 led.on；无需动作时返回 none。"
+    "决策原则：必须先检查 state.window_open、air_trend 和 actions_already_taken。空气质量变差且窗户未开时才可"
+    "window.open；窗户已经打开时禁止再次建议开窗，应建议检查污染源、通风路径或远离风险区域。"
+    "air_trend=worsening 时禁止 window.close。光照不足且有人时可以 led.on，无人或明亮时可以 led.off；"
+    "自动决策不得控制蜂鸣器，无需动作时返回 none。"
     "烟雾报警由设备本地独立执行，云端不得用 window.open 替代报警。若照片与遥测矛盾，以更保守（更安全）的动作为准。\n"
     "只返回一个 JSON 对象，不要包含任何其他文字，字段为："
     '{"type": string, "parameter": object, "confidence": number(0-1), '
-    '"risk_level": "low"|"medium"|"high", "reason": string}。reason 用简体中文，简明说明依据。'
+    '"risk_level": "low"|"medium"|"high", "reason": string, "speech": string, "scene_summary": string}。'
+    "reason 用简体中文说明依据；speech 仅在输入要求语音时填写一至两句、最多六十字，否则为空字符串。"
 )
+
+
+class VisionUnsupportedError(RuntimeError):
+    pass
 
 
 def extract_json_object(content: Any) -> dict[str, Any]:
@@ -101,6 +107,8 @@ class LLMService:
 
         try:
             parsed = await self._call_openai_compatible(device_state, image_path=image_path)
+        except VisionUnsupportedError:
+            raise
         except Exception as exc:
             LOGGER.warning("LLM call failed: %s", exc)
             return self._none_decision(f"LLM 调用失败: {exc}")
@@ -128,6 +136,8 @@ class LLMService:
             risk_level=risk_level,
             summary=reason,
             model=self.settings.llm_model,
+            speech="",
+            scene_summary="",
         )
 
     def _decision_from_payload(self, parsed: dict[str, Any]) -> AiDecision:
@@ -161,6 +171,8 @@ class LLMService:
             risk_level=cast(RiskLevel, risk_level),
             summary=str(parsed.get("summary") or reason),
             model=self.settings.llm_model,
+            speech=str(parsed.get("speech") or "")[:60],
+            scene_summary=str(parsed.get("scene_summary") or parsed.get("summary") or reason),
         )
 
     def _mock_decision(self, device_state: dict[str, Any]) -> AiDecision:
@@ -169,6 +181,7 @@ class LLMService:
         fusion = telemetry.get("fusion") or {}
         state = telemetry.get("state") or {}
         sensors = telemetry.get("sensors") or {}
+        pose = device_state.get("pose") or {}
         air_quality = fusion.get("air_quality")
 
         if sensors.get("smoke_detected"):
@@ -184,32 +197,28 @@ class LLMService:
                 "medium",
                 "空气质量达到 alert，窗户未开，建议立即开窗通风",
             )
-        elif air_quality == "alert" and fusion.get("alarm_enabled"):
+        elif air_quality == "alert" and state.get("window_open"):
             command_type, confidence, risk, reason = (
-                "alarm.on",
-                0.85,
-                "high",
-                "空气质量持续 alert 且已开窗，触发报警提醒",
+                "none",
+                0.9,
+                "high" if device_state.get("air_trend") == "worsening" else "medium",
+                "窗户已经打开，空气仍未改善，应检查室内污染源和通风路径",
             )
-        elif fusion.get("alarm_enabled"):
-            command_type, confidence, risk, reason = (
-                "alarm.on",
-                0.85,
-                "medium",
-                "融合评估要求报警",
-            )
-        elif air_quality == "good" and state.get("alarm_on"):
-            command_type, confidence, risk, reason = (
-                "alarm.off",
-                0.8,
-                "low",
-                "环境已恢复正常，关闭报警",
-            )
-        elif sensors.get("light_is_dark") and state.get("led_on") is False:
+        elif pose.get("human_present") and sensors.get("light_is_dark") and state.get("led_on") is False:
             command_type, confidence, risk, reason = ("led.on", 0.8, "low", "室内光照偏暗，开启照明")
+        elif state.get("led_on") and (not pose.get("human_present") or not sensors.get("light_is_dark")):
+            command_type, confidence, risk, reason = ("led.off", 0.9, "low", "当前无人或环境明亮，关闭照明")
         else:
             command_type, confidence, risk, reason = ("none", 0.95, "low", "环境正常，无需动作")
 
+        intent = str(device_state.get("analysis_intent") or "")
+        speech = ""
+        if intent == "smoke":
+            speech = "检测到烟雾，请立即远离并检查现场安全。"
+        elif intent == "air_change":
+            speech = "空气质量正在变差，请检查污染源并保持有效通风。"
+        elif intent == "sedentary":
+            speech = "您已久坐较长时间，请起身活动并放松肩颈。"
         return AiDecision(
             command=CommandMessage(
                 type=cast(CommandType, command_type),
@@ -220,6 +229,8 @@ class LLMService:
             risk_level=cast(RiskLevel, risk),
             summary=reason,
             model="mock",
+            speech=speech,
+            scene_summary=reason,
         )
 
     def _mock_report(self, context: dict[str, Any]) -> dict[str, Any]:
@@ -280,7 +291,7 @@ class LLMService:
         return None
 
     def _read_image(self, image_path: Path | None) -> bytes | None:
-        if image_path is None or not self.settings.llm_vision_enabled:
+        if image_path is None:
             return None
         try:
             return image_path.read_bytes()
@@ -308,6 +319,10 @@ class LLMService:
         headers = {"Authorization": f"Bearer {self.settings.llm_api_key}"}
         async with httpx.AsyncClient(timeout=self.settings.llm_timeout_seconds) as client:
             response = await client.post(self.settings.llm_endpoint, json=payload, headers=headers)
+            if response.status_code in {400, 415, 422} and any(
+                marker in response.text.lower() for marker in ("image", "vision", "multimodal", "image_url")
+            ):
+                raise VisionUnsupportedError("当前模型不支持图片分析")
             response.raise_for_status()
             data = response.json()
 

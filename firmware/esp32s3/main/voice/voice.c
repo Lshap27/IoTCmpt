@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "app_config_defaults.h"
 #include "driver/gpio.h"
@@ -10,28 +11,10 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "mbedtls/base64.h"
 #include "sensors.h"
-
-/** TODO：
- * 1、当TFT显示屏显示空气质量由好变差时，自动模式下 AI 通过语音给出建议，在一句话以内，无需蜂鸣器
- * 2、当烟雾传感器检测烟雾浓度过高，语音给出建议（AI分析给出建议，非硬件）
- * 3、检测到久坐超过两个小时（模拟时半分钟左右），语音给出建议
- * 
- */
 static const char *TAG = "VOICE";
 static SemaphoreHandle_t s_mutex;
-
-typedef enum {
-    VOICE_IDLE = 0,
-    VOICE_AIR_BAD,
-    VOICE_SMOKE,
-} voice_state_t;
-
-static voice_state_t s_state;
-
-static const uint8_t GB_SMOKE_ALARM[] = {0xD1, 0xCC, 0xCE, 0xED, 0xC5, 0xA8, 0xB6, 0xC8, 0xB3, 0xAC, 0xB1, 0xEA};
-static const uint8_t GB_AIR_BAD[] = {0xBF, 0xD5, 0xC6, 0xF8, 0xD6, 0xCA, 0xC1, 0xBF, 0xBD, 0xCF, 0xB2,
-                                     0xEE, 0xA3, 0xAC, 0xBD, 0xA8, 0xD2, 0xE9, 0xBF, 0xAA, 0xB4, 0xB0};
 
 static bool wait_idle(uint32_t timeout_ms) {
     const TickType_t start = xTaskGetTickCount();
@@ -44,13 +27,17 @@ static bool wait_idle(uint32_t timeout_ms) {
     return false;
 }
 
-static void speak(const uint8_t *text, size_t text_len) {
+static esp_err_t speak(const uint8_t *text, size_t text_len) {
     if (!wait_idle(5000) || !sensors_air_uart_lock(1000)) {
         ESP_LOGW(TAG, "SYN6288 busy, skipping announcement");
-        return;
+        return ESP_ERR_TIMEOUT;
     }
 
-    uint8_t frame[96];
+    if (!text || text_len == 0 || text_len > 220) {
+        sensors_air_uart_unlock();
+        return ESP_ERR_INVALID_SIZE;
+    }
+    uint8_t frame[256];
     size_t index = 0;
     const uint16_t data_len = (uint16_t)(4 + text_len);
     const uint16_t payload_len = (uint16_t)(2 + data_len);
@@ -70,8 +57,9 @@ static void speak(const uint8_t *text, size_t text_len) {
         checksum ^= frame[i];
     }
     frame[index++] = checksum;
-    uart_write_bytes((uart_port_t)CONFIG_APP_TVOC_UART_NUM, frame, index);
+    const int written = uart_write_bytes((uart_port_t)CONFIG_APP_TVOC_UART_NUM, frame, index);
     sensors_air_uart_unlock();
+    return written == (int)index ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t voice_init(void) {
@@ -115,18 +103,20 @@ esp_err_t voice_init(void) {
     return ESP_OK;
 }
 
-void voice_update(bool smoke_detected, bool air_bad) {
-    if (!CONFIG_APP_VOICE_ENABLED || !s_mutex || xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
-        return;
+esp_err_t voice_speak_base64(const char *encoded) {
+    if (!CONFIG_APP_VOICE_ENABLED || !s_mutex || !encoded) {
+        return ESP_ERR_INVALID_STATE;
     }
-    const voice_state_t next = smoke_detected ? VOICE_SMOKE : air_bad ? VOICE_AIR_BAD : VOICE_IDLE;
-    if (next != s_state) {
-        s_state = next;
-        if (next == VOICE_SMOKE) {
-            speak(GB_SMOKE_ALARM, sizeof(GB_SMOKE_ALARM));
-        } else if (next == VOICE_AIR_BAD) {
-            speak(GB_AIR_BAD, sizeof(GB_AIR_BAD));
-        }
+    uint8_t decoded[224];
+    size_t decoded_len = 0;
+    if (mbedtls_base64_decode(decoded, sizeof(decoded), &decoded_len, (const unsigned char *)encoded,
+                              strlen(encoded)) != 0) {
+        return ESP_ERR_INVALID_ARG;
     }
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+    esp_err_t err = speak(decoded, decoded_len);
     xSemaphoreGive(s_mutex);
+    return err;
 }

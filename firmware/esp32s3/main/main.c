@@ -212,7 +212,6 @@ static void telemetry_task(void *arg) {
         }
 
         latest_update(&sample, &fusion);
-        voice_update(sample.smoke_detected, fusion.recommend_open_window);
         err = mqtt_app_publish_telemetry(&sample, &fusion);
         if (err == ESP_OK) {
             status_set_cloud(APP_STATUS_LINK_READY);
@@ -247,11 +246,6 @@ static void safety_task(void *arg) {
                 previous = detected;
                 has_previous = true;
             }
-            sensor_sample_t sample;
-            fusion_state_t fusion;
-            app_status_t status;
-            latest_get(&sample, &fusion, &status);
-            voice_update(detected, fusion.recommend_open_window);
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -274,8 +268,7 @@ static void actuator_task(void *arg) {
         (void)status;
 
         latest_get(&sample, &fusion, &status);
-        const bool has_command =
-            s_command_queue && xQueueReceive(s_command_queue, &envelope, 0) == pdTRUE;
+        const bool has_command = s_command_queue && xQueueReceive(s_command_queue, &envelope, 0) == pdTRUE;
 
         if (err != ESP_OK) {
             if (has_command) {
@@ -358,7 +351,7 @@ static void camera_upload_task(void *arg) {
         }
 
         camera_app_return_frame(frame);
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(s_config.camera_upload_interval_ms));
     }
 }
 

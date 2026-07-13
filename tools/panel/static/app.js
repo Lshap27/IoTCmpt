@@ -328,7 +328,6 @@ async function loadEnvConfig() {
       $("#deviceId").value = compose.AIOT_DEMO_DEVICE_ID;
     if (compose.AIOT_DEMO_SCENARIO)
       $("#simulatorScenario").value = compose.AIOT_DEMO_SCENARIO;
-    $("#llmVisionEnabled").checked = server.AIOT_LLM_VISION_ENABLED !== "false";
     $("#autopilotEnabled").checked = server.AIOT_AUTOPILOT_ENABLED !== "false";
     syncModeFields();
   } catch (_) {
@@ -395,7 +394,6 @@ $("#btnSaveEnv").addEventListener("click", async () => {
     llmEndpoint: llmEndpoint || null,
     llmModel: $("#llmModel").value || null,
     llmApiKey: $("#llmApiKey").value || null,
-    llmVisionEnabled: $("#llmVisionEnabled").checked,
     autopilotEnabled: $("#autopilotEnabled").checked,
     autopilotMinConfidence: confidence.value || null,
     autopilotTriggerLevels: triggerLevels,
@@ -495,6 +493,7 @@ const FW_BOOL_KEYS = [
   "CONFIG_APP_BUTTON_ENABLED",
   "CONFIG_APP_MQ2_ENABLED",
   "CONFIG_APP_VOICE_ENABLED",
+  "CONFIG_APP_LED_ACTIVE_LOW",
 ];
 const FW_TEXT_KEYS = [
   "CONFIG_APP_DEVICE_ID",
@@ -503,6 +502,8 @@ const FW_TEXT_KEYS = [
   "CONFIG_APP_WIFI_PASSWORD",
   "CONFIG_APP_MQTT_BROKER_URI",
   "CONFIG_APP_IMAGE_UPLOAD_URL",
+  "CONFIG_APP_LED_GPIO",
+  "CONFIG_APP_CAMERA_UPLOAD_INTERVAL_MS",
 ];
 
 async function loadFirmwareConfig() {
@@ -517,6 +518,7 @@ async function loadFirmwareConfig() {
       const el = $("#fw_" + key);
       if (el && v[key] !== undefined) el.checked = !!v[key];
     }
+    $("#fw_LED_MODE").value = v.CONFIG_APP_LED_MODE_GPIO === false ? "logical" : "gpio";
     syncFirmwareFields();
   } catch (_) {}
 }
@@ -535,6 +537,7 @@ function syncFirmwareFields() {
     '[data-for-firmware="image"]',
     $("#fw_CONFIG_APP_IMAGE_UPLOAD_ENABLED").checked,
   );
+  setModeFields('[data-for-firmware="led-gpio"]', $("#fw_LED_MODE").value === "gpio");
 }
 
 [
@@ -544,6 +547,7 @@ function syncFirmwareFields() {
 ].forEach((selector) =>
   $(selector).addEventListener("change", syncFirmwareFields),
 );
+$("#fw_LED_MODE").addEventListener("change", syncFirmwareFields);
 
 $("#btnFwAutofill").addEventListener("click", () => {
   const deviceId = $("#fw_CONFIG_APP_DEVICE_ID").value || "esp32s3-001";
@@ -587,6 +591,8 @@ $("#btnSaveFw").addEventListener("click", async () => {
     const el = $("#fw_" + key);
     if (el) values[key] = el.checked;
   }
+  values.CONFIG_APP_LED_MODE_GPIO = $("#fw_LED_MODE").value === "gpio";
+  values.CONFIG_APP_LED_MODE_LOGICAL = $("#fw_LED_MODE").value === "logical";
   try {
     const result = await post("/api/config/firmware", { values });
     msg.className = "msg ok";

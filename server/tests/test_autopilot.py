@@ -213,6 +213,58 @@ def test_run_ai_analysis_low_confidence_stays_pending(client):
     assert fake_mqtt.published == []
 
 
+def test_general_analysis_never_attaches_an_image(client, tmp_path):
+    from app.db.session import SessionLocal
+
+    llm = FakeLLM(make_decision(command_type="none"))
+    db = SessionLocal()
+    try:
+        asyncio.run(run_ai_analysis(db, "esp32s3-001", llm, FakeMqtt(), trigger="manual"))
+    finally:
+        db.close()
+    assert llm.calls[0][1] is None
+
+
+def test_open_window_blocks_duplicate_open_decision(client):
+    from app.db.session import SessionLocal
+
+    db = SessionLocal()
+    mqtt = FakeMqtt()
+    try:
+        record_telemetry(
+            db,
+            TelemetryIn.model_validate(
+                {
+                    "device_id": "esp32s3-001",
+                    **ALERT_TELEMETRY,
+                    "state": {"window_open": True, "alarm_on": False, "manual_override": False},
+                }
+            ),
+        )
+        payload = asyncio.run(run_ai_analysis(db, "esp32s3-001", FakeLLM(make_decision()), mqtt))
+    finally:
+        db.close()
+    assert payload["command"]["type"] == "none"
+    assert "窗户已经打开" in payload["reason"]
+    assert mqtt.published == []
+
+
+def test_runtime_automation_settings_are_reported():
+    pilot = AutoPilot(make_settings(), None)
+    pilot.update(
+        "dev",
+        vision_interval_enabled=True,
+        vision_interval_seconds=90,
+        sedentary_threshold_seconds=1800,
+        smoke_silence_seconds=45,
+    )
+    state = pilot.describe("dev")
+    assert state["vision_interval_enabled"] is True
+    assert state["vision_interval_seconds"] == 90
+    assert state["sedentary_threshold_seconds"] == 1800
+    assert state["smoke_silence_seconds"] == 45
+
+
 # ---- 自动决策闭环 ----
 
 

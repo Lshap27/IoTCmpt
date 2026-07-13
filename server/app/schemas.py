@@ -14,6 +14,10 @@ CommandType = Literal[
     "alarm.off",
     "led.on",
     "led.off",
+    "control.set_priority",
+    "control.resume_auto",
+    "alarm.silence",
+    "voice.speak",
     "display.message",
 ]
 CommandSource = Literal["frontend", "llm", "rule"]
@@ -33,6 +37,10 @@ class DeviceStatePayload(BaseModel):
     window_open: bool | None = None
     alarm_on: bool | None = None
     manual_override: bool | None = None
+    manual_window_override: bool | None = None
+    manual_led_override: bool | None = None
+    control_priority: Literal["manual_first", "auto_first"] | None = None
+    smoke_silenced: bool | None = None
     led_on: bool | None = None
 
 
@@ -89,10 +97,16 @@ class AiDecision(BaseModel):
     risk_level: RiskLevel = "unknown"
     summary: str = ""
     model: str = ""
+    speech: str = ""
+    scene_summary: str = ""
 
 
 class AutopilotIn(BaseModel):
-    enabled: bool
+    enabled: bool | None = None
+    vision_interval_enabled: bool | None = None
+    vision_interval_seconds: float | None = Field(default=None, ge=30, le=3600)
+    sedentary_threshold_seconds: float | None = Field(default=None, ge=30, le=28800)
+    smoke_silence_seconds: int | None = Field(default=None, ge=10, le=600)
 
 
 class ImageAssetOut(BaseModel):
@@ -226,10 +240,17 @@ class AiResultInfo(BaseModel):
     reason: str
     summary: str
     model: str
+    speech: str = ""
+    scene_summary: str = ""
 
 
 class AutopilotEnabled(BaseModel):
     enabled: bool
+    vision_capability: Literal["unknown", "supported", "unsupported"] = "unknown"
+    vision_interval_enabled: bool = False
+    vision_interval_seconds: float = 300
+    sedentary_threshold_seconds: float = 7200
+    smoke_silence_seconds: int = 60
 
 
 class AutopilotState(BaseModel):
@@ -238,6 +259,12 @@ class AutopilotState(BaseModel):
     cooldown_seconds: float
     min_confidence: float
     trigger_levels: list[str]
+    vision_capability: Literal["unknown", "supported", "unsupported"]
+    vision_interval_enabled: bool
+    vision_interval_effective: bool
+    vision_interval_seconds: float
+    sedentary_threshold_seconds: float
+    smoke_silence_seconds: int
 
 
 class LatestState(BaseModel):
@@ -258,7 +285,8 @@ class AiDecisionOut(BaseModel):
     model: str
     trigger: str
     published: bool
-    image_attached: bool
+    speech: str = ""
+    scene_summary: str = ""
 
 
 ReportPeriod = Literal["hour", "day", "week"]

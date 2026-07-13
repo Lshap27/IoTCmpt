@@ -114,6 +114,19 @@ def test_image_upload(client):
     assert payload["url"].startswith("http://testserver/uploads/esp32s3-001/")
 
 
+def test_explicit_image_analysis_uses_fresh_capture(client):
+    settings = config.get_settings()
+    settings.llm_endpoint = "mock"
+    upload = client.post(
+        "/api/devices/esp32s3-001/images",
+        files={"file": ("image.jpg", b"\xff\xd8\xff\xd9", "image/jpeg")},
+    )
+    assert upload.status_code == 200
+    response = client.post("/api/devices/esp32s3-001/ai/analyze-image")
+    assert response.status_code == 200
+    assert response.json()["trigger"] == "manual:vision"
+
+
 def test_image_retention_keeps_newest_100(client):
     paths = []
     for index in range(101):
