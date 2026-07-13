@@ -9,6 +9,7 @@ import { DeviceHeader } from "@/components/device-header";
 import { EventStream } from "@/components/event-stream";
 import { HealthReport } from "@/components/health-report";
 import { LightCard } from "@/components/light-card";
+import { NotificationCenter } from "@/components/notification-center";
 import { SafetyPanel } from "@/components/safety-panel";
 import { StatCard } from "@/components/stat-card";
 import { METRICS, TelemetryChart } from "@/components/telemetry-chart";
@@ -83,6 +84,8 @@ export default function Dashboard() {
           ，页面展示最近一次同步的数据
         </div>
       ) : null}
+
+      <NotificationCenter notifications={live.notifications} />
 
       <section className="mt-8" aria-labelledby="overview-heading">
         <h2 id="overview-heading" className="mb-4 text-lg font-semibold tracking-tight text-ink">

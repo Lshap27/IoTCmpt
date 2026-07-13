@@ -2,18 +2,27 @@
 
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AiHealthReport, AutopilotState, EventOut, LatestState, ReportPeriod } from "@/lib/api";
+import type {
+  AiHealthReport,
+  AutopilotState,
+  EventOut,
+  LatestState,
+  NotificationOut,
+  ReportPeriod,
+} from "@/lib/api";
 import {
   acknowledgeDeviceEvent,
   fetchDeviceEvents,
   fetchHistory,
   fetchHistoryBucketed,
   fetchLatest,
+  fetchNotifications,
   requestAiAnalysis,
   requestAiImageAnalysis,
   requestAiReport,
   requestPoseAnalysis,
   sendCommand,
+  sendDormNotification,
   updateAutopilot,
 } from "@/lib/api";
 import { deviceKeys } from "@/lib/query-keys";
@@ -66,6 +75,10 @@ export function useDeviceLive(deviceId: string) {
     queryKey: deviceKeys.ledger(deviceId),
     queryFn: () => fetchDeviceEvents(deviceId),
   });
+  const notificationsQuery = useQuery({
+    queryKey: deviceKeys.notifications(deviceId),
+    queryFn: () => fetchNotifications(deviceId),
+  });
 
   // 纯客户端状态放 query cache：WS dispatcher 可以在组件树外更新它们。
   const eventsQuery = useQuery({
@@ -107,6 +120,7 @@ export function useDeviceLive(deviceId: string) {
       void queryClient.invalidateQueries({ queryKey: deviceKeys.history(deviceId) });
       void queryClient.invalidateQueries({ queryKey: deviceKeys.reportHistory(deviceId) });
       void queryClient.invalidateQueries({ queryKey: deviceKeys.ledger(deviceId) });
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.notifications(deviceId) });
     }, [queryClient, deviceId]),
   );
 
@@ -181,6 +195,19 @@ export function useDeviceLive(deviceId: string) {
     },
   });
 
+  const notificationMutation = useMutation({
+    mutationFn: ({ content, voiceBroadcast }: { content: string; voiceBroadcast: boolean }) =>
+      sendDormNotification(deviceId, content, voiceBroadcast),
+    onMutate: () => setActionError(""),
+    onSuccess: (notification) => {
+      queryClient.setQueryData<NotificationOut[]>(deviceKeys.notifications(deviceId), (current = []) => [
+        notification,
+        ...current.filter((item) => item.id !== notification.id),
+      ]);
+    },
+    onError: (err) => setActionError(err instanceof Error ? err.message : "通知下发失败"),
+  });
+
   const acknowledgeMutation = useMutation({
     mutationFn: (eventId: number) => acknowledgeDeviceEvent(deviceId, eventId),
     onSuccess: (event) => {
@@ -233,7 +260,12 @@ export function useDeviceLive(deviceId: string) {
 
   const latest = latestQuery.data ?? null;
   const ai = aiQuery.data ?? EMPTY_AI;
-  const queryError = latestQuery.error ?? historyQuery.error ?? reportHistoryQuery.error ?? ledgerQuery.error;
+  const queryError =
+    latestQuery.error ??
+    historyQuery.error ??
+    reportHistoryQuery.error ??
+    ledgerQuery.error ??
+    notificationsQuery.error;
 
   return {
     latest,
@@ -241,6 +273,7 @@ export function useDeviceLive(deviceId: string) {
     reportHistory: reportHistoryQuery.data ?? [],
     events: eventsQuery.data ?? [],
     ledger: ledgerQuery.data ?? [],
+    notifications: notificationsQuery.data ?? [],
     socketState,
     analyzing: ai.analyzing,
     decision: ai.decision,
@@ -248,6 +281,7 @@ export function useDeviceLive(deviceId: string) {
     reportGenerating: reportMutation.isPending,
     autopilotEnabled: latest?.autopilot?.enabled ?? null,
     pendingCommands: pendingQuery.data ?? {},
+    notificationSending: notificationMutation.isPending,
     error: actionError || (queryError instanceof Error ? queryError.message : ""),
     triggerAnalysis: useCallback(() => analyzeMutation.mutate(), [analyzeMutation]),
     triggerImageAnalysis: useCallback(() => imageAnalyzeMutation.mutate(), [imageAnalyzeMutation]),
@@ -256,6 +290,11 @@ export function useDeviceLive(deviceId: string) {
     dispatchCommand: useCallback(
       (type: string, parameter?: Record<string, unknown>) => commandMutation.mutate({ type, parameter }),
       [commandMutation],
+    ),
+    sendNotification: useCallback(
+      (content: string, voiceBroadcast: boolean) =>
+        notificationMutation.mutateAsync({ content, voiceBroadcast }),
+      [notificationMutation],
     ),
     acknowledgeEvent: useCallback(
       (eventId: number) => acknowledgeMutation.mutate(eventId),

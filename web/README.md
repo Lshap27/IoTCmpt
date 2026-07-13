@@ -14,6 +14,12 @@ The first screen is the working dashboard (bento grid layout):
 - AI decision panel with per-device autopilot switch
 - manual command controls
 - live event stream
+- persisted dorm notifications with optional SYN6288 voice status
+
+The resident dashboard remains at `/`. The counselor-facing management and
+notification page is available at `/admin`; its `映雪3-301` live panel maps to
+the demo device `esp32s3-001`, while other prototype rooms are visibly marked
+as demo data.
 
 Data flow: initial state is fetched over HTTP with TanStack Query; after
 that, WebSocket envelopes from `WS /ws/devices/{device_id}` are written into

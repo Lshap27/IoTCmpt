@@ -26,6 +26,8 @@ from app.schemas import (
     EventOut,
     ImageAssetOut,
     LatestState,
+    NotificationIn,
+    NotificationOut,
     PoseAnalyzeAccepted,
     TelemetryBucketPoint,
     TelemetryPoint,
@@ -38,6 +40,7 @@ from app.services.events import acknowledge_event, serialize_event
 from app.services.images import save_image
 from app.services.llm import LLMService, VisionUnsupportedError
 from app.services.mqtt import MqttGateway
+from app.services.notifications import create_notification, list_notifications, serialize_notification
 from app.services.pose import PoseService
 from app.services.reports import generate_health_report
 from app.services.telemetry import fetch_history_bucketed, serialize_telemetry
@@ -172,6 +175,33 @@ async def send_command(
     envelope = WebSocketEnvelope(type="command", device_id=device_id, payload=serialize_command(command))
     await manager.broadcast(device_id, envelope.model_dump(mode="json"))
     return serialize_command(command)
+
+
+@router.get("/devices/{device_id}/notifications", response_model=list[NotificationOut])
+def device_notifications(
+    device_id: str,
+    limit: int = Query(default=50, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    return list_notifications(db, device_id, limit)
+
+
+@router.post("/devices/{device_id}/notifications", response_model=NotificationOut, status_code=201)
+async def send_notification(
+    device_id: str,
+    payload: NotificationIn,
+    db: Session = Depends(get_db),
+    mqtt: MqttGateway | None = Depends(get_mqtt_gateway),
+):
+    notification, voice_command = create_notification(db, device_id, payload)
+    if voice_command is not None and mqtt is not None:
+        published = await mqtt.publish_json(f"devices/{device_id}/command", serialize_command(voice_command), qos=1)
+        if published:
+            mark_published(db, voice_command)
+    response = serialize_notification(db, notification)
+    envelope = WebSocketEnvelope(type="notification", device_id=device_id, payload=response)
+    await manager.broadcast(device_id, envelope.model_dump(mode="json"))
+    return response
 
 
 @router.post("/devices/{device_id}/ai/analyze", response_model=AiDecisionOut)

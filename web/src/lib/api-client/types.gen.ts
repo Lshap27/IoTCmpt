@@ -781,6 +781,73 @@ export type LogEnvelope = {
 };
 
 /**
+ * NotificationEnvelope
+ */
+export type NotificationEnvelope = {
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Occurred At
+     */
+    occurred_at: string;
+    payload: NotificationOut;
+    /**
+     * Type
+     */
+    type: 'notification';
+};
+
+/**
+ * NotificationIn
+ */
+export type NotificationIn = {
+    /**
+     * Content
+     */
+    content: string;
+    /**
+     * Voice Broadcast
+     */
+    voice_broadcast?: boolean;
+};
+
+/**
+ * NotificationOut
+ */
+export type NotificationOut = {
+    /**
+     * Content
+     */
+    content: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Voice Command Id
+     */
+    voice_command_id?: string | null;
+    /**
+     * Voice Requested
+     */
+    voice_requested: boolean;
+    /**
+     * Voice Status
+     */
+    voice_status: 'not_requested' | 'unavailable' | 'pending' | 'executed' | 'rejected' | 'failed';
+};
+
+/**
  * PoseAnalyzeAccepted
  */
 export type PoseAnalyzeAccepted = {
@@ -1187,6 +1254,8 @@ export type WsMessage = ({
 } & PoseEnvelope) | ({
     type: 'command';
 } & CommandEnvelope) | ({
+    type: 'notification';
+} & NotificationEnvelope) | ({
     type: 'command_ack';
 } & CommandAckEnvelope) | ({
     type: 'event';
@@ -1614,6 +1683,73 @@ export type LatestDeviceStateResponses = {
 };
 
 export type LatestDeviceStateResponse = LatestDeviceStateResponses[keyof LatestDeviceStateResponses];
+
+export type DeviceNotificationsData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/devices/{device_id}/notifications';
+};
+
+export type DeviceNotificationsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeviceNotificationsError = DeviceNotificationsErrors[keyof DeviceNotificationsErrors];
+
+export type DeviceNotificationsResponses = {
+    /**
+     * Response Device Notifications
+     *
+     * Successful Response
+     */
+    200: Array<NotificationOut>;
+};
+
+export type DeviceNotificationsResponse = DeviceNotificationsResponses[keyof DeviceNotificationsResponses];
+
+export type SendNotificationData = {
+    body: NotificationIn;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+    };
+    query?: never;
+    url: '/api/devices/{device_id}/notifications';
+};
+
+export type SendNotificationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SendNotificationError = SendNotificationErrors[keyof SendNotificationErrors];
+
+export type SendNotificationResponses = {
+    /**
+     * Successful Response
+     */
+    201: NotificationOut;
+};
+
+export type SendNotificationResponse = SendNotificationResponses[keyof SendNotificationResponses];
 
 export type AnalyzeLatestPoseData = {
     body?: never;

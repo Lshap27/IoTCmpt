@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AckDeviceEventData, AckDeviceEventErrors, AckDeviceEventResponses, AnalyzeDeviceData, AnalyzeDeviceErrors, AnalyzeDeviceImageData, AnalyzeDeviceImageErrors, AnalyzeDeviceImageResponses, AnalyzeDeviceResponses, AnalyzeLatestPoseData, AnalyzeLatestPoseErrors, AnalyzeLatestPoseResponses, CreateAiHealthReportData, CreateAiHealthReportErrors, CreateAiHealthReportResponses, DeviceEventsData, DeviceEventsErrors, DeviceEventsResponses, GetAutopilotStateData, GetAutopilotStateErrors, GetAutopilotStateResponses, HealthData, HealthResponses, LatestDeviceStateData, LatestDeviceStateErrors, LatestDeviceStateResponses, ListDevicesData, ListDevicesResponses, SendCommandData, SendCommandErrors, SendCommandResponses, TelemetryHistoryBucketedData, TelemetryHistoryBucketedErrors, TelemetryHistoryBucketedResponses, TelemetryHistoryData, TelemetryHistoryErrors, TelemetryHistoryResponses, UpdateAutopilotStateData, UpdateAutopilotStateErrors, UpdateAutopilotStateResponses, UploadImageData, UploadImageErrors, UploadImageResponses } from './types.gen';
+import type { AckDeviceEventData, AckDeviceEventErrors, AckDeviceEventResponses, AnalyzeDeviceData, AnalyzeDeviceErrors, AnalyzeDeviceImageData, AnalyzeDeviceImageErrors, AnalyzeDeviceImageResponses, AnalyzeDeviceResponses, AnalyzeLatestPoseData, AnalyzeLatestPoseErrors, AnalyzeLatestPoseResponses, CreateAiHealthReportData, CreateAiHealthReportErrors, CreateAiHealthReportResponses, DeviceEventsData, DeviceEventsErrors, DeviceEventsResponses, DeviceNotificationsData, DeviceNotificationsErrors, DeviceNotificationsResponses, GetAutopilotStateData, GetAutopilotStateErrors, GetAutopilotStateResponses, HealthData, HealthResponses, LatestDeviceStateData, LatestDeviceStateErrors, LatestDeviceStateResponses, ListDevicesData, ListDevicesResponses, SendCommandData, SendCommandErrors, SendCommandResponses, SendNotificationData, SendNotificationErrors, SendNotificationResponses, TelemetryHistoryBucketedData, TelemetryHistoryBucketedErrors, TelemetryHistoryBucketedResponses, TelemetryHistoryData, TelemetryHistoryErrors, TelemetryHistoryResponses, UpdateAutopilotStateData, UpdateAutopilotStateErrors, UpdateAutopilotStateResponses, UploadImageData, UploadImageErrors, UploadImageResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -111,6 +111,23 @@ export const uploadImage = <ThrowOnError extends boolean = false>(options: Optio
  * Latest Device State
  */
 export const latestDeviceState = <ThrowOnError extends boolean = false>(options: Options<LatestDeviceStateData, ThrowOnError>): RequestResult<LatestDeviceStateResponses, LatestDeviceStateErrors, ThrowOnError> => (options.client ?? client).get<LatestDeviceStateResponses, LatestDeviceStateErrors, ThrowOnError>({ url: '/api/devices/{device_id}/latest', ...options });
+
+/**
+ * Device Notifications
+ */
+export const deviceNotifications = <ThrowOnError extends boolean = false>(options: Options<DeviceNotificationsData, ThrowOnError>): RequestResult<DeviceNotificationsResponses, DeviceNotificationsErrors, ThrowOnError> => (options.client ?? client).get<DeviceNotificationsResponses, DeviceNotificationsErrors, ThrowOnError>({ url: '/api/devices/{device_id}/notifications', ...options });
+
+/**
+ * Send Notification
+ */
+export const sendNotification = <ThrowOnError extends boolean = false>(options: Options<SendNotificationData, ThrowOnError>): RequestResult<SendNotificationResponses, SendNotificationErrors, ThrowOnError> => (options.client ?? client).post<SendNotificationResponses, SendNotificationErrors, ThrowOnError>({
+    url: '/api/devices/{device_id}/notifications',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Analyze Latest Pose

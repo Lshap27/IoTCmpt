@@ -14,6 +14,10 @@
 - 小时、日报、周报三种 AI 环境健康报告，包含数据完整度、异常、风险分和优先建议
 - 手动命令控制
 - 实时事件流
+- 可持久化的宿舍通知与可选 SYN6288 语音状态
+
+宿舍环境控制台继续使用 `/`；辅导员管理与通知页面位于 `/admin`。第一版将
+`映雪3-301` 映射为演示设备 `esp32s3-001`，其余原型宿舍会明确标记为演示数据。
 
 数据流：初始状态通过 HTTP 由 TanStack Query 拉取；之后 `WS /ws/devices/{device_id}` 的 WebSocket envelope 由 `src/lib/ws-dispatcher.ts`（基于 `WsMessage` 判别联合的纯函数）写入 query 缓存。Socket 断开后按指数退避自动重连（`src/hooks/use-device-socket.ts`）。
 

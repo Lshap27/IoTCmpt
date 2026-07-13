@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 CommandType = Literal[
     "none",
@@ -65,6 +65,28 @@ class CommandIn(BaseModel):
     type: CommandType
     parameter: dict[str, Any] = Field(default_factory=dict)
     reason: str = ""
+
+
+VoiceStatus = Literal["not_requested", "unavailable", "pending", "executed", "rejected", "failed"]
+
+
+class NotificationIn(BaseModel):
+    content: str = Field(min_length=1, max_length=500)
+    voice_broadcast: bool = False
+
+    @field_validator("content")
+    @classmethod
+    def strip_content(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("notification content must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def validate_voice_payload_size(self) -> Self:
+        if self.voice_broadcast and len(self.content.encode("gb2312", errors="replace")) > 220:
+            raise ValueError("voice notification exceeds the SYN6288 220-byte GB2312 limit")
+        return self
 
 
 class CommandMessage(BaseModel):
@@ -215,6 +237,16 @@ class CommandOut(BaseModel):
     created_at: str
     published_at: str | None = None
     executed_at: str | None = None
+
+
+class NotificationOut(BaseModel):
+    id: int
+    device_id: str
+    content: str
+    voice_requested: bool
+    voice_command_id: str | None = None
+    voice_status: VoiceStatus
+    created_at: str
 
 
 class ImageSnapshot(BaseModel):
@@ -375,6 +407,11 @@ class CommandEnvelope(_EnvelopeBase):
     payload: CommandOut
 
 
+class NotificationEnvelope(_EnvelopeBase):
+    type: Literal["notification"]
+    payload: NotificationOut
+
+
 class CommandAckPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -446,6 +483,7 @@ WsMessage = Annotated[
     | ImageEnvelope
     | PoseEnvelope
     | CommandEnvelope
+    | NotificationEnvelope
     | CommandAckEnvelope
     | EventEnvelope
     | LogEnvelope

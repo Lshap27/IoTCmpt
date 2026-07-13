@@ -5,6 +5,7 @@ export const deviceKeys = {
   reportHistory: (deviceId: string) => ["device", deviceId, "report-history"] as const,
   events: (deviceId: string) => ["device", deviceId, "events"] as const,
   ledger: (deviceId: string) => ["device", deviceId, "ledger"] as const,
+  notifications: (deviceId: string) => ["device", deviceId, "notifications"] as const,
   ai: (deviceId: string) => ["device", deviceId, "ai"] as const,
   pendingCommands: (deviceId: string) => ["device", deviceId, "pending-commands"] as const,
 };

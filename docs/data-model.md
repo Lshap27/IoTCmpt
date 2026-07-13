@@ -104,6 +104,19 @@ these aggregates without inventing samples for missing periods.
 - `kind`: `capture` or `pose_annotated`.
 - `created_at`
 
+## notification
+
+- `id`
+- `device_id`
+- `content`: persisted text shown on the dorm dashboard.
+- `voice_requested`: whether the sender requested SYN6288 playback.
+- `voice_command_id`: nullable link to the generated `voice.speak` command.
+- `created_at`
+
+The user-facing `voice_status` is derived from the linked command rather than
+duplicated in this table. Text delivery remains available when the command is
+unpublished, rejected, or failed.
+
 Image retention is configured with `AIOT_MAX_IMAGES_PER_DEVICE` (default 100).
 After a new capture or annotated pose image is stored, the gateway removes the
 oldest excess image records, their files, and pose results that reference those

@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown, CircuitBoard } from "lucide-react";
+import Link from "next/link";
 import { AirQualityBadge } from "@/components/air-quality-badge";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { DeviceSummary } from "@/lib/api";
@@ -62,6 +63,12 @@ export function DeviceHeader({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        <Link
+          href="/admin"
+          className="inline-flex min-h-10 items-center rounded-xl border border-line bg-surface px-3 text-sm font-medium text-ink2 transition-colors hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+        >
+          辅导员平台
+        </Link>
         <AirQualityBadge level={airQuality} />
         <span className="inline-flex min-h-9 items-center gap-2 rounded-full border border-line bg-surface px-3 text-sm font-medium text-ink2">
           <span

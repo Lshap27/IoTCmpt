@@ -5,10 +5,12 @@ import {
   ackDeviceEvent,
   analyzeLatestPose,
   deviceEvents,
+  deviceNotifications,
   getAutopilotState,
   latestDeviceState,
   listDevices,
   sendCommand as sendCommandSdk,
+  sendNotification as sendNotificationSdk,
   telemetryHistory,
   telemetryHistoryBucketed,
   updateAutopilotState,
@@ -29,6 +31,7 @@ export type {
   DeviceSummary,
   LatestState,
   EventOut,
+  NotificationOut,
   TelemetryBucketPoint,
   TelemetryPoint,
   WsMessage,
@@ -43,6 +46,7 @@ import type {
   DeviceSummary as DeviceSummaryT,
   LatestState as LatestStateT,
   EventOut as EventOutT,
+  NotificationOut as NotificationOutT,
   TelemetryBucketPoint as TelemetryBucketPointT,
   TelemetryPoint as TelemetryPointT,
 } from "./api-client/types.gen";
@@ -147,6 +151,29 @@ export async function fetchDeviceEvents(deviceId: string, type?: string): Promis
 export async function acknowledgeDeviceEvent(deviceId: string, eventId: number): Promise<EventOutT> {
   const { data } = await ackDeviceEvent({
     path: { device_id: deviceId, event_id: eventId },
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function fetchNotifications(deviceId: string, limit = 50): Promise<NotificationOutT[]> {
+  const { data } = await deviceNotifications({
+    path: { device_id: deviceId },
+    query: { limit },
+    cache: "no-store",
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function sendDormNotification(
+  deviceId: string,
+  content: string,
+  voiceBroadcast: boolean,
+): Promise<NotificationOutT> {
+  const { data } = await sendNotificationSdk({
+    path: { device_id: deviceId },
+    body: { content, voice_broadcast: voiceBroadcast },
     throwOnError: true,
   });
   return data;

@@ -64,6 +64,8 @@ switching on `type` (`web/src/lib/ws-dispatcher.ts`).
   stored as a suggestion with `status=pending` and never sent to the device.
 - `command`: command created or published.
 - `command_ack`: command acknowledgement from firmware.
+- `notification`: a persisted dorm notification. Its payload matches the
+  HTTP `NotificationOut` model and includes the linked voice command status.
 - `autopilot`: autopilot switch state changed. Payload mirrors
   `GET /api/devices/{device_id}/autopilot`.
 - `log`: device log line.
@@ -77,7 +79,10 @@ persisted event `id`, so the dashboard can acknowledge the exact ledger entry.
 ## Client Behavior
 
 - On page load, the client calls `GET /api/devices/{device_id}/latest` and
-  `GET /api/devices/{device_id}/history`.
+  `GET /api/devices/{device_id}/history`; notification-capable pages also call
+  `GET /api/devices/{device_id}/notifications`.
 - After that, the WebSocket stream updates the visible dashboard state.
 - If the socket disconnects, the UI shows a degraded live state and retries.
+- After reconnect, the client refetches notifications so messages created
+  during the outage are not lost.
 - The frontend never connects directly to PostgreSQL or MQTT.

@@ -56,6 +56,7 @@
   `GET /api/devices/{device_id}/history/bucketed`,
   `POST /api/devices/{device_id}/images`,
   `POST /api/devices/{device_id}/commands`,
+  `GET/POST /api/devices/{device_id}/notifications`,
   `POST /api/devices/{device_id}/ai/analyze`,
   `GET/PUT /api/devices/{device_id}/autopilot`, and
   `WS /ws/devices/{device_id}`.

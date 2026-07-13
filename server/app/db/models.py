@@ -85,6 +85,19 @@ class Command(Base):
     executed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[str] = mapped_column(String(64), ForeignKey("devices.device_id"), index=True)
+    content: Mapped[str] = mapped_column(Text)
+    voice_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    voice_command_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("commands.command_id", ondelete="SET NULL"), unique=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
 class AiResult(Base):
     __tablename__ = "ai_results"
 

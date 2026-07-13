@@ -169,9 +169,9 @@ class PoseService:
             raise FileNotFoundError(f"pose model not found: {self.settings.pose_model_path}")
         import cv2
         import numpy as np
-        from mediapipe import Image, ImageFormat  # type: ignore[import-untyped]
-        from mediapipe.tasks import python as mp_python  # type: ignore[import-untyped]
-        from mediapipe.tasks.python import vision  # type: ignore[import-untyped]
+        from mediapipe import Image, ImageFormat
+        from mediapipe.tasks import python as mp_python
+        from mediapipe.tasks.python import vision
 
         if self.detector is None:
             options = vision.PoseLandmarkerOptions(

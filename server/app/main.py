@@ -20,12 +20,6 @@ from app.services.mqtt_ingest import ingest_mqtt_message
 from app.services.pose import PoseService
 from app.services.websocket import manager
 
-""" TODO：
- 接入辅导员平台，只实现：
- ①烟雾报警器联通
- ②下发通知，可选调用voice
-"""
-
 
 def _ingest_sync(topic: str, payload: dict[str, Any]) -> WebSocketEnvelope | None:
     db = SessionLocal()

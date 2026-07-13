@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { AiDecisionPayload, LatestState, TelemetryPoint, WsMessage } from "@/lib/api";
+import type { AiDecisionPayload, LatestState, NotificationOut, TelemetryPoint, WsMessage } from "@/lib/api";
 import { deviceKeys } from "@/lib/query-keys";
 
 export type UiEvent = {
@@ -168,6 +168,23 @@ export function applyEnvelope(queryClient: QueryClient, deviceId: string, envelo
             }
           : current,
       );
+      if (status === "executed" || status === "rejected" || status === "failed") {
+        queryClient.setQueryData<NotificationOut[]>(deviceKeys.notifications(deviceId), (current = []) =>
+          current.map((notification) =>
+            notification.voice_command_id === commandId
+              ? { ...notification, voice_status: status }
+              : notification,
+          ),
+        );
+      }
+      break;
+    }
+    case "notification": {
+      const notification = envelope.payload;
+      queryClient.setQueryData<NotificationOut[]>(deviceKeys.notifications(deviceId), (current = []) => [
+        notification,
+        ...current.filter((item) => item.id !== notification.id),
+      ]);
       break;
     }
     case "autopilot": {

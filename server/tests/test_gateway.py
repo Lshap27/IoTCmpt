@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -248,6 +249,101 @@ def test_command_http_broadcasts_websocket_event(client):
     assert event["type"] == "command"
     assert event["device_id"] == "esp32s3-001"
     assert event["payload"]["type"] == "alarm.on"
+
+
+def test_notification_persists_and_broadcasts_websocket_event(client):
+    with client.websocket_connect("/ws/devices/esp32s3-001") as websocket:
+        response = client.post(
+            "/api/devices/esp32s3-001/notifications",
+            json={"content": "  请保持宿舍通风。  ", "voice_broadcast": False},
+        )
+        assert response.status_code == 201
+        event = websocket.receive_json()
+
+    payload = response.json()
+    assert payload["content"] == "请保持宿舍通风。"
+    assert payload["voice_status"] == "not_requested"
+    assert event["type"] == "notification"
+    assert event["payload"] == payload
+
+    history = client.get("/api/devices/esp32s3-001/notifications").json()
+    assert history == [payload]
+    assert client.get("/api/devices/another-device/notifications").json() == []
+
+
+def test_notification_validation_rejects_blank_and_oversized_voice(client):
+    blank = client.post(
+        "/api/devices/esp32s3-001/notifications",
+        json={"content": "   ", "voice_broadcast": False},
+    )
+    assert blank.status_code == 422
+
+    too_long = client.post(
+        "/api/devices/esp32s3-001/notifications",
+        json={"content": "宿" * 111, "voice_broadcast": True},
+    )
+    assert too_long.status_code == 422
+    assert client.get("/api/devices/esp32s3-001/notifications").json() == []
+
+
+def test_voice_notification_survives_mqtt_unavailable(client):
+    response = client.post(
+        "/api/devices/esp32s3-001/notifications",
+        json={"content": "设备离线时文字仍需送达。", "voice_broadcast": True},
+    )
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["voice_command_id"]
+    assert payload["voice_status"] == "unavailable"
+    assert client.get("/api/devices/esp32s3-001/notifications").json()[0]["content"] == payload["content"]
+
+
+def test_voice_notification_publishes_gb2312_and_tracks_ack(client):
+    class RecordingMqtt:
+        def __init__(self):
+            self.messages = []
+
+        async def publish_json(self, topic, payload, qos=0, retain=False):
+            self.messages.append((topic, payload, qos, retain))
+            return True
+
+    mqtt = RecordingMqtt()
+    client.app.state.mqtt_service = mqtt
+    content = "同学们请注意，今晚十点查寝。"
+    response = client.post(
+        "/api/devices/esp32s3-001/notifications",
+        json={"content": content, "voice_broadcast": True},
+    )
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["voice_status"] == "pending"
+    assert len(mqtt.messages) == 1
+    topic, command, qos, retain = mqtt.messages[0]
+    assert topic == "devices/esp32s3-001/command"
+    assert qos == 1
+    assert retain is False
+    assert command["type"] == "voice.speak"
+    assert base64.b64decode(command["parameter"]["gb2312_base64"]).decode("gb2312") == content
+
+    from app.db.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        ingest_mqtt_message(
+            db,
+            "devices/esp32s3-001/command_ack",
+            {
+                "command_id": payload["voice_command_id"],
+                "status": "executed",
+                "message": "ok",
+                "executed_at": "2026-07-13T00:00:00Z",
+            },
+        )
+    finally:
+        db.close()
+
+    history = client.get("/api/devices/esp32s3-001/notifications").json()
+    assert history[0]["voice_status"] == "executed"
 
 
 def test_smoke_event_is_deduplicated_and_acknowledged(client):

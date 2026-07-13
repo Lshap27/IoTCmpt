@@ -1321,6 +1321,113 @@
         "title": "LogEnvelope",
         "type": "object"
       },
+      "NotificationEnvelope": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/NotificationOut"
+          },
+          "type": {
+            "const": "notification",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "occurred_at",
+          "type",
+          "payload"
+        ],
+        "title": "NotificationEnvelope",
+        "type": "object"
+      },
+      "NotificationIn": {
+        "properties": {
+          "content": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "voice_broadcast": {
+            "default": false,
+            "title": "Voice Broadcast",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "NotificationIn",
+        "type": "object"
+      },
+      "NotificationOut": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "voice_command_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Voice Command Id"
+          },
+          "voice_requested": {
+            "title": "Voice Requested",
+            "type": "boolean"
+          },
+          "voice_status": {
+            "enum": [
+              "not_requested",
+              "unavailable",
+              "pending",
+              "executed",
+              "rejected",
+              "failed"
+            ],
+            "title": "Voice Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "device_id",
+          "content",
+          "voice_requested",
+          "voice_status",
+          "created_at"
+        ],
+        "title": "NotificationOut",
+        "type": "object"
+      },
       "PoseAnalyzeAccepted": {
         "properties": {
           "queued": {
@@ -2069,6 +2176,7 @@
             "event": "#/components/schemas/EventEnvelope",
             "image": "#/components/schemas/ImageEnvelope",
             "log": "#/components/schemas/LogEnvelope",
+            "notification": "#/components/schemas/NotificationEnvelope",
             "pose_result": "#/components/schemas/PoseEnvelope",
             "status": "#/components/schemas/StatusEnvelope",
             "telemetry": "#/components/schemas/TelemetryEnvelope"
@@ -2090,6 +2198,9 @@
           },
           {
             "$ref": "#/components/schemas/CommandEnvelope"
+          },
+          {
+            "$ref": "#/components/schemas/NotificationEnvelope"
           },
           {
             "$ref": "#/components/schemas/CommandAckEnvelope"
@@ -2735,6 +2846,108 @@
           }
         },
         "summary": "Latest Device State"
+      }
+    },
+    "/api/devices/{device_id}/notifications": {
+      "get": {
+        "operationId": "device_notifications",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/NotificationOut"
+                  },
+                  "title": "Response Device Notifications",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Device Notifications"
+      },
+      "post": {
+        "operationId": "send_notification",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send Notification"
       }
     },
     "/api/devices/{device_id}/pose/analyze": {

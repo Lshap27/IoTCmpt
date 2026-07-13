@@ -253,3 +253,30 @@ Request:
 
 The server stores the command and publishes it to
 `devices/{device_id}/command`.
+
+## Dorm Notification
+
+```text
+GET  /api/devices/{device_id}/notifications?limit=50
+POST /api/devices/{device_id}/notifications
+```
+
+`GET` returns the newest persisted notifications first (`limit` 1–100). A
+`POST` request contains trimmed text and an optional hardware voice request:
+
+```json
+{
+  "content": "同学们请注意，今晚22:00将进行例行查寝。",
+  "voice_broadcast": true
+}
+```
+
+Text is limited to 500 characters. When `voice_broadcast=true`, its GB2312
+representation must also fit the SYN6288 firmware limit of 220 bytes. The
+server persists and broadcasts the text even when MQTT or voice playback is
+unavailable. It creates a linked `voice.speak` command with
+`parameter.gb2312_base64`; `voice_status` is one of `not_requested`,
+`unavailable`, `pending`, `executed`, `rejected`, or `failed`.
+
+`voice_status=unavailable` means no MQTT publish was confirmed. The API does
+not claim that a browser has displayed or read the notification.

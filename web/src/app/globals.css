@@ -265,7 +265,7 @@ select {
 @keyframes bento-rise {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.99);
+    transform: translateY(10px);
   }
 }
 
