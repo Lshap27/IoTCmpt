@@ -23,6 +23,7 @@ $OutputEncoding = $Utf8NoBom
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $DockerConfigDir = Join-Path $env:USERPROFILE ".docker"
 $DockerDaemonPath = Join-Path $DockerConfigDir "daemon.json"
+. (Join-Path $PSScriptRoot "esp-idf-environment.ps1")
 
 function Test-Command {
     param([string] $Name)
@@ -90,89 +91,51 @@ function Get-EnvironmentReport {
         } catch { $dockerRunning = $false }
     }
 
-    $idfCandidates = [System.Collections.Generic.List[string]]::new()
-    if ($env:IDF_PATH) { $idfCandidates.Add($env:IDF_PATH) }
-    $vscodeSettings = Join-Path $RepoRoot ".vscode\settings.json"
-    if (Test-Path -LiteralPath $vscodeSettings) {
-        try {
-            $settings = Get-Content -LiteralPath $vscodeSettings -Raw | ConvertFrom-Json
-            if ($settings.PSObject.Properties["idf.currentSetup"]) {
-                $idfCandidates.Add([string] $settings."idf.currentSetup")
-            }
-        } catch {}
+    $idfSetup = $null
+    $idfDetectionError = ""
+    try {
+        $idfSetup = Get-EspIdfSetup -RepoRoot $RepoRoot
+    } catch {
+        $idfDetectionError = $_.Exception.Message
     }
-    $idfEnvPath = Join-Path $env:USERPROFILE ".espressif\idf-env.json"
-    if (Test-Path -LiteralPath $idfEnvPath) {
-        try {
-            $idfEnvironment = Get-Content -LiteralPath $idfEnvPath -Raw | ConvertFrom-Json
-            if ($null -ne $idfEnvironment.idfInstalled) {
-                foreach ($entry in $idfEnvironment.idfInstalled.PSObject.Properties) {
-                    if ($entry.Value.path) { $idfCandidates.Add([string] $entry.Value.path) }
-                }
-            }
-        } catch {}
-    }
-    if (Test-Path -LiteralPath "C:\esp") {
-        Get-ChildItem -LiteralPath "C:\esp" -Directory -ErrorAction SilentlyContinue |
-            ForEach-Object { $idfCandidates.Add((Join-Path $_.FullName "esp-idf")) }
-    }
-    $idfCandidates.Add("C:\esp\esp-idf")
-
-    $idfPath = @($idfCandidates | Select-Object -Unique | Where-Object {
-        $_ -and (Test-Path -LiteralPath (Join-Path $_ "export.ps1"))
-    } | Select-Object -First 1)[0]
-    $idfFound = -not [string]::IsNullOrWhiteSpace($idfPath)
+    $idfFound = $null -ne $idfSetup
+    $idfPath = if ($idfFound) { $idfSetup.IdfPath } else { "" }
     $idfVersion = ""
     $idfCompatible = $false
     if ($idfFound) {
-        $versionFile = Join-Path $idfPath "tools\cmake\version.cmake"
-        if (Test-Path -LiteralPath $versionFile) {
-            $versionText = Get-Content -LiteralPath $versionFile -Raw
-            $majorMatch = [regex]::Match($versionText, "IDF_VERSION_MAJOR\s+(\d+)")
-            $minorMatch = [regex]::Match($versionText, "IDF_VERSION_MINOR\s+(\d+)")
-            $patchMatch = [regex]::Match($versionText, "IDF_VERSION_PATCH\s+(\d+)")
-            if ($majorMatch.Success -and $minorMatch.Success) {
-                $major = [int] $majorMatch.Groups[1].Value
-                $minor = [int] $minorMatch.Groups[1].Value
-                $patch = if ($patchMatch.Success) { [int] $patchMatch.Groups[1].Value } else { 0 }
-                $idfVersion = "$major.$minor.$patch"
-                # esp32-camera 2.1.7 requires IDF >=5.1. Keep the next major as an explicit review boundary.
-                $idfCompatible = $major -eq 5 -and $minor -ge 1
-            }
+        try {
+            $versionInfo = Get-EspIdfVersionInfo $idfPath
+            $idfVersion = $versionInfo.Version
+            $idfCompatible = $versionInfo.Compatible
+        } catch {
+            $idfDetectionError = $_.Exception.Message
         }
     }
 
-    $idfToolsPath = ""
-    foreach ($path in @(
-        $(if ($env:IDF_TOOLS_PATH -and (Test-Path (Join-Path $env:IDF_TOOLS_PATH "tools"))) { Join-Path $env:IDF_TOOLS_PATH "tools" } elseif ($env:IDF_TOOLS_PATH) { $env:IDF_TOOLS_PATH }),
-        "C:\Espressif\tools",
-        (Join-Path $env:USERPROFILE ".espressif\tools")
-    )) {
-        if ($path -and (Test-Path -LiteralPath $path)) { $idfToolsPath = $path; break }
-    }
-    $idfPythonPath = ""
-    foreach ($path in @(
-        $env:IDF_PYTHON_ENV_PATH,
-        $(if ($idfVersion) { "C:\Espressif\tools\python\v$idfVersion\venv" })
-    )) {
-        if ($path -and (Test-Path -LiteralPath (Join-Path $path "Scripts\python.exe"))) {
-            $idfPythonPath = $path
-            break
-        }
-    }
-    if (-not $idfPythonPath) {
-        $pythonEnvironment = Get-ChildItem (Join-Path $env:USERPROFILE ".espressif\python_env") `
-            -Directory -Filter "idf5*_env" -ErrorAction SilentlyContinue |
-            Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "Scripts\python.exe") } |
-            Select-Object -First 1
-        if ($null -ne $pythonEnvironment) { $idfPythonPath = $pythonEnvironment.FullName }
-    }
+    $idfToolsPath = if ($idfFound) { [string] $idfSetup.ToolsPath } else { "" }
+    $idfPythonPath = if ($idfFound) { [string] $idfSetup.PythonPath } else { "" }
 
     $idfToolchainReady = $false
+    $idfToolchainError = ""
     if ($idfFound -and $idfCompatible) {
         $idfCheck = Invoke-CapturedPowerShell `
             (Join-Path $RepoRoot "tools\esp-idf-task.ps1") "Check"
         $idfToolchainReady = $idfCheck.exitCode -eq 0
+        if (-not $idfToolchainReady) {
+            $errorText = if (-not [string]::IsNullOrWhiteSpace($idfCheck.stderr)) {
+                $idfCheck.stderr
+            } else {
+                $idfCheck.stdout
+            }
+            $idfToolchainError = @($errorText -split "`r?`n" | Where-Object {
+                -not [string]::IsNullOrWhiteSpace($_) -and
+                $_ -notmatch "^\s*(At |所在位置 |\+ |CategoryInfo|FullyQualifiedErrorId)"
+            } | Select-Object -First 1)[0]
+            $idfToolchainError = "$idfToolchainError".Trim()
+            if ($idfToolchainError.Length -gt 220) {
+                $idfToolchainError = $idfToolchainError.Substring(0, 217) + "..."
+            }
+        }
     }
 
     $dnsAddresses = @()
@@ -223,12 +186,13 @@ function Get-EnvironmentReport {
             ready=($idfFound -and $idfCompatible -and $idfToolchainReady);
             version=$(if ($idfVersion) { "v$idfVersion" } else { "" });
             canInstall=$idfFound; canUninstall=$false;
-            detail=$(if (-not $idfFound) { "未找到 ESP-IDF 框架源码" }
+            detail=$(if (-not $idfFound) { $(if ($idfDetectionError) { $idfDetectionError } else { "未找到 ESP-IDF 框架源码" }) }
                 elseif (-not $idfCompatible) { "版本不兼容，项目要求 >=5.1 且 <6.0" }
-                elseif (-not $idfToolchainReady) { "框架已找到，工具链或 Python 环境需要修复" }
+                elseif (-not $idfToolchainReady) { $(if ($idfToolchainError) { $idfToolchainError } else { "框架已找到，工具链或 Python 环境需要修复" }) }
                 else { "框架、Python、CMake、Ninja、Xtensa 工具链和 OpenOCD 均可用" });
             sourcePath=$idfPath; toolsPath=$idfToolsPath; pythonPath=$idfPythonPath;
-            frameworkFound=$idfFound; versionCompatible=$idfCompatible; toolchainReady=$idfToolchainReady
+            frameworkFound=$idfFound; versionCompatible=$idfCompatible; toolchainReady=$idfToolchainReady;
+            setupSource=$(if ($idfFound) { $idfSetup.Source } else { "" }); toolchainError=$idfToolchainError
         }
     )
 

@@ -38,7 +38,7 @@ From the repository root, use PowerShell 7:
 
 ```powershell
 cd firmware\esp32s3
-idf.py -B build-esp32s3 build
+idf.py -B build build
 ```
 
 ## MQTT Behavior

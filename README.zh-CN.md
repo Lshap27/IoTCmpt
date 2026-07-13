@@ -49,7 +49,7 @@ HTTP 和 WebSocket API：
 不熟悉命令行时，双击项目根目录的 `启动配置面板.cmd`。面板只监听 `127.0.0.1:8765`，依次提供“环境中心、项目配置、服务控制、固件配置、固件操作”。建议按以下顺序演示：
 
 1. 在“环境中心”点“重新检查”。缺少基础软件时点“一键补全演示环境”；Docker 拉取失败时再测试网络、选择官方源/国内镜像或为 Docker Desktop 启用本机代理。
-2. ESP-IDF 的检测与“安装/修复”也统一在“环境中心”。它检查框架、Python 环境、CMake、Ninja、Xtensa ESP32-S3 工具链和 OpenOCD；支持能实际加载的 ESP-IDF `>=5.1,<6.0`。
+2. ESP-IDF 的检测与“安装/修复”也统一在“环境中心”。它优先读取 ESP-IDF Installation Manager（EIM）当前选中的安装实例，也支持自定义 `idf.eimIdfJsonPath` 和旧版安装布局；随后检查框架、Python 环境、CMake、Ninja、Xtensa ESP32-S3 工具链和 OpenOCD。支持能实际加载的 ESP-IDF `>=5.1,<6.0`。
 3. 在“项目配置”分别选择设备来源和 AI 模式，保存配置。
 4. 在“服务控制”启动 Docker 演示栈。若选择“虚拟设备”，面板会在 MQTT 和后端就绪后自动启动模拟器，并显示独立的在线状态。
 5. 打开 Web 控制台 `http://localhost:3000`。后端健康检查为 `http://localhost:8000/health`，EMQX 控制台为 `http://localhost:18083`（默认 `admin / public`）。
@@ -113,7 +113,7 @@ pnpm dev
 
 ```powershell
 cd firmware\esp32s3
-idf.py -B build-esp32s3 build
+idf.py -B build build
 ```
 
 VS Code 的 `Tasks: Run Task` 仍可作为快捷入口；任务定义在 `.vscode/tasks.json`。固件环境检测/修复以可视化面板的“环境中心”为统一入口。

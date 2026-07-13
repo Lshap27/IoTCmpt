@@ -65,7 +65,9 @@ control, firmware configuration, and firmware operations.
    configure Docker Desktop to use a detected local proxy.
 2. ESP-IDF detection and repair are centralized in the Environment Center. It
    validates the framework, Python environment, CMake, Ninja, ESP32-S3 Xtensa
-   toolchain, and OpenOCD. Working ESP-IDF releases `>=5.1,<6.0` are accepted.
+   toolchain, and OpenOCD. It reads the current setup from ESP-IDF Installation
+   Manager (EIM), including custom `idf.eimIdfJsonPath` locations, and keeps a
+   legacy-install fallback. Working ESP-IDF releases `>=5.1,<6.0` are accepted.
 3. Select the device source and AI mode independently, then save.
 4. Start the Docker demo stack. In Virtual Device mode, the panel waits for
    MQTT and the API, then starts the host simulator automatically.
@@ -137,7 +139,7 @@ Build the firmware after loading an ESP-IDF environment:
 
 ```powershell
 cd firmware\esp32s3
-idf.py -B build-esp32s3 build
+idf.py -B build build
 ```
 
 VS Code tasks remain available as shortcuts in `.vscode/tasks.json`; the visual

@@ -26,12 +26,21 @@ Firmware compile-only full feature profile:
 
 ```powershell
 cd firmware\esp32s3
-idf.py -B build-ci-full `
-  -D SDKCONFIG=build-ci-full/sdkconfig `
-  -D SDKCONFIG_DEFAULTS=configs/full-hardware.defaults build
+$fullBuild = Join-Path ([System.IO.Path]::GetTempPath()) "iotcmpt-esp32s3-full"
+try {
+  idf.py -B $fullBuild `
+    -D "SDKCONFIG=$fullBuild\sdkconfig" `
+    -D SDKCONFIG_DEFAULTS=configs/full-hardware.defaults build
+  if ($LASTEXITCODE -ne 0) { throw "Full-feature firmware build failed." }
+} finally {
+  Remove-Item -LiteralPath $fullBuild -Recurse -Force -ErrorAction SilentlyContinue
+}
 ```
 
 This validates code generation and linking for MQ-2, SYN6288, GPIO LED,
 camera, display, actuator, and button modules. Physical behavior still requires
-the actual board and wiring. The compatibility profile drives the LED on GPIO41;
-the normal default remains logical-only until GPIO mode is explicitly enabled.
+the actual board and wiring. Its isolated build files live under the system
+temporary directory and are removed afterward, so the repository keeps only
+the normal `firmware/esp32s3/build` directory. The compatibility profile drives
+the LED on GPIO41; the normal default remains logical-only until GPIO mode is
+explicitly enabled.

@@ -86,7 +86,7 @@
 
   ```powershell
   cd firmware\esp32s3
-  idf.py -B build-esp32s3 build
+  idf.py -B build build
   ```
 
 - The current checkout does not contain `scripts/build.ps1`; do not cite it as
