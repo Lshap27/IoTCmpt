@@ -41,7 +41,7 @@ const RISK: Record<string, { label: string; color: string; soft: string; Icon: t
   unknown: { label: "风险未知", color: "var(--ink-3)", soft: "transparent", Icon: ShieldQuestion },
 };
 
-function AutopilotSwitch({
+function AutomationSwitch({
   enabled,
   onChange,
 }: {
@@ -63,7 +63,7 @@ export function AiPanel({
   run,
   runs,
   policy,
-  onToggleAutopilot,
+  onToggleAutomation,
   onUpdatePolicy,
   onAnalyze,
   onCancelRun,
@@ -73,7 +73,7 @@ export function AiPanel({
   run: AiRunOut | null;
   runs: AiRunOut[];
   policy: AutomationPolicyOut | null;
-  onToggleAutopilot: (enabled: boolean) => void;
+  onToggleAutomation: (enabled: boolean) => void;
   onUpdatePolicy: (values: AutomationPolicyIn) => void;
   onAnalyze: () => void;
   onCancelRun: (runId: string) => void;
@@ -93,7 +93,7 @@ export function AiPanel({
       title="AI 决策"
       icon={<BrainCircuit size={17} />}
       className={className}
-      actions={<AutopilotSwitch enabled={policy?.enabled ?? null} onChange={onToggleAutopilot} />}
+      actions={<AutomationSwitch enabled={policy?.enabled ?? null} onChange={onToggleAutomation} />}
     >
       <div className="flex min-h-[15.5rem] flex-col">
         <div className="mb-4 grid grid-cols-3 rounded-lg border border-line bg-raised p-1 text-xs">

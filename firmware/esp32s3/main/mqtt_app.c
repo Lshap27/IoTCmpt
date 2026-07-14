@@ -27,6 +27,8 @@ static char s_status_offline_payload[320];
 static char s_boot_id[24];
 static uint32_t s_sequence;
 
+static bool capability_enabled(const char *name);
+
 typedef struct {
     char command_id[64];
     char trace_id[64];
@@ -165,6 +167,20 @@ static bool valid_utc_date(int year, int month, int day) {
     return day <= maximum;
 }
 
+static bool valid_utc_suffix(const char *value) {
+    const char *suffix = value + 19;
+    if (*suffix == '.') {
+        ++suffix;
+        if (*suffix < '0' || *suffix > '9') {
+            return false;
+        }
+        while (*suffix >= '0' && *suffix <= '9') {
+            ++suffix;
+        }
+    }
+    return strcmp(suffix, "Z") == 0 || strcmp(suffix, "+00:00") == 0;
+}
+
 static const char *validate_command_expiry(const cJSON *body) {
     const cJSON *expires_at = cJSON_GetObjectItemCaseSensitive(body, "expires_at");
     if (!expires_at || cJSON_IsNull(expires_at)) {
@@ -176,18 +192,97 @@ static const char *validate_command_expiry(const cJSON *body) {
 
     const time_t now = time(NULL);
     if (now < 1704067200) { // 2024-01-01 UTC: system clock is not trustworthy yet.
+        ESP_LOGW(TAG, "system time not synchronized; expires_at cannot be enforced yet");
         return NULL;
     }
 
     int year, month, day, hour, minute, second;
-    if (sscanf(expires_at->valuestring, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &minute, &second) != 6 ||
-        !valid_utc_date(year, month, day) || hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 ||
-        second > 60) {
+    if (strlen(expires_at->valuestring) < 20 || expires_at->valuestring[4] != '-' ||
+        expires_at->valuestring[7] != '-' || expires_at->valuestring[10] != 'T' || expires_at->valuestring[13] != ':' ||
+        expires_at->valuestring[16] != ':' ||
+        sscanf(expires_at->valuestring, "%4d-%2d-%2dT%2d:%2d:%2d", &year, &month, &day, &hour, &minute, &second) != 6 ||
+        !valid_utc_suffix(expires_at->valuestring) || !valid_utc_date(year, month, day) || hour < 0 || hour > 23 ||
+        minute < 0 || minute > 59 || second < 0 || second > 60) {
         return "invalid_parameter";
     }
     const int64_t expiry =
         utc_days_from_civil(year, (unsigned)month, (unsigned)day) * 86400 + hour * 3600 + minute * 60 + second;
     return expiry <= (int64_t)now ? "expired" : NULL;
+}
+
+static uint32_t command_source_mask(cloud_command_source_t source) {
+    switch (source) {
+    case CLOUD_COMMAND_SOURCE_FRONTEND:
+        return 1U;
+    case CLOUD_COMMAND_SOURCE_AI:
+        return 2U;
+    case CLOUD_COMMAND_SOURCE_EXTERNAL_MCP:
+        return 4U;
+    case CLOUD_COMMAND_SOURCE_RULE:
+        return 8U;
+    case CLOUD_COMMAND_SOURCE_UNKNOWN:
+    default:
+        return 0U;
+    }
+}
+
+static uint32_t command_allowed_source_mask(cloud_command_type_t type) {
+    switch (type) {
+#define SOURCE_CASE(command_enum, command_name, ai_allowed, safety_class, parameter_schema_json, source_mask)          \
+    case command_enum:                                                                                                 \
+        return source_mask;
+        AIOT_COMMAND_CATALOG(SOURCE_CASE)
+#undef SOURCE_CASE
+    default:
+        return 0U;
+    }
+}
+
+static bool object_only_has(const cJSON *object, const char *first, const char *second) {
+    for (const cJSON *item = object ? object->child : NULL; item; item = item->next) {
+        if ((!first || strcmp(item->string, first) != 0) && (!second || strcmp(item->string, second) != 0)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool command_parameter_valid(cloud_command_type_t type, const cJSON *parameter) {
+    if (!cJSON_IsObject(parameter)) {
+        return false;
+    }
+    const cJSON *value;
+    switch (type) {
+    case CLOUD_COMMAND_WINDOW_OPEN:
+    case CLOUD_COMMAND_WINDOW_CLOSE:
+    case CLOUD_COMMAND_ALARM_ON:
+    case CLOUD_COMMAND_ALARM_OFF:
+    case CLOUD_COMMAND_LED_ON:
+    case CLOUD_COMMAND_LED_OFF:
+    case CLOUD_COMMAND_CONTROL_RESUME_AUTO:
+        return parameter->child == NULL;
+    case CLOUD_COMMAND_CONTROL_SET_PRIORITY:
+        value = cJSON_GetObjectItemCaseSensitive(parameter, "priority");
+        return object_only_has(parameter, "priority", NULL) && cJSON_GetArraySize(parameter) == 1 &&
+               cJSON_IsString(value) &&
+               (strcmp(value->valuestring, "manual_first") == 0 || strcmp(value->valuestring, "auto_first") == 0);
+    case CLOUD_COMMAND_ALARM_SILENCE:
+        value = cJSON_GetObjectItemCaseSensitive(parameter, "duration_seconds");
+        return object_only_has(parameter, "duration_seconds", NULL) && cJSON_GetArraySize(parameter) <= 1 &&
+               (!value || (cJSON_IsNumber(value) && value->valuedouble == (double)value->valueint &&
+                           value->valueint >= (int)AIOT_SMOKE_SILENCE_MIN_SECONDS &&
+                           value->valueint <= (int)AIOT_SMOKE_SILENCE_MAX_SECONDS));
+    case CLOUD_COMMAND_VOICE_SPEAK:
+        value = cJSON_GetObjectItemCaseSensitive(parameter, "gb2312_base64");
+        return object_only_has(parameter, "gb2312_base64", NULL) && cJSON_GetArraySize(parameter) == 1 &&
+               cJSON_IsString(value) && strlen(value->valuestring) >= 4 && strlen(value->valuestring) <= 320;
+    case CLOUD_COMMAND_DISPLAY_MESSAGE:
+        value = cJSON_GetObjectItemCaseSensitive(parameter, "text");
+        return object_only_has(parameter, "text", NULL) && cJSON_GetArraySize(parameter) == 1 &&
+               cJSON_IsString(value) && strlen(value->valuestring) >= 1 && strlen(value->valuestring) <= 120;
+    default:
+        return false;
+    }
 }
 
 static void handle_command_payload(const char *payload) {
@@ -201,13 +296,19 @@ static void handle_command_payload(const char *payload) {
         return;
     }
 
-    const cJSON *body = root;
     const cJSON *schema_version = cJSON_GetObjectItemCaseSensitive(root, "schema_version");
     const cJSON *nested_payload = cJSON_GetObjectItemCaseSensitive(root, "payload");
-    if (cJSON_IsString(schema_version) && strcmp(schema_version->valuestring, AIOT_PROTOCOL_VERSION) == 0 &&
-        cJSON_IsObject(nested_payload)) {
-        body = nested_payload;
+    const cJSON *device_id = cJSON_GetObjectItemCaseSensitive(root, "device_id");
+    if (!cJSON_IsString(schema_version) || strcmp(schema_version->valuestring, AIOT_PROTOCOL_VERSION) != 0 ||
+        !cJSON_IsString(device_id) || strcmp(device_id->valuestring, s_config.device_id) != 0 ||
+        !cJSON_HasObjectItem(root, "message_id") || !cJSON_HasObjectItem(root, "occurred_at") ||
+        !cJSON_HasObjectItem(root, "boot_id") || !cJSON_HasObjectItem(root, "sequence") ||
+        !cJSON_IsObject(nested_payload)) {
+        ESP_LOGW(TAG, "rejecting command without a valid MQTT v2 envelope");
+        cJSON_Delete(root);
+        return;
     }
+    const cJSON *body = nested_payload;
 
     mqtt_app_command_t envelope = {0};
     command_clear(&envelope.command);
@@ -215,23 +316,6 @@ static void handle_command_payload(const char *payload) {
     copy_json_string(envelope.trace_id, sizeof(envelope.trace_id), root, "trace_id");
     if (envelope.command_id[0] == '\0') {
         ESP_LOGW(TAG, "command_id is required");
-        cJSON_Delete(root);
-        return;
-    }
-
-    const recent_ack_t *recent = find_recent_ack(envelope.command_id);
-    if (recent) {
-        strlcpy(envelope.trace_id, recent->trace_id, sizeof(envelope.trace_id));
-        ESP_LOGW(TAG, "duplicate command id=%s, replaying terminal ack", envelope.command_id);
-        mqtt_app_publish_command_ack(&envelope, recent->status, recent->message);
-        cJSON_Delete(root);
-        return;
-    }
-
-    const char *expiry_error = validate_command_expiry(body);
-    if (expiry_error) {
-        ESP_LOGW(TAG, "rejecting command id=%s: %s", envelope.command_id, expiry_error);
-        mqtt_app_publish_command_ack(&envelope, "rejected", expiry_error);
         cJSON_Delete(root);
         return;
     }
@@ -269,12 +353,40 @@ static void handle_command_payload(const char *payload) {
     }
 
     const cJSON *parameter = cJSON_GetObjectItemCaseSensitive(body, "parameter");
-    if (parameter) {
-        char *parameter_json = cJSON_PrintUnformatted(parameter);
-        if (parameter_json) {
-            strlcpy(envelope.command.parameter, parameter_json, sizeof(envelope.command.parameter));
-            cJSON_free(parameter_json);
-        }
+    if ((command_allowed_source_mask(envelope.command.type) & command_source_mask(envelope.command.source)) == 0U) {
+        mqtt_app_publish_command_ack(&envelope, "rejected", "policy_denied");
+        cJSON_Delete(root);
+        return;
+    }
+    if (!capability_enabled(command_type)) {
+        mqtt_app_publish_command_ack(&envelope, "rejected", "unsupported_command");
+        cJSON_Delete(root);
+        return;
+    }
+    if (!command_parameter_valid(envelope.command.type, parameter)) {
+        mqtt_app_publish_command_ack(&envelope, "rejected", "invalid_parameter");
+        cJSON_Delete(root);
+        return;
+    }
+    const char *expiry_error = validate_command_expiry(body);
+    if (expiry_error) {
+        ESP_LOGW(TAG, "rejecting command id=%s: %s", envelope.command_id, expiry_error);
+        mqtt_app_publish_command_ack(&envelope, "rejected", expiry_error);
+        cJSON_Delete(root);
+        return;
+    }
+    const recent_ack_t *recent = find_recent_ack(envelope.command_id);
+    if (recent) {
+        strlcpy(envelope.trace_id, recent->trace_id, sizeof(envelope.trace_id));
+        ESP_LOGW(TAG, "duplicate command id=%s, replaying terminal ack", envelope.command_id);
+        mqtt_app_publish_command_ack(&envelope, recent->status, recent->message);
+        cJSON_Delete(root);
+        return;
+    }
+    char *parameter_json = cJSON_PrintUnformatted(parameter);
+    if (parameter_json) {
+        strlcpy(envelope.command.parameter, parameter_json, sizeof(envelope.command.parameter));
+        cJSON_free(parameter_json);
     }
 
     strlcpy(envelope.command.raw, payload, sizeof(envelope.command.raw));
@@ -414,6 +526,15 @@ static bool capability_enabled(const char *name) {
     if (strcmp(name, "voice.speak") == 0) {
         return CONFIG_APP_VOICE_ENABLED;
     }
+    if (strcmp(name, "led.on") == 0 || strcmp(name, "led.off") == 0) {
+        return CONFIG_APP_LED_ENABLED;
+    }
+    if (strcmp(name, "control.set_priority") == 0 || strcmp(name, "control.resume_auto") == 0) {
+        return true;
+    }
+    if (strcmp(name, "alarm.silence") == 0) {
+        return s_config.actuator_enabled && CONFIG_APP_MQ2_ENABLED;
+    }
     return s_config.actuator_enabled;
 }
 
@@ -434,7 +555,7 @@ esp_err_t mqtt_app_publish_capabilities(void) {
     cJSON_AddStringToObject(payload, "firmware_version", "2.0.0");
     cJSON_AddStringToObject(payload, "hardware_model", "ESP32-S3-DevKitC-1");
 
-#define ADD_CAPABILITY(command_enum, command_name, ai_allowed, safety_class, parameter_schema_json)                    \
+#define ADD_CAPABILITY(command_enum, command_name, ai_allowed, safety_class, parameter_schema_json, source_mask)       \
     do {                                                                                                               \
         (void)(command_enum);                                                                                          \
         if (capability_enabled(command_name)) {                                                                        \
@@ -444,6 +565,16 @@ esp_err_t mqtt_app_publish_capabilities(void) {
             cJSON_AddItemToObject(item, "parameter_schema", schema ? schema : cJSON_CreateObject());                   \
             cJSON_AddStringToObject(item, "safety_class", safety_class);                                               \
             cJSON_AddBoolToObject(item, "ai_allowed", ai_allowed);                                                     \
+            cJSON *sources = cJSON_CreateArray();                                                                      \
+            if ((source_mask & 1U) != 0U)                                                                              \
+                cJSON_AddItemToArray(sources, cJSON_CreateString("frontend"));                                         \
+            if ((source_mask & 2U) != 0U)                                                                              \
+                cJSON_AddItemToArray(sources, cJSON_CreateString("ai"));                                               \
+            if ((source_mask & 4U) != 0U)                                                                              \
+                cJSON_AddItemToArray(sources, cJSON_CreateString("external_mcp"));                                     \
+            if ((source_mask & 8U) != 0U)                                                                              \
+                cJSON_AddItemToArray(sources, cJSON_CreateString("rule"));                                             \
+            cJSON_AddItemToObject(item, "allowed_sources", sources);                                                   \
             cJSON_AddItemToArray(commands, item);                                                                      \
         }                                                                                                              \
     } while (0);
@@ -598,7 +729,7 @@ esp_err_t mqtt_app_publish_command_ack(const mqtt_app_command_t *command, const 
         cJSON_AddNullToObject(payload, "error_code");
     }
     cJSON_AddItemToObject(payload, "reported_state", cJSON_CreateObject());
-    cJSON *root = create_envelope(payload, command->trace_id, command->command_id);
+    cJSON *root = create_envelope(payload, command->trace_id, NULL);
     char *json = root ? cJSON_PrintUnformatted(root) : NULL;
     cJSON_Delete(root);
     if (!json) {

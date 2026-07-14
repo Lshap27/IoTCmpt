@@ -22,9 +22,26 @@ def test_panel_uses_recommended_values_when_sdkconfig_is_missing(tmp_path, monke
     values = panel_server.read_sdkconfig_values()
 
     assert values["CONFIG_APP_SENSOR_MOCK_ENABLED"] is False
-    assert values["CONFIG_APP_WIFI_ENABLED"] is True
-    assert values["CONFIG_APP_LED_ENABLED"] is True
+    assert values["CONFIG_APP_WIFI_ENABLED"] is False
+    assert values["CONFIG_APP_LED_ENABLED"] is False
     assert values["CONFIG_APP_LED_GPIO"] == "41"
+
+
+def test_firmware_preflight_rejects_duplicate_gpio(tmp_path, monkeypatch):
+    monkeypatch.setattr(panel_server, "SDKCONFIG", tmp_path / "sdkconfig")
+    monkeypatch.setattr(panel_server, "SDKCONFIG_DEFAULTS", tmp_path / "sdkconfig.defaults")
+
+    result = panel_server.firmware_preflight(
+        {
+            "CONFIG_APP_LED_ENABLED": True,
+            "CONFIG_APP_LED_GPIO": 41,
+            "CONFIG_APP_BUTTON_ENABLED": True,
+            "CONFIG_APP_BUTTON_GPIO": 41,
+        }
+    )
+
+    assert result["ok"] is False
+    assert any("GPIO41" in error for error in result["errors"])
 
 
 def test_existing_sdkconfig_explicit_values_win(tmp_path, monkeypatch):

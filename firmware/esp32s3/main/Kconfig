@@ -6,7 +6,7 @@ menu "AIoT MQTT 固件主线"
 
     config APP_SENSOR_MOCK_ENABLED
         bool "使用模拟传感器数据"
-        default y
+        default n
 
     config APP_SENSOR_INTERVAL_MS
         int "传感器循环间隔（毫秒）"

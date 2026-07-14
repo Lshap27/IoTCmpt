@@ -27,6 +27,7 @@ const COMMAND_STATUS_ORDER: Record<string, number> = {
 
 export function reduceCommandStatus(previous: string | undefined, incoming: string): string {
   if (!previous) return incoming;
+  if (TERMINAL_COMMAND_STATUSES.has(previous)) return previous;
   return (COMMAND_STATUS_ORDER[incoming] ?? -1) >= (COMMAND_STATUS_ORDER[previous] ?? -1)
     ? incoming
     : previous;
@@ -72,17 +73,23 @@ function appendUiEvent(queryClient: QueryClient, deviceId: string, envelope: WsM
 /** Pure WebSocket v2 envelope reducer. No module-global ACK or connection state. */
 export function applyEnvelope(queryClient: QueryClient, deviceId: string, envelope: WsMessage) {
   if (envelope.device_id !== deviceId) return;
+  let duplicate = false;
+  queryClient.setQueryData<string[]>(deviceKeys.processedEvents(deviceId), (current = []) => {
+    if (current.includes(envelope.event_id)) {
+      duplicate = true;
+      return current;
+    }
+    return [...current, envelope.event_id].slice(-256);
+  });
+  if (duplicate) return;
   appendUiEvent(queryClient, deviceId, envelope);
 
   switch (envelope.type) {
     case "telemetry.received": {
       const point = envelope.payload;
       queryClient.setQueryData<TelemetryPoint[]>(deviceKeys.history(deviceId), (current = []) => {
-        const tail =
-          current.length && current[current.length - 1].sampled_at === point.sampled_at
-            ? current.slice(-(HISTORY_CAP - 1))
-            : current.slice(-(HISTORY_CAP - 2));
-        return [...tail, point];
+        const withoutDuplicate = current.filter((item) => item.sampled_at !== point.sampled_at);
+        return [...withoutDuplicate, point].slice(-HISTORY_CAP);
       });
       patchLatest(queryClient, deviceId, (current) => ({
         ...current,
@@ -176,6 +183,19 @@ export function applyEnvelope(queryClient: QueryClient, deviceId: string, envelo
             }
           : current,
       );
+      queryClient.setQueryData<AiRunOut[]>(deviceKeys.ai(deviceId), (current = []) =>
+        current.map((run) =>
+          run.run_id === envelope.payload.run_id
+            ? {
+                ...run,
+                status: envelope.payload.status,
+                output: envelope.payload.output ?? run.output,
+                error_message: envelope.payload.error ?? run.error_message,
+              }
+            : run,
+        ),
+      );
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.ai(deviceId) });
       break;
     }
     case "notification.created": {

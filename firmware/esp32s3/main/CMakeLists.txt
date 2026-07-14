@@ -2,6 +2,7 @@ idf_component_register(
     SRCS
         "main.c"
         "app_config.c"
+        "config_preflight.c"
         "mqtt_app.c"
         "sensors/sensors.c"
         "fusion/fusion.c"
@@ -22,6 +23,7 @@ idf_component_register(
         esp_event
         esp_lcd
         esp_netif
+        lwip
         esp_wifi
         json
         mqtt

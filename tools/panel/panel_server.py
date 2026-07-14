@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime
+import contextlib
 import json
 import re
 import secrets
@@ -18,6 +18,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import URLError
@@ -25,7 +26,7 @@ from urllib.parse import urlparse
 from urllib.request import urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from runtime_config import apply_config  # noqa: E402
+from runtime_config import apply_config
 
 REPO = Path(__file__).resolve().parents[2]
 TOOLS = REPO / "tools"
@@ -37,6 +38,7 @@ SIMULATOR_STATE_ROOT = REPO / ".runtime" / "firmware-simulator"
 
 CREATE_NEW_CONSOLE = 0x00000010
 PANEL_TOKEN = secrets.token_urlsafe(32)
+PWSH = Path(r"C:\Program Files\PowerShell\7\pwsh.exe")
 
 
 class ApiError(Exception):
@@ -48,14 +50,15 @@ class ApiError(Exception):
 
 def ps_file_args(script, *extra):
     return [
-        "powershell.exe",
+        str(PWSH),
         "-NoLogo",
         "-NoProfile",
         "-ExecutionPolicy",
         "Bypass",
         "-File",
         str(TOOLS / script),
-    ] + list(extra)
+        *extra,
+    ]
 
 
 # ---------------------------------------------------------------- job runner
@@ -68,10 +71,11 @@ class Job:
         self.lines = []
         self.trimmed = 0  # 因缓冲裁剪而丢弃的行数（用于换算绝对行号）
         self.generation = 0  # 每次 start 递增，旧的日志流据此感知任务已重启
+        self.metadata = {}
         self.lock = threading.Lock()
         self.status = "idle"  # idle | running | done | failed | stopped
 
-    def start(self, cmd, cwd, on_success=None):
+    def start(self, cmd, cwd, on_success=None, metadata=None):
         if self.proc and self.proc.poll() is None:
             raise ApiError(409, f"任务 {self.name} 正在运行中")
         with self.lock:
@@ -79,8 +83,9 @@ class Job:
             self.trimmed = 0
             self.generation += 1
             self.status = "running"
+            self.metadata = dict(metadata or {})
         try:
-            self.proc = subprocess.Popen(
+            proc = subprocess.Popen(
                 cmd,
                 cwd=str(cwd),
                 stdout=subprocess.PIPE,
@@ -90,25 +95,31 @@ class Job:
                 encoding="utf-8",
                 errors="replace",
             )
-        except FileNotFoundError:
+        except FileNotFoundError as exc:
             with self.lock:
                 self.status = "failed"
             raise ApiError(
                 500,
-                f"未找到命令 {cmd[0]}。请先安装它（例如 docker / uv / pnpm），"
-                "或改用 Docker 演示栈。",
-            )
-        threading.Thread(target=self._pump, args=(on_success,), daemon=True).start()
+                f"未找到命令 {cmd[0]}。请先安装它（例如 docker / uv / pnpm），或改用 Docker 演示栈。",
+            ) from exc
+        with self.lock:
+            self.proc = proc
+            generation = self.generation
+        threading.Thread(target=self._pump, args=(proc, generation, on_success), daemon=True).start()
 
-    def _pump(self, on_success):
-        for line in self.proc.stdout:
+    def _pump(self, proc, generation, on_success):
+        for line in proc.stdout:
             with self.lock:
+                if generation != self.generation:
+                    continue
                 self.lines.append(line.rstrip("\r\n"))
                 if len(self.lines) > 5000:
                     del self.lines[:1000]
                     self.trimmed += 1000
-        code = self.proc.wait()
+        code = proc.wait()
         with self.lock:
+            if generation != self.generation or self.proc is not proc:
+                return
             if self.status == "running":
                 self.status = "done" if code == 0 else "failed"
             self.lines.append(f"[进程退出，代码 {code}]")
@@ -120,10 +131,11 @@ class Job:
                     self.lines.append(f"[后续操作失败] {exc}")
 
     def stop(self):
-        if not self.proc or self.proc.poll() is not None:
+        proc = self.proc
+        if not proc or proc.poll() is not None:
             raise ApiError(409, f"任务 {self.name} 未在运行")
         subprocess.run(
-            ["taskkill", "/T", "/F", "/PID", str(self.proc.pid)],
+            ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
             capture_output=True,
         )
         with self.lock:
@@ -184,46 +196,18 @@ SIMULATOR_SCENARIOS = {"normal", "air-watch", "air-alert", "smoke"}
 DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
-def write_compose_env_value(key, value):
-    path = REPO / ".env"
-    lines = path.read_text(encoding="utf-8-sig").splitlines() if path.exists() else []
-    replacement = f"{key}={value}"
-    pattern = re.compile(rf"^{re.escape(key)}=")
-    for index, line in enumerate(lines):
-        if pattern.match(line):
-            lines[index] = replacement
-            break
-    else:
-        lines.append(replacement)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
 def simulator_config(body=None):
     body = body or {}
     compose = parse_env(REPO / ".env")
-    scenario = str(
-        body.get("scenario") or compose.get("AIOT_DEMO_SCENARIO") or "normal"
-    )
-    device_id = str(
-        body.get("deviceId") or compose.get("AIOT_DEMO_DEVICE_ID") or "esp32s3-001"
-    )
+    scenario = str(body.get("scenario") or compose.get("AIOT_DEMO_SCENARIO") or "normal")
+    device_id = str(body.get("deviceId") or compose.get("AIOT_DEMO_DEVICE_ID") or "esp32s3-001")
     if scenario not in SIMULATOR_SCENARIOS:
         raise ApiError(400, "模拟场景必须是 normal、air-watch、air-alert 或 smoke")
     if not DEVICE_ID_PATTERN.fullmatch(device_id):
-        raise ApiError(
-            400, "设备 ID 必须为 1-64 位，只能包含字母、数字、点、下划线和连字符"
-        )
+        raise ApiError(400, "设备 ID 必须为 1-64 位，只能包含字母、数字、点、下划线和连字符")
     try:
-        interval = float(
-            body.get("interval")
-            or compose.get("AIOT_SIMULATOR_TELEMETRY_INTERVAL_SECONDS")
-            or 2
-        )
-        image_interval = float(
-            body.get("imageInterval")
-            or compose.get("AIOT_SIMULATOR_IMAGE_INTERVAL_SECONDS")
-            or 30
-        )
+        interval = float(body.get("interval") or compose.get("AIOT_SIMULATOR_TELEMETRY_INTERVAL_SECONDS") or 2)
+        image_interval = float(body.get("imageInterval") or compose.get("AIOT_SIMULATOR_IMAGE_INTERVAL_SECONDS") or 30)
     except (TypeError, ValueError) as exc:
         raise ApiError(400, "模拟器周期必须是数字") from exc
     if not 1 <= interval <= 60:
@@ -232,9 +216,7 @@ def simulator_config(body=None):
         raise ApiError(400, "图片周期必须在 10～3600 秒之间")
     image_value = body.get("imageEnabled")
     if image_value is None:
-        image_enabled = (
-            compose.get("AIOT_SIMULATOR_IMAGE_ENABLED", "true").lower() == "true"
-        )
+        image_enabled = compose.get("AIOT_SIMULATOR_IMAGE_ENABLED", "true").lower() == "true"
     elif isinstance(image_value, bool):
         image_enabled = image_value
     else:
@@ -280,15 +262,14 @@ def start_simulator(body=None, automatic=False):
     python = REPO / "server" / ".venv" / "Scripts" / "python.exe"
     if not python.exists():
         raise ApiError(409, "缺少 server/.venv；请先在环境中心点击“一键补全演示环境”")
-    write_compose_env_value("AIOT_DEMO_SCENARIO", scenario)
-    write_compose_env_value(
-        "AIOT_SIMULATOR_TELEMETRY_INTERVAL_SECONDS", str(config["interval"])
-    )
-    write_compose_env_value(
-        "AIOT_SIMULATOR_IMAGE_ENABLED", str(config["image_enabled"]).lower()
-    )
-    write_compose_env_value(
-        "AIOT_SIMULATOR_IMAGE_INTERVAL_SECONDS", str(config["image_interval"])
+    apply_config(
+        {
+            "AIOT_DEMO_DEVICE_ID": device_id,
+            "AIOT_DEMO_SCENARIO": scenario,
+            "AIOT_SIMULATOR_TELEMETRY_INTERVAL_SECONDS": str(config["interval"]),
+            "AIOT_SIMULATOR_IMAGE_ENABLED": str(config["image_enabled"]).lower(),
+            "AIOT_SIMULATOR_IMAGE_INTERVAL_SECONDS": str(config["image_interval"]),
+        }
     )
     command = [
         str(python),
@@ -306,15 +287,15 @@ def start_simulator(body=None, automatic=False):
     ]
     if not config["image_enabled"]:
         command.append("--no-image")
-    job.start(command, REPO)
+    job.start(command, REPO, metadata={"device_id": device_id})
 
 
 def stop_simulator():
     job = get_job("simulator")
     if not job.running():
         raise ApiError(409, "固件模拟器未在运行")
-    config = simulator_config()
-    device_dir = SIMULATOR_STATE_ROOT / config["device_id"]
+    device_id = str(job.metadata.get("device_id") or simulator_config()["device_id"])
+    device_dir = SIMULATOR_STATE_ROOT / device_id
     device_dir.mkdir(parents=True, exist_ok=True)
     (device_dir / "stop.request").write_text("stop\n", encoding="utf-8")
     for _ in range(40):
@@ -339,10 +320,8 @@ def clear_simulator_nvs(body=None):
     if was_running:
         stop_simulator()
     nvs_path = SIMULATOR_STATE_ROOT / config["device_id"] / "nvs.json"
-    try:
+    with contextlib.suppress(FileNotFoundError):
         nvs_path.unlink()
-    except FileNotFoundError:
-        pass
     if was_running:
         start_simulator(body)
 
@@ -373,9 +352,7 @@ def stop_docker_stack(_body):
 ACTIONS = {
     "docker-up": start_docker_stack,
     "docker-down": stop_docker_stack,
-    "docker-logs": lambda b: get_job("docker-logs").start(
-        ["docker", "compose", "logs", "-f", "--tail", "100"], REPO
-    ),
+    "docker-logs": lambda b: get_job("docker-logs").start(["docker", "compose", "logs", "-f", "--tail", "100"], REPO),
     "backend-start": lambda b: get_job("backend").start(
         [str(REPO / "server" / ".venv" / "Scripts" / "python.exe"), "run_dev.py"],
         REPO / "server",
@@ -384,15 +361,11 @@ ACTIONS = {
         [str(REPO / "server" / ".venv" / "Scripts" / "python.exe"), "run_worker.py"],
         REPO / "server",
     ),
-    "frontend-start": lambda b: get_job("frontend").start(
-        ["cmd", "/c", "pnpm", "dev"], REPO / "web"
-    ),
+    "frontend-start": lambda b: get_job("frontend").start(["cmd", "/c", "pnpm", "dev"], REPO / "web"),
     "simulator-start": lambda b: start_simulator(b),
     "simulator-reboot": lambda b: restart_simulator(b),
     "simulator-clear-nvs": lambda b: clear_simulator_nvs(b),
-    "idf-build": lambda b: get_job("idf").start(
-        ps_file_args("esp-idf-task.ps1", "-Action", "Build"), FIRMWARE
-    ),
+    "idf-build": lambda b: get_job("idf").start(ps_file_args("esp-idf-task.ps1", "-Action", "Build"), FIRMWARE),
     "idf-flash": lambda b: get_job("idf").start(
         ps_file_args("esp-idf-task.ps1", "-Action", "Flash", *port_args(b)), FIRMWARE
     ),
@@ -461,7 +434,7 @@ def get_env_config():
     for name, path in ENV_FILES.items():
         values = parse_env(path)
         for key in MASKED_KEYS & set(values):
-            values[key] = "******" if values[key] else ""
+            values[key] = "已配置" if values[key] else ""
         data[name] = {"exists": path.exists(), "values": values}
     return data
 
@@ -473,18 +446,11 @@ def validate_http_url(value, label):
 
 
 def normalize_trigger_levels(value):
-    if isinstance(value, list):
-        levels = value
-    else:
-        levels = str(value or "").split(",")
-    levels = list(
-        dict.fromkeys(str(item).strip().lower() for item in levels if str(item).strip())
-    )
+    levels = value if isinstance(value, list) else str(value or "").split(",")
+    levels = list(dict.fromkeys(str(item).strip().lower() for item in levels if str(item).strip()))
     allowed = {"good", "watch", "alert"}
     if not levels or any(level not in allowed for level in levels):
-        raise ApiError(
-            400, "自动处置触发级别只能选择 good、watch、alert，且至少选择一项"
-        )
+        raise ApiError(400, "自动处置触发级别只能选择 good、watch、alert，且至少选择一项")
     return levels
 
 
@@ -507,11 +473,7 @@ def save_env_config(body):
         if ai_mode == "Mock":
             body["llmEndpoint"] = "mock"
             body["llmModel"] = "demo-model"
-        preset = (
-            "DeviceDemo"
-            if device_mode == "Real"
-            else ("LlmDemo" if ai_mode == "Online" else "MockDemo")
-        )
+        preset = "DeviceDemo" if device_mode == "Real" else ("LlmDemo" if ai_mode == "Online" else "MockDemo")
     else:
         # 兼容旧版面板和现有 VS Code 任务使用的预设名称。
         preset = body.get("preset", "MockDemo")
@@ -519,9 +481,7 @@ def save_env_config(body):
         raise ApiError(400, f"未知预设 {preset}")
     device_id = str(body.get("deviceId") or "esp32s3-001").strip()
     if not DEVICE_ID_PATTERN.fullmatch(device_id):
-        raise ApiError(
-            400, "设备 ID 必须为 1-64 位，只能包含字母、数字、点、下划线和连字符"
-        )
+        raise ApiError(400, "设备 ID 必须为 1-64 位，只能包含字母、数字、点、下划线和连字符")
     body["deviceId"] = device_id
     simulator = simulator_config(body)
     lan = str(body.get("lanAddress") or "127.0.0.1").strip()
@@ -553,12 +513,10 @@ def save_env_config(body):
     if body.get("mcpControlToken"):
         changes["AIOT_MCP_CONTROL_TOKEN"] = str(body["mcpControlToken"])
     if body.get("mcpEnabled"):
-        existing = get_env_config().get("server", {})
+        existing = get_env_config().get("server", {}).get("values", {})
         if not body.get("mcpReadToken") and not existing.get("AIOT_MCP_READ_TOKEN"):
             changes["AIOT_MCP_READ_TOKEN"] = "generated"
-        if not body.get("mcpControlToken") and not existing.get(
-            "AIOT_MCP_CONTROL_TOKEN"
-        ):
+        if not body.get("mcpControlToken") and not existing.get("AIOT_MCP_CONTROL_TOKEN"):
             changes["AIOT_MCP_CONTROL_TOKEN"] = "generated"
     return apply_config(changes, dry_run=bool(body.get("preview")))
 
@@ -592,22 +550,111 @@ PANEL_FIRMWARE_DEFAULTS = {
     "CONFIG_APP_DEVICE_ID": "esp32s3-001",
     "CONFIG_APP_SENSOR_MOCK_ENABLED": False,
     "CONFIG_APP_SENSOR_INTERVAL_MS": "2500",
-    "CONFIG_APP_WIFI_ENABLED": True,
-    "CONFIG_APP_MQTT_ENABLED": True,
-    "CONFIG_APP_IMAGE_UPLOAD_ENABLED": True,
-    "CONFIG_APP_CAMERA_ENABLED": True,
-    "CONFIG_APP_DISPLAY_ENABLED": True,
-    "CONFIG_APP_ACTUATOR_ENABLED": True,
-    "CONFIG_APP_BUTTON_ENABLED": True,
-    "CONFIG_APP_MQ2_ENABLED": True,
-    "CONFIG_APP_VOICE_ENABLED": True,
-    "CONFIG_APP_LED_ENABLED": True,
+    "CONFIG_APP_WIFI_ENABLED": False,
+    "CONFIG_APP_MQTT_ENABLED": False,
+    "CONFIG_APP_IMAGE_UPLOAD_ENABLED": False,
+    "CONFIG_APP_CAMERA_ENABLED": False,
+    "CONFIG_APP_DISPLAY_ENABLED": False,
+    "CONFIG_APP_ACTUATOR_ENABLED": False,
+    "CONFIG_APP_BUTTON_ENABLED": False,
+    "CONFIG_APP_MQ2_ENABLED": False,
+    "CONFIG_APP_VOICE_ENABLED": False,
+    "CONFIG_APP_LED_ENABLED": False,
     "CONFIG_APP_LED_GPIO": "41",
     "CONFIG_APP_LED_ACTIVE_LOW": False,
     "CONFIG_APP_CAMERA_UPLOAD_INTERVAL_MS": "2000",
 }
 
 LEGACY_LED_KEYS = ("CONFIG_APP_LED_MODE_GPIO", "CONFIG_APP_LED_MODE_LOGICAL")
+
+PIN_GROUPS = {
+    "CONFIG_APP_LED_ENABLED": [("LED", "CONFIG_APP_LED_GPIO")],
+    "CONFIG_APP_BUTTON_ENABLED": [("手动按键", "CONFIG_APP_BUTTON_GPIO")],
+    "CONFIG_APP_MQ2_ENABLED": [("MQ-2", "CONFIG_APP_MQ2_DO_GPIO")],
+    "CONFIG_APP_VOICE_ENABLED": [("语音忙信号", "CONFIG_APP_SYN6288_BY_GPIO")],
+    "CONFIG_APP_ACTUATOR_ENABLED": [
+        ("舵机", "CONFIG_APP_SERVO_GPIO"),
+        ("蜂鸣器", "CONFIG_APP_BEEP_GPIO"),
+    ],
+    "CONFIG_APP_DISPLAY_ENABLED": [
+        ("显示屏 MOSI", "CONFIG_APP_TFT_MOSI_GPIO"),
+        ("显示屏 SCLK", "CONFIG_APP_TFT_SCLK_GPIO"),
+        ("显示屏 CS", "CONFIG_APP_TFT_CS_GPIO"),
+        ("显示屏 DC", "CONFIG_APP_TFT_DC_GPIO"),
+        ("显示屏 RST", "CONFIG_APP_TFT_RST_GPIO"),
+        ("显示屏 BLK", "CONFIG_APP_TFT_BLK_GPIO"),
+    ],
+    "CONFIG_APP_CAMERA_ENABLED": [
+        ("摄像头 PWDN", "CONFIG_APP_CAMERA_PWDN_GPIO"),
+        ("摄像头 SIOD", "CONFIG_APP_CAMERA_SIOD_GPIO"),
+        ("摄像头 SIOC", "CONFIG_APP_CAMERA_SIOC_GPIO"),
+        *[(f"摄像头 D{i}", f"CONFIG_APP_CAMERA_D{i}_GPIO") for i in range(8)],
+        ("摄像头 VSYNC", "CONFIG_APP_CAMERA_VSYNC_GPIO"),
+        ("摄像头 HREF", "CONFIG_APP_CAMERA_HREF_GPIO"),
+        ("摄像头 PCLK", "CONFIG_APP_CAMERA_PCLK_GPIO"),
+    ],
+}
+
+
+def _read_all_sdkconfig() -> dict[str, str | bool]:
+    source = SDKCONFIG if SDKCONFIG.exists() else SDKCONFIG_DEFAULTS
+    if not source.exists():
+        return {}
+    result: dict[str, str | bool] = {}
+    for raw in source.read_text(encoding="utf-8", errors="replace").splitlines():
+        if raw.startswith("CONFIG_") and "=" in raw:
+            key, value = raw.split("=", 1)
+            result[key] = True if value == "y" else value.strip('"')
+        elif raw.startswith("# CONFIG_") and raw.endswith(" is not set"):
+            result[raw[2:-11]] = False
+    return result
+
+
+def firmware_preflight(overrides=None):
+    values = {**PANEL_FIRMWARE_DEFAULTS, **_read_all_sdkconfig(), **(overrides or {})}
+    active: list[tuple[str, int]] = []
+    errors: list[str] = []
+    warnings: list[str] = []
+    for enabled_key, pins in PIN_GROUPS.items():
+        if not values.get(enabled_key):
+            continue
+        for label, pin_key in pins:
+            try:
+                gpio = int(values.get(pin_key, -1))
+            except (TypeError, ValueError):
+                errors.append(f"{label} 的 {pin_key} 不是有效数字")
+                continue
+            if gpio < 0:  # PWDN-only 摄像头允许 XCLK 不存在；未使用引脚也不参与冲突。
+                continue
+            if gpio > 48:
+                errors.append(f"{label} 使用了无效 GPIO{gpio}")
+            active.append((label, gpio))
+    by_gpio: dict[int, list[str]] = {}
+    for label, gpio in active:
+        by_gpio.setdefault(gpio, []).append(label)
+    for gpio, labels in by_gpio.items():
+        if len(labels) > 1:
+            errors.append(f"GPIO{gpio} 被重复分配给：{'、'.join(labels)}")
+    native_usb = bool(values.get("CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG"))
+    octal_psram = bool(values.get("CONFIG_SPIRAM_MODE_OCT"))
+    for label, gpio in active:
+        if native_usb and gpio in {19, 20}:
+            errors.append(f"{label} 的 GPIO{gpio} 与原生 USB Serial/JTAG 冲突")
+        if octal_psram and gpio in {35, 36, 37}:
+            errors.append(f"{label} 的 GPIO{gpio} 与八线 PSRAM 冲突")
+    if not values.get("CONFIG_IDF_TARGET_ESP32S3"):
+        warnings.append("板型/模组未确认：烧录前仍需人工核对供电、PSRAM、USB 与实际接线")
+    if not active:
+        warnings.append("当前未启用外围硬件模块；这是未知板型的安全默认值")
+    return {
+        "ok": not errors,
+        "board": "ESP32-S3（具体模组待核对）",
+        "nativeUsb": native_usb,
+        "psram": "octal" if octal_psram else "unknown-or-quad",
+        "activePins": [{"label": label, "gpio": gpio} for label, gpio in active],
+        "errors": errors,
+        "warnings": warnings,
+    }
 
 
 def read_sdkconfig_values():
@@ -650,14 +697,12 @@ def save_firmware_config(body):
 
     device_id = str(values.get("CONFIG_APP_DEVICE_ID") or "").strip()
     if device_id and not DEVICE_ID_PATTERN.fullmatch(device_id):
-        raise ApiError(
-            400, "固件设备 ID 必须为 1-64 位，只能包含字母、数字、点、下划线和连字符"
-        )
+        raise ApiError(400, "固件设备 ID 必须为 1-64 位，只能包含字母、数字、点、下划线和连字符")
     if "CONFIG_APP_SENSOR_INTERVAL_MS" in values:
         try:
             interval = int(values["CONFIG_APP_SENSOR_INTERVAL_MS"])
-        except (TypeError, ValueError):
-            raise ApiError(400, "传感器采集间隔必须是整数")
+        except (TypeError, ValueError) as exc:
+            raise ApiError(400, "传感器采集间隔必须是整数") from exc
         if not 1000 <= interval <= 60000:
             raise ApiError(400, "传感器采集间隔必须在 1000 到 60000 毫秒之间")
     if "CONFIG_APP_CAMERA_UPLOAD_INTERVAL_MS" in values:
@@ -668,10 +713,7 @@ def save_firmware_config(body):
         led_gpio = int(values.get("CONFIG_APP_LED_GPIO", 41))
         if not 0 <= led_gpio <= 48:
             raise ApiError(400, "LED GPIO 必须在 0 到 48 之间")
-    if (
-        values.get("CONFIG_APP_WIFI_ENABLED")
-        and not str(values.get("CONFIG_APP_WIFI_SSID") or "").strip()
-    ):
+    if values.get("CONFIG_APP_WIFI_ENABLED") and not str(values.get("CONFIG_APP_WIFI_SSID") or "").strip():
         raise ApiError(400, "启用 Wi-Fi 时必须填写 Wi-Fi 名称")
     if values.get("CONFIG_APP_MQTT_ENABLED"):
         mqtt = urlparse(str(values.get("CONFIG_APP_MQTT_BROKER_URI") or "").strip())
@@ -679,6 +721,9 @@ def save_firmware_config(body):
             raise ApiError(400, "MQTT 服务器地址必须是完整的 mqtt:// 或 mqtts:// 地址")
     if values.get("CONFIG_APP_IMAGE_UPLOAD_ENABLED"):
         validate_http_url(values.get("CONFIG_APP_IMAGE_UPLOAD_URL"), "图片上传地址")
+    preflight = firmware_preflight(values)
+    if not preflight["ok"]:
+        raise ApiError(400, "固件引脚预检失败：" + "；".join(preflight["errors"]))
 
     if SDKCONFIG.exists():
         text = SDKCONFIG.read_text(encoding="utf-8", errors="replace")
@@ -696,18 +741,22 @@ def save_firmware_config(body):
         kind = FIRMWARE_KEYS[key]
         try:
             line = format_sdk_line(key, kind, value)
-        except (TypeError, ValueError):
-            raise ApiError(400, f"配置项 {key} 的值无效：{value!r}")
+        except (TypeError, ValueError) as exc:
+            raise ApiError(400, f"配置项 {key} 的值无效：{value!r}") from exc
         pattern = r"^(?:{0}=.*|# {0} is not set)$".format(re.escape(key))
         if re.search(pattern, text, re.M):
-            text = re.sub(pattern, lambda _m: line, text, flags=re.M)
+            text = re.sub(pattern, line, text, flags=re.M)
         else:
             if text and not text.endswith("\n"):
                 text += "\n"
             text += line + "\n"
 
     SDKCONFIG.write_text(text, encoding="utf-8")
-    return {"ok": True, "message": "已写入固件配置，下次编译生效"}
+    return {
+        "ok": True,
+        "message": "已写入固件配置，下次编译生效；烧录前仍需核对具体板型与接线",
+        "preflight": preflight,
+    }
 
 
 # ---------------------------------------------------------------- status
@@ -734,10 +783,7 @@ def _lan_ip_rank(ip):
 def _lan_ip_usable(ip):
     # 排除回环、链路本地和 198.18.0.0/15（VPN/测试工具常占用的基准网段）
     return not (
-        ip.startswith("127.")
-        or ip.startswith("169.254.")
-        or ip.startswith("198.18.")
-        or ip.startswith("198.19.")
+        ip.startswith("127.") or ip.startswith("169.254.") or ip.startswith("198.18.") or ip.startswith("198.19.")
     )
 
 
@@ -751,11 +797,12 @@ def detect_lan_ip():
             "% {$m[$_.InterfaceIndex]=$_.InterfaceMetric}; "
             "Get-NetIPAddress -AddressFamily IPv4 | ? {"
             "$_.IPAddress -ne '127.0.0.1' -and $_.IPAddress -notlike '169.254.*' -and "
-            "$_.InterfaceAlias -notmatch 'vEthernet|WSL|Hyper-V|Default Switch|Docker|Loopback|Clash|TUN|TAP|Tailscale|VPN|WireGuard|Wintun|ZeroTier'"
+            "$_.InterfaceAlias -notmatch 'vEthernet|WSL|Hyper-V|Default Switch|Docker|Loopback|"
+            "Clash|TUN|TAP|Tailscale|VPN|WireGuard|Wintun|ZeroTier'"
             "} | sort {$m[$_.InterfaceIndex]} | select -ExpandProperty IPAddress"
         )
         result = subprocess.run(
-            ["powershell.exe", "-NoLogo", "-NoProfile", "-Command", script],
+            [str(PWSH), "-NoLogo", "-NoProfile", "-Command", script],
             capture_output=True,
             text=True,
             timeout=10,
@@ -777,7 +824,7 @@ def detect_lan_ip():
     usable = [ip for ip in candidates if _lan_ip_usable(ip)]
     if not usable:
         return "127.0.0.1"
-    return list(dict.fromkeys(usable))[0]
+    return next(iter(dict.fromkeys(usable)))
 
 
 def get_status():
@@ -795,9 +842,7 @@ def get_status():
                 services["migration"] = dependencies.get("migration") == "current"
                 services["worker"] = dependencies.get("worker") == "healthy"
                 services["mcp"] = dependencies.get("mcp") == "enabled"
-            device_id = parse_env(REPO / ".env").get(
-                "AIOT_DEMO_DEVICE_ID", "esp32s3-001"
-            )
+            device_id = parse_env(REPO / ".env").get("AIOT_DEMO_DEVICE_ID", "esp32s3-001")
             with urlopen(
                 f"http://127.0.0.1:8000/api/v1/devices/{device_id}/capabilities",
                 timeout=1,
@@ -816,10 +861,7 @@ def get_status():
             "mqtt1883": probe(1883),
             "postgres5432": probe(5432),
         },
-        "jobs": {
-            name: {"status": job.status, "running": job.running()}
-            for name, job in list(JOBS.items())
-        },
+        "jobs": {name: {"status": job.status, "running": job.running()} for name, job in list(JOBS.items())},
         "services": services,
         "simulator": simulator_status,
     }
@@ -829,9 +871,7 @@ def read_simulator_status(device_id):
     path = SIMULATOR_STATE_ROOT / device_id / "status.json"
     try:
         status = json.loads(path.read_text(encoding="utf-8"))
-        updated_at = datetime.fromisoformat(
-            str(status["updated_at"]).replace("Z", "+00:00")
-        )
+        updated_at = datetime.fromisoformat(str(status["updated_at"]).replace("Z", "+00:00"))
         if updated_at.tzinfo is None:
             updated_at = updated_at.replace(tzinfo=UTC)
         age_seconds = max(0, (datetime.now(UTC) - updated_at).total_seconds())
@@ -849,7 +889,7 @@ def read_simulator_status(device_id):
 def get_comports():
     result = subprocess.run(
         [
-            "powershell.exe",
+            str(PWSH),
             "-NoLogo",
             "-NoProfile",
             "-Command",
@@ -877,8 +917,8 @@ def get_environment():
         raise ApiError(500, f"环境检查失败：{result.stderr or result.stdout}")
     try:
         return json.loads(result.stdout.lstrip("\ufeff"))
-    except ValueError:
-        raise ApiError(500, "环境检查返回了无效数据")
+    except ValueError as exc:
+        raise ApiError(500, "环境检查返回了无效数据") from exc
 
 
 # ---------------------------------------------------------------- data tools
@@ -940,9 +980,7 @@ def run_data_tool(operation, body):
             timeout=120,
         )
     except FileNotFoundError as exc:
-        raise ApiError(
-            503, "数据工具需要运行中的 Docker server 或本机 uv 环境"
-        ) from exc
+        raise ApiError(503, "数据工具需要运行中的 Docker server 或本机 uv 环境") from exc
     except subprocess.TimeoutExpired as exc:
         raise ApiError(504, "数据操作超时，请缩短时间范围后重试") from exc
 
@@ -1012,8 +1050,8 @@ class Handler(BaseHTTPRequestHandler):
             return {}
         try:
             return json.loads(self.rfile.read(length).decode("utf-8"))
-        except (ValueError, UnicodeDecodeError):
-            raise ApiError(400, "请求体不是合法 JSON")
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise ApiError(400, "请求体不是合法 JSON") from exc
 
     def send_file(self, path):
         try:
@@ -1104,6 +1142,7 @@ class Handler(BaseHTTPRequestHandler):
                     {
                         "sdkconfigExists": SDKCONFIG.exists(),
                         "values": read_sdkconfig_values(),
+                        "preflight": firmware_preflight(),
                     }
                 )
             else:
@@ -1169,10 +1208,8 @@ def main():
     print(f"IoTCmpt 配置面板已启动：http://127.0.0.1:{args.port}")
     print(f"Panel Token: {PANEL_TOKEN}")
     print("关闭此窗口（或按 Ctrl+C）即可停止面板。")
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         server.serve_forever()
-    except KeyboardInterrupt:
-        pass
 
 
 if __name__ == "__main__":

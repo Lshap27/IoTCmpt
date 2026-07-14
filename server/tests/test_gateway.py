@@ -16,6 +16,19 @@ from app.services.pose import PoseService
 from app.services.telemetry import fetch_history_bucketed, record_telemetry
 
 
+def mqtt_v2(body: dict, *, message_id: str) -> dict:
+    return {
+        "schema_version": "2.0",
+        "message_id": message_id,
+        "trace_id": f"trace-{message_id}",
+        "device_id": "esp32s3-001",
+        "occurred_at": "2026-07-15T00:00:00Z",
+        "boot_id": "boot-test",
+        "sequence": 1,
+        "payload": body,
+    }
+
+
 def test_health(client):
     response = client.get("/health")
     assert response.status_code == 200
@@ -202,7 +215,7 @@ def test_mqtt_malformed_telemetry_returns_error_envelope(client):
         envelope = ingest_mqtt_message(
             db,
             "devices/esp32s3-001/telemetry",
-            {"sensors": "not-an-object"},
+            mqtt_v2({"sensors": "not-an-object"}, message_id="malformed-telemetry"),
         )
     finally:
         db.close()
@@ -211,6 +224,20 @@ def test_mqtt_malformed_telemetry_returns_error_envelope(client):
     assert envelope.type == "system.error"
     assert envelope.device_id == "esp32s3-001"
     assert envelope.payload["topic"] == "devices/esp32s3-001/telemetry"
+
+
+def test_mqtt_legacy_payload_is_rejected(client):
+    from app.db.session import SessionLocal
+
+    with SessionLocal() as db:
+        envelope = ingest_mqtt_message(
+            db,
+            "devices/esp32s3-001/status",
+            {"status": "online"},
+        )
+    assert envelope is not None
+    assert envelope.type == "system.error"
+    assert envelope.payload["code"] == "invalid_mqtt_envelope"
 
 
 def test_mqtt_command_ack_updates_command_status(client):
@@ -222,12 +249,15 @@ def test_mqtt_command_ack_updates_command_status(client):
         envelope = ingest_mqtt_message(
             db,
             "devices/esp32s3-001/command_ack",
-            {
-                "command_id": command.command_id,
-                "status": "executed",
-                "message": "ok",
-                "executed_at": "2026-07-07T00:00:00Z",
-            },
+            mqtt_v2(
+                {
+                    "command_id": command.command_id,
+                    "status": "executed",
+                    "message": "ok",
+                    "executed_at": "2026-07-07T00:00:00Z",
+                },
+                message_id="ack-executed",
+            ),
         )
         updated = db.query(models.Command).filter(models.Command.command_id == command.command_id).one()
     finally:
@@ -246,18 +276,24 @@ def test_duplicate_and_out_of_order_ack_do_not_regress_terminal_command(client):
     db = SessionLocal()
     try:
         command = create_command(db, "esp32s3-001", "window.open", reason="manual")
-        terminal = {
-            "command_id": command.command_id,
-            "status": "executed",
-            "message": "ok",
-            "executed_at": "2026-07-07T00:00:00Z",
-        }
+        terminal = mqtt_v2(
+            {
+                "command_id": command.command_id,
+                "status": "executed",
+                "message": "ok",
+                "executed_at": "2026-07-07T00:00:00Z",
+            },
+            message_id="ack-terminal",
+        )
         ingest_mqtt_message(db, "devices/esp32s3-001/command_ack", terminal)
         ingest_mqtt_message(db, "devices/esp32s3-001/command_ack", terminal)
         ingest_mqtt_message(
             db,
             "devices/esp32s3-001/command_ack",
-            {**terminal, "status": "accepted"},
+            mqtt_v2(
+                {**terminal["payload"], "status": "accepted"},
+                message_id="ack-out-of-order",
+            ),
         )
         updated = db.query(models.Command).filter(models.Command.command_id == command.command_id).one()
         events = db.query(models.CommandEvent).filter(models.CommandEvent.command_id == command.command_id).all()
@@ -266,6 +302,41 @@ def test_duplicate_and_out_of_order_ack_do_not_regress_terminal_command(client):
 
     assert updated.status == "executed"
     assert len(events) == 1
+
+
+def test_late_ack_is_recorded_without_replacing_timeout(client):
+    from app.db.session import SessionLocal
+
+    with SessionLocal() as db:
+        command = create_command(db, "esp32s3-001", "window.open", reason="manual")
+        command.status = "timed_out"
+        command.error_code = "timeout"
+        db.commit()
+        envelope = ingest_mqtt_message(
+            db,
+            "devices/esp32s3-001/command_ack",
+            mqtt_v2(
+                {
+                    "command_id": command.command_id,
+                    "status": "executed",
+                    "message": "late but applied",
+                    "executed_at": "2026-07-07T00:00:10Z",
+                },
+                message_id="ack-late",
+            ),
+        )
+        db.refresh(command)
+        event = (
+            db.query(models.CommandEvent)
+            .filter(models.CommandEvent.command_id == command.command_id)
+            .order_by(models.CommandEvent.id.desc())
+            .first()
+        )
+    assert command.status == "timed_out"
+    assert envelope is not None
+    assert envelope.payload["status"] == "timed_out"
+    assert envelope.payload["late_ack_status"] == "executed"
+    assert event.detail["event"] == "late_device_ack"
 
 
 def test_command_http_broadcasts_websocket_event(client):
@@ -350,12 +421,15 @@ def test_voice_notification_uses_unified_outbox_and_tracks_ack(client):
         ingest_mqtt_message(
             db,
             "devices/esp32s3-001/command_ack",
-            {
-                "command_id": payload["voice_command_id"],
-                "status": "executed",
-                "message": "ok",
-                "executed_at": "2026-07-13T00:00:00Z",
-            },
+            mqtt_v2(
+                {
+                    "command_id": payload["voice_command_id"],
+                    "status": "executed",
+                    "message": "ok",
+                    "executed_at": "2026-07-13T00:00:00Z",
+                },
+                message_id="ack-voice",
+            ),
         )
     finally:
         db.close()
@@ -372,12 +446,18 @@ def test_smoke_event_is_deduplicated_and_acknowledged(client):
         first = ingest_mqtt_message(
             db,
             "devices/esp32s3-001/event",
-            {"type": "smoke.detected", "severity": "critical", "message": "smoke"},
+            mqtt_v2(
+                {"type": "smoke.detected", "severity": "critical", "message": "smoke"},
+                message_id="smoke-1",
+            ),
         )
         second = ingest_mqtt_message(
             db,
             "devices/esp32s3-001/event",
-            {"type": "smoke.detected", "severity": "critical", "message": "smoke"},
+            mqtt_v2(
+                {"type": "smoke.detected", "severity": "critical", "message": "smoke"},
+                message_id="smoke-2",
+            ),
         )
     finally:
         db.close()

@@ -21,17 +21,17 @@ esp_err_t command_from_name(const char *name, cloud_command_t *out_command) {
 
     command_clear(out_command);
 
-    if (strcmp(name, "window.open") == 0 || strcmp(name, "open") == 0) {
+    if (strcmp(name, "window.open") == 0) {
         out_command->type = CLOUD_COMMAND_WINDOW_OPEN;
-    } else if (strcmp(name, "window.close") == 0 || strcmp(name, "close") == 0) {
+    } else if (strcmp(name, "window.close") == 0) {
         out_command->type = CLOUD_COMMAND_WINDOW_CLOSE;
-    } else if (strcmp(name, "alarm.on") == 0 || strcmp(name, "alarm_on") == 0) {
+    } else if (strcmp(name, "alarm.on") == 0) {
         out_command->type = CLOUD_COMMAND_ALARM_ON;
-    } else if (strcmp(name, "alarm.off") == 0 || strcmp(name, "alarm_off") == 0) {
+    } else if (strcmp(name, "alarm.off") == 0) {
         out_command->type = CLOUD_COMMAND_ALARM_OFF;
-    } else if (strcmp(name, "led.on") == 0 || strcmp(name, "led_on") == 0) {
+    } else if (strcmp(name, "led.on") == 0) {
         out_command->type = CLOUD_COMMAND_LED_ON;
-    } else if (strcmp(name, "led.off") == 0 || strcmp(name, "led_off") == 0) {
+    } else if (strcmp(name, "led.off") == 0) {
         out_command->type = CLOUD_COMMAND_LED_OFF;
     } else if (strcmp(name, "control.set_priority") == 0) {
         out_command->type = CLOUD_COMMAND_CONTROL_SET_PRIORITY;

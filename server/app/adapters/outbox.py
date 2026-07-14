@@ -64,9 +64,11 @@ class OutboxDispatcher:
             await self.notifier.command_changed(command["device_id"], command)
         rows = await asyncio.to_thread(self._claim_pending)
         published = 0
-        for row_id, topic, payload, qos in rows:
+        for row_id, lease_token, topic, payload, qos in rows:
             ok = await self.mqtt.publish_json(topic, payload, qos=qos)
-            await asyncio.to_thread(self._record_attempt, row_id, ok)
+            updated_command = await asyncio.to_thread(self._record_attempt, row_id, lease_token, ok)
+            if updated_command is not None:
+                await self.notifier.command_changed(str(updated_command["device_id"]), updated_command)
             published += int(ok)
         return published
 
@@ -127,7 +129,7 @@ class OutboxDispatcher:
             db.commit()
         return changed
 
-    def _claim_pending(self) -> list[tuple[int, str, dict, int]]:
+    def _claim_pending(self) -> list[tuple[int, str, str, dict, int]]:
         now = utcnow()
         with self.session_factory() as db:
             query = (
@@ -151,15 +153,21 @@ class OutboxDispatcher:
             for row in rows:
                 row.status = "publishing"
                 row.lease_owner = self.owner
+                row.lease_token = str(uuid4())
                 row.lease_expires_at = now + timedelta(seconds=self.lease_seconds)
             db.commit()
-            return [(row.id, row.topic, row.payload, row.qos) for row in rows]
+            return [(row.id, row.lease_token or "", row.topic, row.payload, row.qos) for row in rows]
 
-    def _record_attempt(self, row_id: int, ok: bool) -> None:
+    def _record_attempt(self, row_id: int, lease_token: str, ok: bool) -> dict[str, object] | None:
         with self.session_factory() as db:
             row = db.get(models.OutboxMessage, row_id)
-            if row is None or row.status == "published" or row.lease_owner != self.owner:
-                return
+            if (
+                row is None
+                or row.status == "published"
+                or row.lease_owner != self.owner
+                or row.lease_token != lease_token
+            ):
+                return None
             row.attempts += 1
             command = db.query(models.Command).filter(models.Command.command_id == row.command_id).one()
             command.attempt_count = row.attempts
@@ -212,7 +220,20 @@ class OutboxDispatcher:
                     row.status = "retry"
                     row.last_error = "mqtt_unavailable"
                     row.next_attempt_at = utcnow() + timedelta(seconds=min(30, 2 ** min(row.attempts, 4)))
+                    db.add(
+                        models.TraceEvent(
+                            event_id=f"trace-{uuid4().hex[:20]}",
+                            trace_id=command.trace_id,
+                            device_id=command.device_id,
+                            component="outbox",
+                            event_type="outbox.retry_scheduled",
+                            status="retry",
+                            detail={"command_id": command.command_id, "attempt": row.attempts},
+                        )
+                    )
             row.lease_owner = None
+            row.lease_token = None
             row.lease_expires_at = None
             db.add_all([row, command])
             db.commit()
+            return serialize_v2_command(command)

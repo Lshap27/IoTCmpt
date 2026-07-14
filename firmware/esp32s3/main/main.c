@@ -3,6 +3,7 @@
 #include "app_config_defaults.h"
 #include "app_status.h"
 #include "camera_app.h"
+#include "config_preflight.h"
 #include "control_state.h"
 #include "display.h"
 #include "esp_camera.h"
@@ -19,10 +20,11 @@
 
 #include "esp_event.h"
 #include "esp_netif.h"
+#include "esp_netif_sntp.h"
 #include "esp_wifi.h"
+#include "firmware_behavior.generated.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
-#include "firmware_behavior.generated.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -111,6 +113,16 @@ static void status_set_cloud(app_status_link_t link) {
     }
 }
 
+static void status_set_wifi(app_status_link_t link) {
+    if (s_latest_mutex) {
+        xSemaphoreTake(s_latest_mutex, portMAX_DELAY);
+        s_status.wifi = link;
+        xSemaphoreGive(s_latest_mutex);
+    } else {
+        s_status.wifi = link;
+    }
+}
+
 static void status_set_command_result(esp_err_t result) {
     if (s_latest_mutex) {
         xSemaphoreTake(s_latest_mutex, portMAX_DELAY);
@@ -143,9 +155,12 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         ESP_LOGW(TAG, "Wi-Fi disconnected, retrying");
+        xEventGroupClearBits(s_wifi_events, WIFI_CONNECTED_BIT);
+        status_set_wifi(APP_STATUS_LINK_DEGRADED);
         esp_wifi_connect();
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ESP_LOGI(TAG, "Wi-Fi connected");
+        status_set_wifi(APP_STATUS_LINK_READY);
         xEventGroupSetBits(s_wifi_events, WIFI_CONNECTED_BIT);
     }
 }
@@ -188,7 +203,15 @@ static esp_err_t wifi_start(void) {
     ESP_ERROR_CHECK(esp_wifi_start());
 
     EventBits_t bits = xEventGroupWaitBits(s_wifi_events, WIFI_CONNECTED_BIT, pdFALSE, pdTRUE, pdMS_TO_TICKS(15000));
-    return (bits & WIFI_CONNECTED_BIT) ? ESP_OK : ESP_ERR_TIMEOUT;
+    if ((bits & WIFI_CONNECTED_BIT) == 0) {
+        return ESP_ERR_TIMEOUT;
+    }
+    esp_sntp_config_t sntp = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+    esp_err_t sntp_result = esp_netif_sntp_init(&sntp);
+    if (sntp_result != ESP_OK) {
+        ESP_LOGW(TAG, "SNTP initialization failed: %s", esp_err_to_name(sntp_result));
+    }
+    return ESP_OK;
 }
 
 static void telemetry_task(void *arg) {
@@ -300,10 +323,15 @@ static void actuator_task(void *arg) {
             }
         }
         if (has_command) {
-            const char *ack_status = command_result == ESP_OK                  ? "executed"
-                                     : command_result == ESP_ERR_NOT_SUPPORTED ? "rejected"
-                                                                               : "failed";
-            mqtt_app_publish_command_ack(&envelope, ack_status, esp_err_to_name(command_result));
+            const bool rejected = command_result == ESP_ERR_NOT_SUPPORTED || command_result == ESP_ERR_INVALID_ARG ||
+                                  command_result == ESP_ERR_INVALID_STATE || command_result == ESP_ERR_INVALID_RESPONSE;
+            const char *ack_status = command_result == ESP_OK ? "executed" : rejected ? "rejected" : "failed";
+            const char *message = command_result == ESP_ERR_NOT_SUPPORTED      ? "unsupported_command"
+                                  : command_result == ESP_ERR_INVALID_ARG      ? "invalid_parameter"
+                                  : command_result == ESP_ERR_INVALID_STATE    ? "policy_denied"
+                                  : command_result == ESP_ERR_INVALID_RESPONSE ? "safety_interlock"
+                                                                               : esp_err_to_name(command_result);
+            mqtt_app_publish_command_ack(&envelope, ack_status, message);
         }
 
         vTaskDelay(pdMS_TO_TICKS(AIOT_COMMAND_EXECUTION_PERIOD_MS));
@@ -382,6 +410,10 @@ void app_main(void) {
     s_status.cloud = APP_STATUS_LINK_DISABLED;
 
     ESP_ERROR_CHECK(app_config_load(&s_config));
+    if (config_preflight_validate() != ESP_OK) {
+        ESP_LOGE(TAG, "firmware startup stopped by hardware configuration preflight");
+        return;
+    }
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {

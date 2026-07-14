@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -110,6 +110,15 @@ class Settings(BaseSettings):
     @classmethod
     def trim_base_url(cls, value: str) -> str:
         return value.rstrip("/")
+
+    @model_validator(mode="after")
+    def validate_mcp_tokens(self) -> Settings:
+        if self.mcp_enabled:
+            if not self.mcp_read_token or not self.mcp_control_token:
+                raise ValueError("external MCP requires both read and control tokens")
+            if self.mcp_read_token == self.mcp_control_token:
+                raise ValueError("MCP read and control tokens must be different")
+        return self
 
 
 @lru_cache

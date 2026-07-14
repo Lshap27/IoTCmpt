@@ -2010,6 +2010,20 @@ export type AnalyzeLatestPoseResponses = {
 
 export type AnalyzeLatestPoseResponse = AnalyzeLatestPoseResponses[keyof AnalyzeLatestPoseResponses];
 
+export type GetDiagnosticsOverviewData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/diagnostics/overview';
+};
+
+export type GetDiagnosticsOverviewResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type GetTraceTimelineData = {
     body?: never;
     path: {

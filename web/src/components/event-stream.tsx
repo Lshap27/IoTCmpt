@@ -36,7 +36,7 @@ function num(value: unknown): number | null {
 
 function readableAckMessage(message: string, status: string): string {
   if (!message) return status === "executed" ? "设备已完成执行并回传确认" : "设备未提供详细原因";
-  if (message.includes("applied by simulator")) return "虚拟设备已完成执行并回传确认";
+  if (message.includes("applied by simulator")) return "固件模拟器已完成执行并回传确认";
   if (message.includes("manual window override")) return "窗户处于手动锁定，自动指令未执行";
   if (message.includes("manual LED override")) return "LED 处于手动锁定，自动指令未执行";
   if (message.includes("no active smoke alarm")) return "当前没有需要静音的烟雾报警";

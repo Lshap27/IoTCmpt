@@ -45,8 +45,12 @@ def command_envelope(command_id: str, command_type: str, **payload_overrides):
     }
     return {
         "schema_version": "2.0",
+        "message_id": f"message-{command_id}",
         "device_id": "esp32s3-test",
         "trace_id": f"trace-{command_id}",
+        "occurred_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "boot_id": "gateway-test",
+        "sequence": 1,
         "payload": payload,
     }
 
@@ -135,10 +139,13 @@ def test_command_ack_is_accepted_before_terminal_and_duplicate_replays(tmp_path)
         envelope = command_envelope("c1", "window.open")
         client = FakeClient([envelope])
         await simulator._command_receive_loop(client)
-        executor = asyncio.create_task(simulator._command_execute_loop(client))
+        executor = asyncio.create_task(simulator._command_execute_loop())
+        ack_publisher = asyncio.create_task(simulator._ack_publish_loop(client))
         await asyncio.wait_for(simulator.command_queue.join(), timeout=2)
+        await asyncio.wait_for(simulator.ack_queue.join(), timeout=2)
         executor.cancel()
-        await asyncio.gather(executor, return_exceptions=True)
+        ack_publisher.cancel()
+        await asyncio.gather(executor, ack_publisher, return_exceptions=True)
 
         statuses = [item[1]["payload"]["status"] for item in client.published]
         assert statuses == ["accepted", "executed"]
@@ -146,6 +153,10 @@ def test_command_ack_is_accepted_before_terminal_and_duplicate_replays(tmp_path)
 
         replay = FakeClient([envelope])
         await simulator._command_receive_loop(replay)
+        replay_publisher = asyncio.create_task(simulator._ack_publish_loop(replay))
+        await asyncio.wait_for(simulator.ack_queue.join(), timeout=2)
+        replay_publisher.cancel()
+        await asyncio.gather(replay_publisher, return_exceptions=True)
         assert [item[1]["payload"]["status"] for item in replay.published] == ["executed"]
         assert simulator.model.command_count == 1
 
@@ -159,6 +170,10 @@ def test_command_queue_has_firmware_capacity(tmp_path):
             await simulator.command_queue.put((command_envelope(f"q{index}", "led.on")["payload"], "trace"))
         client = FakeClient([command_envelope("overflow", "led.on")])
         await simulator._command_receive_loop(client)
+        ack_publisher = asyncio.create_task(simulator._ack_publish_loop(client))
+        await asyncio.wait_for(simulator.ack_queue.join(), timeout=2)
+        ack_publisher.cancel()
+        await asyncio.gather(ack_publisher, return_exceptions=True)
         ack = client.published[0][1]["payload"]
         assert ack["status"] == "rejected"
         assert ack["error_code"] == "device_rejected"

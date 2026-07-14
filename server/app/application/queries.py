@@ -24,6 +24,7 @@ class DeviceQueryApplicationService:
         limit: int,
         start_at: datetime | None = None,
         end_at: datetime | None = None,
+        bucket_seconds: int | None = None,
     ) -> list[dict[str, Any]]:
         return await asyncio.to_thread(
             self.repository.history,
@@ -31,6 +32,7 @@ class DeviceQueryApplicationService:
             limit=limit,
             start_at=start_at,
             end_at=end_at,
+            bucket_seconds=bucket_seconds,
         )
 
     async def events(self, device_id: str, *, limit: int) -> list[dict[str, Any]]:
@@ -47,3 +49,9 @@ class DeviceQueryApplicationService:
 
     async def link_notification_command(self, notification_id: int, command_id: str) -> dict[str, Any]:
         return await asyncio.to_thread(self.repository.link_notification_command, notification_id, command_id)
+
+    async def diagnostics_overview(self) -> dict[str, Any]:
+        return await asyncio.to_thread(self.repository.diagnostics_overview)
+
+    async def trace_timeline(self, trace_id: str) -> dict[str, Any]:
+        return await asyncio.to_thread(self.repository.trace_timeline, trace_id)

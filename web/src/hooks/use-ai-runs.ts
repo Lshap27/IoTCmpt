@@ -3,21 +3,10 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AiHealthReport, AiRunOut, ReportPeriod } from "@/lib/api";
-import { cancelDeviceAiRun, fetchAiRun, fetchAiRuns, startAiRun } from "@/lib/api";
+import { cancelDeviceAiRun, fetchAiRuns, startAiRun } from "@/lib/api";
 import { deviceKeys } from "@/lib/query-keys";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled", "skipped"]);
-
-async function waitForRun(deviceId: string, initial: AiRunOut): Promise<AiRunOut> {
-  let current = initial;
-  for (let attempt = 0; attempt < 120 && !TERMINAL.has(current.status); attempt += 1) {
-    await new Promise((resolve) => window.setTimeout(resolve, 1000));
-    current = await fetchAiRun(deviceId, current.run_id);
-  }
-  if (!TERMINAL.has(current.status)) throw new Error("AI 任务等待超时，可稍后按 run_id 查询");
-  if (current.status === "failed") throw new Error(current.error_message || "AI 任务失败");
-  return current;
-}
 
 export function useAiRuns(deviceId: string) {
   const queryClient = useQueryClient();
@@ -32,8 +21,7 @@ export function useAiRuns(deviceId: string) {
   });
 
   const decision = useMutation({
-    mutationFn: async (kind: "decision" | "vision") =>
-      waitForRun(deviceId, await startAiRun(deviceId, { kind, trigger: "manual" })),
+    mutationFn: (kind: "decision" | "vision") => startAiRun(deviceId, { kind, trigger: "manual" }),
     onMutate: () => setError(""),
     onSuccess: (run) => {
       setDecisionRun(run);
@@ -42,11 +30,10 @@ export function useAiRuns(deviceId: string) {
     onError: (reason) => setError(reason instanceof Error ? reason.message : "AI 分析失败"),
   });
   const report = useMutation({
-    mutationFn: async (period: ReportPeriod) =>
-      waitForRun(deviceId, await startAiRun(deviceId, { kind: "report", trigger: "manual", period })),
+    mutationFn: (period: ReportPeriod) => startAiRun(deviceId, { kind: "report", trigger: "manual", period }),
     onMutate: () => setError(""),
     onSuccess: (run) => {
-      setHealthReport(run.output as AiHealthReport);
+      if (run.output) setHealthReport(run.output as AiHealthReport);
       void queryClient.invalidateQueries({ queryKey: deviceKeys.ai(deviceId) });
     },
     onError: (reason) => setError(reason instanceof Error ? reason.message : "AI 报告生成失败"),
@@ -61,14 +48,19 @@ export function useAiRuns(deviceId: string) {
   const latestDecision =
     decisionRun ?? runs.find((run) => run.kind === "decision" || run.kind === "patrol") ?? null;
   const latestReport = runs.find((run) => run.kind === "report" && run.status === "succeeded");
+  const activeDecision = runs.find(
+    (run) => (run.kind === "decision" || run.kind === "patrol") && !TERMINAL.has(run.status),
+  );
+  const activeVision = runs.find((run) => run.kind === "vision" && !TERMINAL.has(run.status));
+  const activeReport = runs.find((run) => run.kind === "report" && !TERMINAL.has(run.status));
 
   return {
     runs,
     decisionRun: latestDecision,
     healthReport: healthReport ?? (latestReport?.output as AiHealthReport | undefined) ?? null,
-    analyzing: decision.isPending ? "manual" : null,
-    imageAnalyzing: decision.isPending && decision.variables === "vision",
-    reportGenerating: report.isPending,
+    analyzing: decision.isPending || activeDecision ? "manual" : null,
+    imageAnalyzing: (decision.isPending && decision.variables === "vision") || Boolean(activeVision),
+    reportGenerating: report.isPending || Boolean(activeReport),
     error: error || (runsQuery.error instanceof Error ? runsQuery.error.message : ""),
     triggerAnalysis: useCallback(() => decision.mutate("decision"), [decision]),
     triggerImageAnalysis: useCallback(() => decision.mutate("vision"), [decision]),

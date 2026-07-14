@@ -244,6 +244,33 @@ export async function fetchReadiness(): Promise<{
   return response.json();
 }
 
+export type DiagnosticsOverview = {
+  ai_runs: Record<string, number>;
+  outbox: Record<string, number>;
+  realtime: Record<string, number>;
+  workers: Array<{
+    instance_id: string;
+    role: string;
+    heartbeat_at: string;
+    healthy: boolean;
+    age_seconds: number;
+  }>;
+  capabilities: Array<{
+    device_id: string;
+    firmware_version: string;
+    hardware_model: string;
+    command_count: number;
+    seen_at: string;
+  }>;
+  mcp: { external_enabled: boolean; internal_configured: boolean };
+};
+
+export async function fetchDiagnosticsOverview(): Promise<DiagnosticsOverview> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/diagnostics/overview`, { cache: "no-store" });
+  if (!response.ok) throw new Error("无法读取诊断概览");
+  return response.json();
+}
+
 export async function fetchAutomationPolicy(deviceId: string): Promise<AutomationPolicyOutT> {
   const { data } = await getAutomationPolicy({
     path: { device_id: deviceId },

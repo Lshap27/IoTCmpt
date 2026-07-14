@@ -83,6 +83,25 @@ def record_command_ack(db: Session, payload: CommandAckIn) -> models.Command | N
     command = db.query(models.Command).filter(models.Command.command_id == payload.command_id).one_or_none()
     if command is None:
         return None
+    if command.status == "timed_out" and payload.status in {"executed", "rejected", "failed"}:
+        db.add(
+            models.CommandEvent(
+                command_id=command.command_id,
+                trace_id=payload.trace_id or command.trace_id,
+                from_status="timed_out",
+                to_status="timed_out",
+                error_code=command.error_code,
+                detail={
+                    "event": "late_device_ack",
+                    "late_ack_status": payload.status,
+                    "late_error_code": payload.error_code,
+                    "message": payload.message,
+                    "reported_state": payload.reported_state,
+                },
+            )
+        )
+        db.commit()
+        return command
     current_rank = COMMAND_STATUS_ORDER.get(command.status, -1)
     incoming_rank = COMMAND_STATUS_ORDER.get(payload.status, -1)
     if incoming_rank <= current_rank:

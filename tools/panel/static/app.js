@@ -614,10 +614,20 @@ async function loadFirmwareConfig() {
       const el = $("#fw_" + key);
       if (el && v[key] !== undefined) el.checked = !!v[key];
     }
+    renderFirmwarePreflight(data.preflight);
     syncFirmwareFields();
   } catch (_) {}
 }
 loadFirmwareConfig();
+
+function renderFirmwarePreflight(result) {
+  const root = $("#firmwarePreflight");
+  if (!root || !result) return;
+  const summary = `${result.board}；PSRAM=${result.psram}；原生 USB=${result.nativeUsb ? "开启" : "关闭"}`;
+  const details = [...(result.errors || []), ...(result.warnings || [])];
+  root.className = result.ok ? "notice" : "notice danger";
+  root.textContent = details.length ? `${summary}。${details.join("；")}` : `${summary}。预检通过。`;
+}
 
 function syncFirmwareFields() {
   setModeFields(
@@ -691,6 +701,7 @@ $("#btnSaveFw").addEventListener("click", async () => {
   }
   try {
     const result = await post("/api/config/firmware", { values });
+    renderFirmwarePreflight(result.preflight);
     msg.className = "msg ok";
     msg.textContent = "✔ " + (result.message || "已写入");
   } catch (e) {

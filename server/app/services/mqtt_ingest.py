@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.adapters.persistence import serialize_v2_command
 from app.core.timeutil import iso_utc
 from app.db import models
 from app.schemas import CommandAckIn, TelemetryIn, WebSocketEnvelope
@@ -26,13 +28,55 @@ def ingest_mqtt_message(db: Session, topic: str, payload: dict) -> WebSocketEnve
 
     device_id, channel = parsed
     trace_id = payload.get("trace_id")
-    body = payload.get("payload") if payload.get("schema_version") == "2.0" else payload
-    if not isinstance(body, dict):
-        body = payload
+    required = {"message_id", "device_id", "occurred_at", "boot_id", "sequence", "payload"}
+    if payload.get("schema_version") != "2.0" or not required.issubset(payload):
+        return WebSocketEnvelope(
+            type="system.error",
+            device_id=device_id,
+            trace_id=trace_id,
+            payload={"code": "invalid_mqtt_envelope", "message": "MQTT v2 envelope required", "topic": topic},
+        )
+    if payload.get("device_id") != device_id or not isinstance(payload.get("payload"), dict):
+        return WebSocketEnvelope(
+            type="system.error",
+            device_id=device_id,
+            trace_id=trace_id,
+            payload={"code": "invalid_mqtt_envelope", "message": "device_id or payload mismatch", "topic": topic},
+        )
+    message_id = str(payload.get("message_id") or "")
+    if not message_id:
+        return WebSocketEnvelope(
+            type="system.error",
+            device_id=device_id,
+            trace_id=trace_id,
+            payload={"code": "invalid_mqtt_envelope", "message": "message_id is required", "topic": topic},
+        )
+    body = payload["payload"]
     envelope_payload = body
     event_type = channel
 
     try:
+        ensure_device(db, device_id)
+        if (
+            db.query(models.MqttInboxMessage)
+            .filter(
+                models.MqttInboxMessage.device_id == device_id,
+                models.MqttInboxMessage.topic == topic,
+                models.MqttInboxMessage.message_id == message_id,
+            )
+            .one_or_none()
+            is not None
+        ):
+            return None
+        db.add(
+            models.MqttInboxMessage(
+                device_id=device_id,
+                topic=topic,
+                message_id=message_id,
+                trace_id=str(trace_id) if trace_id else None,
+            )
+        )
+        db.flush()
         if channel == "status":
             event_type = "device.status_changed"
             status = str(body.get("status") or body.get("value") or "unknown")
@@ -49,7 +93,15 @@ def ingest_mqtt_message(db: Session, topic: str, payload: dict) -> WebSocketEnve
         elif channel == "command_ack":
             ack = CommandAckIn.model_validate({**body, "trace_id": trace_id, "device_id": device_id})
             command = record_command_ack(db, ack)
-            envelope_payload = body | {"known_command": command is not None}
+            envelope_payload = (
+                serialize_v2_command(command)
+                | {
+                    "known_command": True,
+                    "late_ack_status": body.get("status") if command.status == "timed_out" else None,
+                }
+                if command is not None
+                else body | {"known_command": False}
+            )
             event_type = "command.status_changed"
         elif channel == "capabilities":
             ensure_device(db, device_id)
@@ -78,11 +130,16 @@ def ingest_mqtt_message(db: Session, topic: str, payload: dict) -> WebSocketEnve
             event_type = "perception.updated"
         else:
             return None
+    except IntegrityError:
+        db.rollback()
+        return None
     except Exception as exc:
+        db.rollback()
         event_type = "system.error"
-        envelope_payload = {"code": "mqtt_ingest_failed", "message": str(exc), "topic": topic, "payload": payload}
+        envelope_payload = {"code": "mqtt_ingest_failed", "message": str(exc), "topic": topic}
 
     if trace_id:
+        ensure_device(db, device_id)
         db.add(
             models.TraceEvent(
                 event_id=f"trace-{uuid4().hex[:20]}",

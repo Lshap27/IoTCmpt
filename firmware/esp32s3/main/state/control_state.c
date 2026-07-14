@@ -2,10 +2,10 @@
 
 #include <string.h>
 
+#include "firmware_behavior.generated.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
-#include "firmware_behavior.generated.h"
 #include "nvs.h"
 
 static control_state_t s_state;

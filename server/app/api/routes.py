@@ -269,30 +269,25 @@ async def cancel_ai_run(
 
 
 @router.get("/diagnostics/traces/{trace_id}", response_model=TraceTimelineOut)
-def get_trace_timeline(trace_id: str, db: Session = Depends(get_db)):
-    events = (
-        db.query(models.TraceEvent)
-        .filter(models.TraceEvent.trace_id == trace_id)
-        .order_by(
-            models.TraceEvent.occurred_at,
-            models.TraceEvent.id,
-        )
-    )
+async def get_trace_timeline(
+    trace_id: str,
+    queries: DeviceQueryApplicationService = Depends(get_device_queries),
+):
+    return await queries.trace_timeline(trace_id)
+
+
+@router.get("/diagnostics/overview")
+async def get_diagnostics_overview(
+    queries: DeviceQueryApplicationService = Depends(get_device_queries),
+):
+    overview = await queries.diagnostics_overview()
+    settings = get_settings()
     return {
-        "trace_id": trace_id,
-        "events": [
-            {
-                "event_id": event.event_id,
-                "trace_id": event.trace_id,
-                "device_id": event.device_id,
-                "component": event.component,
-                "event_type": event.event_type,
-                "status": event.status,
-                "detail": event.detail or {},
-                "occurred_at": iso_utc(event.occurred_at),
-            }
-            for event in events.all()
-        ],
+        **overview,
+        "mcp": {
+            "external_enabled": settings.mcp_enabled,
+            "internal_configured": bool(settings.mcp_internal_token),
+        },
     }
 
 

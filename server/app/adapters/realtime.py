@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -10,6 +11,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db import models
 from app.schemas import WebSocketEnvelope
 from app.services.websocket import manager
+
+LOGGER = logging.getLogger(__name__)
 
 
 def utcnow() -> datetime:
@@ -54,16 +57,24 @@ class RealtimeRelay:
 
     async def _run(self) -> None:
         while True:
-            rows = await asyncio.to_thread(self._claim)
-            for row in rows:
-                envelope = WebSocketEnvelope(
-                    type=row["type"],
-                    device_id=row["device_id"],
-                    trace_id=row["trace_id"],
-                    payload=row["payload"],
-                )
-                await manager.broadcast(row["device_id"], envelope.model_dump(mode="json"))
-                await asyncio.to_thread(self._finish, row["id"])
+            rows: list[dict] = []
+            try:
+                rows = await asyncio.to_thread(self._claim)
+                for row in rows:
+                    envelope = WebSocketEnvelope(
+                        event_id=row["event_id"],
+                        type=row["type"],
+                        device_id=row["device_id"],
+                        trace_id=row["trace_id"],
+                        occurred_at=row["created_at"],
+                        payload=row["payload"],
+                    )
+                    await manager.broadcast(row["device_id"], envelope.model_dump(mode="json"))
+                    await asyncio.to_thread(self._finish, row["id"], row["lease_token"])
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                LOGGER.exception("realtime relay iteration failed")
             await asyncio.sleep(0.2 if rows else 0.5)
 
     def _claim(self) -> list[dict]:
@@ -86,27 +97,32 @@ class RealtimeRelay:
                 row.status = "delivering"
                 row.attempts += 1
                 row.lease_owner = self.owner
+                row.lease_token = str(uuid4())
                 row.lease_expires_at = now + timedelta(seconds=self.lease_seconds)
                 result.append(
                     {
                         "id": row.id,
+                        "event_id": row.event_id,
                         "type": row.type,
                         "device_id": row.device_id,
                         "trace_id": row.trace_id,
                         "payload": row.payload,
+                        "created_at": row.created_at,
+                        "lease_token": row.lease_token,
                     }
                 )
             db.commit()
             return result
 
-    def _finish(self, row_id: int) -> None:
+    def _finish(self, row_id: int, lease_token: str) -> None:
         with self.session_factory() as db:
             row = db.get(models.RealtimeEvent, row_id)
-            if row is None or row.lease_owner != self.owner:
+            if row is None or row.lease_owner != self.owner or row.lease_token != lease_token:
                 return
             row.status = "delivered"
             row.delivered_at = utcnow()
             row.lease_owner = None
+            row.lease_token = None
             row.lease_expires_at = None
             if row.trace_id:
                 db.add(

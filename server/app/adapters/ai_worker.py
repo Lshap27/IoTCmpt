@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -10,7 +11,7 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.adapters.job_store import RunCancelled, SqlAlchemyJobStore
+from app.adapters.job_store import RunCancelled, RunLeaseLost, SqlAlchemyJobStore
 from app.adapters.mcp_client import McpToolClient
 from app.core.config import Settings
 from app.db import models
@@ -72,7 +73,9 @@ class AiRunWorker:
                 await asyncio.sleep(self.settings.ai_worker_poll_seconds)
 
     async def execute(self, run: dict[str, Any]) -> None:
-        heartbeat = asyncio.create_task(self._renew_lease(run["run_id"]), name=f"lease-{run['run_id']}")
+        heartbeat = asyncio.create_task(
+            self._renew_lease(run["run_id"], run["lease_token"]), name=f"lease-{run['run_id']}"
+        )
         try:
             if run["kind"] == "report":
                 output = await self._execute_report(run)
@@ -83,21 +86,24 @@ class AiRunWorker:
                 run["run_id"],
                 output,
                 str(output.get("model") or self.settings.llm_model),
+                run["lease_token"],
             )
         except RunCancelled:
             LOGGER.info("AI run cancelled: %s", run["run_id"])
+        except RunLeaseLost:
+            LOGGER.warning("AI run lease lost; stale worker stopped: %s", run["run_id"])
         except Exception as exc:
             LOGGER.exception("AI run failed: %s", run["run_id"])
-            await asyncio.to_thread(self.store.fail, run["run_id"], exc)
+            await asyncio.to_thread(self.store.fail, run["run_id"], exc, run["lease_token"])
         finally:
             heartbeat.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await heartbeat
 
-    async def _renew_lease(self, run_id: str) -> None:
+    async def _renew_lease(self, run_id: str, lease_token: str) -> None:
         while True:
             await asyncio.sleep(self.settings.ai_worker_heartbeat_seconds)
-            renewed = await asyncio.to_thread(self.store.renew, run_id)
+            renewed = await asyncio.to_thread(self.store.renew, run_id, lease_token)
             await asyncio.to_thread(self.store.heartbeat_instance)
             if not renewed:
                 return
@@ -110,13 +116,13 @@ class AiRunWorker:
         start = datetime.now(UTC) - durations[period]
         history = await self._call_tool(
             run,
-            f"call-{uuid4().hex[:16]}",
+            self._call_id(run, "report-history"),
             "device_get_history",
             {"device_id": run["device_id"], "limit": 2000, "start_at": start.isoformat()},
         )
         events = await self._call_tool(
             run,
-            f"call-{uuid4().hex[:16]}",
+            self._call_id(run, "report-events"),
             "device_list_events",
             {"device_id": run["device_id"], "limit": 500},
         )
@@ -138,7 +144,6 @@ class AiRunWorker:
             "metrics": context["metrics"],
             **result,
         }
-        await asyncio.to_thread(self.store.persist_report, run, period, output)
         return output
 
     @staticmethod
@@ -189,7 +194,7 @@ class AiRunWorker:
     async def _execute_tool_run(self, run: dict[str, Any]) -> dict[str, Any]:
         snapshot_result = await self._call_tool(
             run,
-            f"call-{uuid4().hex[:16]}",
+            self._call_id(run, "snapshot"),
             "device_get_snapshot",
             {"device_id": run["device_id"]},
         )
@@ -214,6 +219,9 @@ class AiRunWorker:
         }
         if command is None:
             return output
+        if run["kind"] not in {"decision", "patrol"}:
+            output["policy"] = {"status": "read_only_run", "command": command.type}
+            return output
         if command.type not in AI_COMMAND_NAMES:
             output["policy"] = {"status": "denied", "command": command.type}
             return output
@@ -222,10 +230,10 @@ class AiRunWorker:
             "command_type": command.type,
             "parameter": command.parameter,
             "reason": command.reason,
-            "idempotency_key": f"{run['run_id']}:{command.type}",
+            "idempotency_key": f"{run['run_id']}:{self._call_id(run, 'mock-command')}",
         }
         await self._transition(run, "calling_tool")
-        result = await self._call_tool(run, f"call-{uuid4().hex[:16]}", "device_execute_command", arguments)
+        result = await self._call_tool(run, self._call_id(run, "mock-command"), "device_execute_command", arguments)
         output["action"] = result
         return output
 
@@ -251,9 +259,11 @@ class AiRunWorker:
         ]
         total_calls = 0
         async with self.mcp.session(run["trace_id"]) as session:
+            await asyncio.to_thread(self.store.ensure_owned, run["run_id"], run["lease_token"])
             listed = await session.list_tools()
-            tools = self.mcp.openai_tools(listed.tools, allow_control=True)
-            for _ in range(self.settings.ai_tool_max_rounds):
+            allow_control = run["kind"] in {"decision", "patrol"}
+            tools = self.mcp.openai_tools(listed.tools, allow_control=allow_control)
+            for round_index in range(self.settings.ai_tool_max_rounds):
                 await self._transition(run, "waiting_model")
                 assistant = await self.llm.complete_with_tools(messages, tools)
                 messages.append(assistant)
@@ -265,7 +275,7 @@ class AiRunWorker:
                         "model": self.settings.llm_model,
                         "tool_call_count": total_calls,
                     }
-                for call in calls:
+                for call_index, call in enumerate(calls):
                     total_calls += 1
                     if total_calls > self.settings.ai_tool_max_calls:
                         raise RuntimeError("AI tool call limit exceeded")
@@ -278,13 +288,18 @@ class AiRunWorker:
                         raise ValueError("tool arguments must be an object")
                     if name != "device_list":
                         arguments["device_id"] = run["device_id"]
-                    call_id = str(call.get("id") or f"call-{uuid4().hex[:16]}")
+                    model_call_id = str(call.get("id") or self._call_id(run, f"model-{round_index}-{call_index}"))
+                    call_id = self._call_id(run, f"tool-{round_index}-{call_index}")
+                    if name == "device_execute_command":
+                        if not allow_control:
+                            raise PermissionError(f"{run['kind']} runs cannot execute commands")
+                        arguments["idempotency_key"] = f"{run['run_id']}:{call_id}"
                     await self._transition(run, "calling_tool")
                     result = await self._call_tool_with_session(run, session, call_id, name, arguments)
                     messages.append(
                         {
                             "role": "tool",
-                            "tool_call_id": call_id,
+                            "tool_call_id": model_call_id,
                             "content": json.dumps(result, ensure_ascii=False, default=str),
                         }
                     )
@@ -310,14 +325,16 @@ class AiRunWorker:
     ) -> dict[str, Any]:
         await asyncio.to_thread(self.store.tool_started, run, call_id, name, arguments)
         try:
+            await asyncio.to_thread(self.store.ensure_owned, run["run_id"], run["lease_token"])
             raw = await session.call_tool(name, arguments)
             result = self.mcp.result_payload(raw)
         except Exception as exc:
-            await asyncio.to_thread(self.store.tool_finished, call_id, None, exc)
+            with contextlib.suppress(RunLeaseLost):
+                await asyncio.to_thread(self.store.tool_finished, run, call_id, None, exc)
             raise
         if name == "device_execute_command" and result.get("ok"):
             result = await self._wait_for_command(run, session, result)
-        await asyncio.to_thread(self.store.tool_finished, call_id, result, None)
+        await asyncio.to_thread(self.store.tool_finished, run, call_id, result, None)
         return result
 
     async def _wait_for_command(self, run: dict[str, Any], session: Any, result: dict[str, Any]) -> dict[str, Any]:
@@ -330,6 +347,7 @@ class AiRunWorker:
         terminal = {"executed", "rejected", "failed", "expired", "timed_out"}
         while asyncio.get_running_loop().time() < deadline:
             await asyncio.sleep(0.5)
+            await asyncio.to_thread(self.store.ensure_owned, run["run_id"], run["lease_token"])
             raw = await session.call_tool(
                 "device_get_command",
                 {"device_id": run["device_id"], "command_id": command_id},
@@ -345,7 +363,12 @@ class AiRunWorker:
         }
 
     async def _transition(self, run: dict[str, Any], status: str) -> None:
-        await asyncio.to_thread(self.store.transition, run["run_id"], status)
+        await asyncio.to_thread(self.store.transition, run["run_id"], status, run["lease_token"])
+
+    @staticmethod
+    def _call_id(run: dict[str, Any], label: str) -> str:
+        digest = hashlib.sha256(f"{run['run_id']}:{label}".encode()).hexdigest()[:24]
+        return f"call-{digest}"
 
 
 class PatrolScheduler:

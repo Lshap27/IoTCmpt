@@ -212,13 +212,18 @@ esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *s
 
     /* 本地融合规则只在自动优先模式下负责开窗；空气恢复后保持当前状态，等待用户关窗。 */
     bool target_open = local.window_open;
-    if (local.priority == CONTROL_PRIORITY_AUTO_FIRST && state->recommend_open_window) {
+    if (local.priority == CONTROL_PRIORITY_MANUAL_FIRST && local.manual_window_override) {
+        target_open = local.manual_open;
+    } else if (local.priority == CONTROL_PRIORITY_AUTO_FIRST && state->recommend_open_window) {
         target_open = true;
     }
 
     if (command) {
         switch (command->type) {
         case CLOUD_COMMAND_WINDOW_OPEN:
+            if (!CONFIG_APP_ACTUATOR_ENABLED) {
+                return ESP_ERR_NOT_SUPPORTED;
+            }
             if (command->source != CLOUD_COMMAND_SOURCE_FRONTEND && !control_state_is_automatic_source_allowed(false)) {
                 return ESP_ERR_INVALID_STATE;
             }
@@ -226,6 +231,12 @@ esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *s
             control_state_set_manual_window(command->source == CLOUD_COMMAND_SOURCE_FRONTEND, true);
             break;
         case CLOUD_COMMAND_WINDOW_CLOSE:
+            if (!CONFIG_APP_ACTUATOR_ENABLED) {
+                return ESP_ERR_NOT_SUPPORTED;
+            }
+            if ((local.alarm_sources & CONTROL_ALARM_SMOKE) != 0) {
+                return ESP_ERR_INVALID_RESPONSE;
+            }
             if (command->source != CLOUD_COMMAND_SOURCE_FRONTEND && !control_state_is_automatic_source_allowed(false)) {
                 return ESP_ERR_INVALID_STATE;
             }
@@ -233,14 +244,14 @@ esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *s
             control_state_set_manual_window(command->source == CLOUD_COMMAND_SOURCE_FRONTEND, false);
             break;
         case CLOUD_COMMAND_ALARM_ON:
-            if (!s_actuator_ready) {
-                return ESP_ERR_INVALID_STATE;
+            if (!CONFIG_APP_ACTUATOR_ENABLED) {
+                return ESP_ERR_NOT_SUPPORTED;
             }
             control_state_set_alarm_source(CONTROL_ALARM_COMMAND, true);
             break;
         case CLOUD_COMMAND_ALARM_OFF:
-            if (!s_actuator_ready) {
-                return ESP_ERR_INVALID_STATE;
+            if (!CONFIG_APP_ACTUATOR_ENABLED) {
+                return ESP_ERR_NOT_SUPPORTED;
             }
             control_state_set_alarm_source(CONTROL_ALARM_COMMAND, false);
             break;

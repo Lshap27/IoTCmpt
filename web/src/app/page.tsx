@@ -95,7 +95,7 @@ export default function Dashboard() {
           run={live.decisionRun}
           runs={live.aiRuns}
           policy={live.automationPolicy}
-          onToggleAutopilot={live.toggleAutopilot}
+          onToggleAutomation={live.toggleAutomationPolicy}
           onUpdatePolicy={live.updatePolicy}
           onAnalyze={live.triggerAnalysis}
           onCancelRun={live.cancelAiRun}

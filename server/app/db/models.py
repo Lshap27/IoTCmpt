@@ -182,6 +182,7 @@ class OutboxMessage(Base):
     max_attempts: Mapped[int] = mapped_column(Integer, default=8)
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
     lease_owner: Mapped[str | None] = mapped_column(String(96), index=True)
+    lease_token: Mapped[str | None] = mapped_column(String(36), index=True)
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
@@ -207,6 +208,7 @@ class AiRun(Base):
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, default=3)
     lease_owner: Mapped[str | None] = mapped_column(String(96), index=True)
+    lease_token: Mapped[str | None] = mapped_column(String(36), index=True)
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime)
     cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -277,9 +279,22 @@ class RealtimeEvent(Base):
     status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     lease_owner: Mapped[str | None] = mapped_column(String(96), index=True)
+    lease_token: Mapped[str | None] = mapped_column(String(36), index=True)
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class MqttInboxMessage(Base):
+    __tablename__ = "mqtt_inbox_messages"
+    __table_args__ = (UniqueConstraint("device_id", "topic", "message_id", name="uq_mqtt_inbox_message"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[str] = mapped_column(String(64), ForeignKey("devices.device_id"), index=True)
+    topic: Mapped[str] = mapped_column(String(255))
+    message_id: Mapped[str] = mapped_column(String(96))
+    trace_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
 
 
 class TraceEvent(Base):

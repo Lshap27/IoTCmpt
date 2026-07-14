@@ -410,12 +410,11 @@ esp_err_t display_render(const sensor_sample_t *sample, const fusion_state_t *st
     if (sample->climate_valid) {
         uint16_t tc = (sample->temperature_c > AIOT_FUSION_TEMPERATURE_ALERT_C)   ? COLOR_RED
                       : (sample->temperature_c > AIOT_FUSION_TEMPERATURE_WATCH_C) ? COLOR_YELLOW
-                                                        : COLOR_GREEN;
-        uint16_t hc =
-            (sample->humidity_percent > AIOT_FUSION_HUMIDITY_HIGH_PERCENT ||
-             sample->humidity_percent < AIOT_FUSION_HUMIDITY_LOW_PERCENT)
-                ? COLOR_YELLOW
-                : COLOR_GREEN;
+                                                                                  : COLOR_GREEN;
+        uint16_t hc = (sample->humidity_percent > AIOT_FUSION_HUMIDITY_HIGH_PERCENT ||
+                       sample->humidity_percent < AIOT_FUSION_HUMIDITY_LOW_PERCENT)
+                          ? COLOR_YELLOW
+                          : COLOR_GREEN;
         int tx = 4;
         fb_draw_string(tx, 18, "T:", COLOR_GRAY, COLOR_DARK_BG);
         tx += 16;
@@ -432,12 +431,12 @@ esp_err_t display_render(const sensor_sample_t *sample, const fusion_state_t *st
 
     /* ── TVOC / eCO2 行 (y=34) ── */
     if (sample->air_valid) {
-        uint16_t vc = (sample->tvoc_ppb > AIOT_FUSION_TVOC_ALERT_PPB)
-                          ? COLOR_RED
-                          : (sample->tvoc_ppb > AIOT_FUSION_TVOC_WATCH_PPB) ? COLOR_YELLOW : COLOR_GREEN;
-        uint16_t cc = (sample->eco2_ppm > AIOT_FUSION_ECO2_ALERT_PPM)
-                          ? COLOR_RED
-                          : (sample->eco2_ppm > AIOT_FUSION_ECO2_WATCH_PPM) ? COLOR_YELLOW : COLOR_GREEN;
+        uint16_t vc = (sample->tvoc_ppb > AIOT_FUSION_TVOC_ALERT_PPB)   ? COLOR_RED
+                      : (sample->tvoc_ppb > AIOT_FUSION_TVOC_WATCH_PPB) ? COLOR_YELLOW
+                                                                        : COLOR_GREEN;
+        uint16_t cc = (sample->eco2_ppm > AIOT_FUSION_ECO2_ALERT_PPM)   ? COLOR_RED
+                      : (sample->eco2_ppm > AIOT_FUSION_ECO2_WATCH_PPM) ? COLOR_YELLOW
+                                                                        : COLOR_GREEN;
         int tx = 4;
         fb_draw_string(tx, 34, "V:", COLOR_GRAY, COLOR_DARK_BG);
         tx += 16;
@@ -458,9 +457,9 @@ esp_err_t display_render(const sensor_sample_t *sample, const fusion_state_t *st
         snprintf(buf, sizeof(buf), "---");
         if (sample->air_valid) {
             snprintf(buf, sizeof(buf), "%u", sample->hcho_ug_m3);
-            fc = (sample->hcho_ug_m3 > AIOT_FUSION_HCHO_ALERT_UG_M3)
-                     ? COLOR_RED
-                     : (sample->hcho_ug_m3 > AIOT_FUSION_HCHO_WATCH_UG_M3) ? COLOR_YELLOW : COLOR_GREEN;
+            fc = (sample->hcho_ug_m3 > AIOT_FUSION_HCHO_ALERT_UG_M3)   ? COLOR_RED
+                 : (sample->hcho_ug_m3 > AIOT_FUSION_HCHO_WATCH_UG_M3) ? COLOR_YELLOW
+                                                                       : COLOR_GREEN;
         }
         int tx = 4;
         fb_draw_string(tx, 50, "F:", COLOR_GRAY, COLOR_DARK_BG);

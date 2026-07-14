@@ -84,6 +84,7 @@ export function useDeviceLive(deviceId: string) {
         deviceKeys.notifications(deviceId),
         deviceKeys.capabilities(deviceId),
         deviceKeys.automationPolicy(deviceId),
+        deviceKeys.ai(deviceId),
       ]) {
         void queryClient.invalidateQueries({ queryKey: key });
       }
@@ -141,7 +142,10 @@ export function useDeviceLive(deviceId: string) {
       [acknowledgeMutation],
     ),
     requestPose: useCallback(() => poseMutation.mutate(), [poseMutation]),
-    toggleAutopilot: useCallback((enabled: boolean) => automation.updatePolicy({ enabled }), [automation]),
+    toggleAutomationPolicy: useCallback(
+      (enabled: boolean) => automation.updatePolicy({ enabled }),
+      [automation],
+    ),
     updatePolicy: automation.updatePolicy,
     updateAutomation: automation.updatePolicy,
   };

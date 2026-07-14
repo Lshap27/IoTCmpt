@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any
 
 import aiomqtt
-from aiomqtt.client import Will
 import httpx
+from aiomqtt.client import Will
 
 DEFAULT_JPEG = base64.b64decode(
     "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwc"
@@ -31,9 +31,7 @@ class EnvelopeEncoder:
         self.boot_id = boot_id
         self.sequence = 0
 
-    def encode(
-        self, payload: dict[str, Any], *, trace_id: str | None = None
-    ) -> dict[str, Any]:
+    def encode(self, payload: dict[str, Any], *, trace_id: str | None = None) -> dict[str, Any]:
         self.sequence += 1
         return {
             "schema_version": "2.0",
@@ -47,9 +45,7 @@ class EnvelopeEncoder:
         }
 
 
-def mqtt_client(
-    host: str, port: int, device_id: str, offline_payload: dict[str, Any]
-) -> aiomqtt.Client:
+def mqtt_client(host: str, port: int, device_id: str, offline_payload: dict[str, Any]) -> aiomqtt.Client:
     return aiomqtt.Client(
         host,
         port=port,

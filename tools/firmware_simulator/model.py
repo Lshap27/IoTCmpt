@@ -15,14 +15,9 @@ from .generated_behavior import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-COMMAND_CATALOG_DOCUMENT = json.loads(
-    (ROOT / "contracts" / "commands.json").read_text(encoding="utf-8")
-)
+COMMAND_CATALOG_DOCUMENT = json.loads((ROOT / "contracts" / "commands.json").read_text(encoding="utf-8"))
 COMMAND_DEFAULTS = COMMAND_CATALOG_DOCUMENT.get("defaults", {})
-COMMAND_CATALOG = {
-    item["name"]: {**COMMAND_DEFAULTS, **item}
-    for item in COMMAND_CATALOG_DOCUMENT["commands"]
-}
+COMMAND_CATALOG = {item["name"]: {**COMMAND_DEFAULTS, **item} for item in COMMAND_CATALOG_DOCUMENT["commands"]}
 SCENARIOS = ("normal", "air-watch", "air-alert", "smoke")
 
 
@@ -60,10 +55,7 @@ def fuse_sample(sensors: dict[str, Any]) -> dict[str, Any]:
         reasons.append(f"温度偏高 {temperature:.1f}C")
 
     humidity_threshold = FUSION_THRESHOLDS["humidity_percent"]
-    if (
-        humidity > humidity_threshold["watch_above"]
-        or humidity < humidity_threshold["watch_below"]
-    ):
+    if humidity > humidity_threshold["watch_above"] or humidity < humidity_threshold["watch_below"]:
         watch = ventilation_needed = True
         reasons.append(f"湿度异常 {humidity:.1f}%")
 
@@ -157,6 +149,7 @@ class FirmwareModel:
         self.command_count = 0
         self.image_count = 0
         self.manual_alarm_on = False
+        self.smoke_active = False
         self.smoke_silenced_until = 0.0
         self.last_voice_content: str | None = None
         self.last_display_content: str | None = None
@@ -170,9 +163,7 @@ class FirmwareModel:
             "manual_override": False,
             "manual_window_override": False,
             "manual_led_override": False,
-            "control_priority": priority
-            if priority in {"manual_first", "auto_first"}
-            else "manual_first",
+            "control_priority": priority if priority in {"manual_first", "auto_first"} else "manual_first",
             "smoke_silenced": False,
             "led_on": False,
         }
@@ -194,6 +185,7 @@ class FirmwareModel:
                     "parameter_schema": command["parameter_schema"],
                     "safety_class": command["safety_class"],
                     "ai_allowed": command["ai_allowed"],
+                    "allowed_sources": command["allowed_sources"],
                 }
                 for command in COMMAND_CATALOG_DOCUMENT["commands"]
             ],
@@ -202,14 +194,7 @@ class FirmwareModel:
     def telemetry(self) -> dict[str, Any]:
         sensors = self.sensor.sample()
         fusion = fuse_sample(sensors)
-        smoke_active = bool(sensors["smoke_detected"])
-        silence_active = smoke_active and time.monotonic() < self.smoke_silenced_until
-        if not smoke_active:
-            self.smoke_silenced_until = 0.0
-        self.state["smoke_silenced"] = silence_active
-        self.state["alarm_on"] = self.manual_alarm_on or (
-            smoke_active and not silence_active
-        )
+        self.update_safety(bool(sensors["smoke_detected"]))
         if (
             self.state["control_priority"] == "auto_first"
             and fusion["recommend_open_window"]
@@ -228,20 +213,28 @@ class FirmwareModel:
         self.last_telemetry = payload
         return payload
 
-    def validate_command(
-        self, envelope: dict[str, Any], payload: dict[str, Any]
-    ) -> tuple[str, str] | None:
-        if envelope.get("schema_version") != "2.0" or envelope.get("device_id") not in {
-            None,
-            self.device_id,
-        }:
+    def update_safety(self, smoke_active: bool | None = None) -> bool:
+        if smoke_active is None:
+            smoke_active = self.scenario == "smoke"
+        self.smoke_active = smoke_active
+        silence_active = smoke_active and time.monotonic() < self.smoke_silenced_until
+        if not smoke_active:
+            self.smoke_silenced_until = 0.0
+        self.state["smoke_silenced"] = silence_active
+        self.state["alarm_on"] = self.manual_alarm_on or (smoke_active and not silence_active)
+        return smoke_active
+
+    def validate_command(self, envelope: dict[str, Any], payload: dict[str, Any]) -> tuple[str, str] | None:
+        required = {"message_id", "trace_id", "device_id", "occurred_at", "boot_id", "sequence", "payload"}
+        if (
+            envelope.get("schema_version") != "2.0"
+            or envelope.get("device_id") != self.device_id
+            or not required.issubset(envelope)
+            or envelope.get("payload") is not payload
+        ):
             return "invalid_parameter", "invalid MQTT v2 envelope"
         command_id = payload.get("command_id")
-        if (
-            not isinstance(command_id, str)
-            or not command_id.strip()
-            or len(command_id) > 128
-        ):
+        if not isinstance(command_id, str) or not command_id.strip() or len(command_id) > 128:
             return "invalid_parameter", "command_id must be a non-empty string"
         command_type = payload.get("type")
         command = COMMAND_CATALOG.get(str(command_type))
@@ -277,6 +270,8 @@ class FirmwareModel:
         source = str(payload["source"])
         automatic_source = source in {"ai", "external_mcp", "rule"}
         if command.startswith("window."):
+            if command == "window.close" and self.smoke_active:
+                return "rejected", "window cannot close while smoke is detected", "safety_interlock"
             if (
                 automatic_source
                 and self.state["control_priority"] == "manual_first"
@@ -284,10 +279,7 @@ class FirmwareModel:
             ):
                 return "rejected", "manual window override is active", "policy_denied"
             self.state["window_open"] = command == "window.open"
-            if (
-                source == "frontend"
-                and self.state["control_priority"] == "manual_first"
-            ):
+            if source == "frontend" and self.state["control_priority"] == "manual_first":
                 self.state["manual_window_override"] = True
         elif command.startswith("led."):
             if (
@@ -297,21 +289,14 @@ class FirmwareModel:
             ):
                 return "rejected", "manual LED override is active", "policy_denied"
             self.state["led_on"] = command == "led.on"
-            if (
-                source == "frontend"
-                and self.state["control_priority"] == "manual_first"
-            ):
+            if source == "frontend" and self.state["control_priority"] == "manual_first":
                 self.state["manual_led_override"] = True
         elif command == "alarm.on":
             self.manual_alarm_on = True
             self.state["alarm_on"] = True
         elif command == "alarm.off":
             self.manual_alarm_on = False
-            self.state["alarm_on"] = bool(
-                self.last_telemetry
-                and self.last_telemetry["sensors"]["smoke_detected"]
-                and not self.state["smoke_silenced"]
-            )
+            self.update_safety()
         elif command == "control.set_priority":
             self.state["control_priority"] = parameter["priority"]
             if parameter["priority"] == "auto_first":
@@ -321,9 +306,7 @@ class FirmwareModel:
             self.state["manual_window_override"] = False
             self.state["manual_led_override"] = False
         elif command == "alarm.silence":
-            smoke_active = bool(
-                self.last_telemetry and self.last_telemetry["sensors"]["smoke_detected"]
-            )
+            smoke_active = self.smoke_active
             if not smoke_active:
                 return "rejected", "no active smoke alarm", "safety_interlock"
             duration = int(parameter.get("duration_seconds", 60))
@@ -354,14 +337,10 @@ class FirmwareModel:
         }
 
     def _refresh_override(self) -> None:
-        self.state["manual_override"] = bool(
-            self.state["manual_window_override"] or self.state["manual_led_override"]
-        )
+        self.state["manual_override"] = bool(self.state["manual_window_override"] or self.state["manual_led_override"])
 
 
-def _validate_parameter(
-    parameter: dict[str, Any], schema: dict[str, Any]
-) -> str | None:
+def _validate_parameter(parameter: dict[str, Any], schema: dict[str, Any]) -> str | None:
     properties = schema.get("properties", {})
     required = schema.get("required", [])
     for key in required:
@@ -374,9 +353,7 @@ def _validate_parameter(
     for key, value in parameter.items():
         rule = properties.get(key, {})
         expected = rule.get("type")
-        if expected == "integer" and (
-            not isinstance(value, int) or isinstance(value, bool)
-        ):
+        if expected == "integer" and (not isinstance(value, int) or isinstance(value, bool)):
             return f"{key} must be an integer"
         if expected == "string" and not isinstance(value, str):
             return f"{key} must be a string"

@@ -9,13 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 CATALOG_PATH = ROOT / "contracts" / "commands.json"
 BEHAVIOR_PATH = ROOT / "contracts" / "firmware-behavior.json"
 PYTHON_OUTPUT = ROOT / "server" / "app" / "generated" / "command_catalog.py"
-C_OUTPUT = (
-    ROOT / "firmware" / "esp32s3" / "main" / "include" / "command_catalog.generated.h"
-)
+C_OUTPUT = ROOT / "firmware" / "esp32s3" / "main" / "include" / "command_catalog.generated.h"
 BEHAVIOR_PYTHON_OUTPUT = ROOT / "tools" / "firmware_simulator" / "generated_behavior.py"
-BEHAVIOR_C_OUTPUT = (
-    ROOT / "firmware" / "esp32s3" / "main" / "include" / "firmware_behavior.generated.h"
-)
+BEHAVIOR_C_OUTPUT = ROOT / "firmware" / "esp32s3" / "main" / "include" / "firmware_behavior.generated.h"
 
 
 def load_catalog() -> dict:
@@ -46,15 +42,15 @@ def render_python(catalog: dict) -> str:
 
 def render_c(catalog: dict) -> str:
     commands = catalog["commands"]
+    source_bits = {"frontend": 1, "ai": 2, "external_mcp": 4, "rule": 8}
     rows_list = []
     for item in commands:
-        schema = json.dumps(
-            item["parameter_schema"], ensure_ascii=True, separators=(",", ":")
-        )
+        schema = json.dumps(item["parameter_schema"], ensure_ascii=True, separators=(",", ":"))
         c_schema = schema.replace("\\", "\\\\").replace('"', '\\"')
+        source_mask = sum(source_bits[source] for source in item["allowed_sources"])
         rows_list.append(
             f'    X({item["c_enum"]}, "{item["name"]}", {str(item["ai_allowed"]).lower()}, '
-            f'"{item["safety_class"]}", "{c_schema}")'
+            f'"{item["safety_class"]}", "{c_schema}", {source_mask}U)'
         )
     rows = " \\\n".join(rows_list)
     return (

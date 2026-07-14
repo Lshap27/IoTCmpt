@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.timeutil import iso_utc
@@ -20,6 +21,29 @@ from app.services.telemetry import serialize_telemetry
 
 def utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _bucket_points(points: list[dict[str, Any]], bucket_seconds: int) -> list[dict[str, Any]]:
+    """Portable report-oriented bucketing used by both SQLite tests and PostgreSQL."""
+    buckets: dict[int, list[dict[str, Any]]] = {}
+    for point in points:
+        sampled = datetime.fromisoformat(str(point["sampled_at"]).replace("Z", "+00:00"))
+        key = int(sampled.timestamp()) // bucket_seconds * bucket_seconds
+        buckets.setdefault(key, []).append(point)
+
+    result: list[dict[str, Any]] = []
+    for key in sorted(buckets, reverse=True):
+        group = buckets[key]
+        newest = dict(group[0])
+        sensors = dict(newest.get("sensors") or {})
+        for name in ("temperature_c", "humidity_percent", "tvoc_ppb", "hcho_ug_m3", "eco2_ppm"):
+            values = [float(value) for point in group if (value := (point.get("sensors") or {}).get(name)) is not None]
+            sensors[name] = sum(values) / len(values) if values else None
+        newest["sampled_at"] = datetime.fromtimestamp(key, UTC).isoformat().replace("+00:00", "Z")
+        newest["sensors"] = sensors
+        newest["sample_count"] = len(group)
+        result.append(newest)
+    return result
 
 
 class SqlAlchemyDeviceQueryRepository:
@@ -50,6 +74,7 @@ class SqlAlchemyDeviceQueryRepository:
         limit: int,
         start_at: datetime | None = None,
         end_at: datetime | None = None,
+        bucket_seconds: int | None = None,
     ) -> list[dict[str, Any]]:
         with self.session_factory() as db:
             query = db.query(models.Telemetry).filter(models.Telemetry.device_id == device_id)
@@ -58,7 +83,8 @@ class SqlAlchemyDeviceQueryRepository:
             if end_at is not None:
                 query = query.filter(models.Telemetry.sampled_at <= end_at)
             rows = query.order_by(models.Telemetry.sampled_at.desc()).limit(max(1, min(limit, 2000))).all()
-            return [serialize_telemetry(row) for row in rows]
+            points = [serialize_telemetry(row) for row in rows]
+            return _bucket_points(points, bucket_seconds) if bucket_seconds else points
 
     def events(self, device_id: str, *, limit: int) -> list[dict[str, Any]]:
         with self.session_factory() as db:
@@ -109,6 +135,73 @@ class SqlAlchemyDeviceQueryRepository:
             db.commit()
             db.refresh(notification)
             return serialize_notification(db, notification)
+
+    def diagnostics_overview(self) -> dict[str, Any]:
+        with self.session_factory() as db:
+
+            def counts(field: Any) -> dict[str, int]:
+                rows = db.query(field, func.count()).group_by(field).all()
+                return {str(status): int(count) for status, count in rows}
+
+            now = utcnow()
+            workers = (
+                db.query(models.RuntimeInstance)
+                .filter(models.RuntimeInstance.role == "ai-worker")
+                .order_by(models.RuntimeInstance.heartbeat_at.desc())
+                .limit(10)
+                .all()
+            )
+            capabilities = db.query(models.DeviceCapability).order_by(models.DeviceCapability.device_id).all()
+            return {
+                "ai_runs": counts(models.AiRun.status),
+                "outbox": counts(models.OutboxMessage.status),
+                "realtime": counts(models.RealtimeEvent.status),
+                "workers": [
+                    {
+                        "instance_id": worker.instance_id,
+                        "heartbeat_at": iso_utc(worker.heartbeat_at),
+                        "role": worker.role,
+                        "healthy": worker.heartbeat_at >= now - timedelta(seconds=45),
+                        "age_seconds": max(0, int((now - worker.heartbeat_at).total_seconds())),
+                    }
+                    for worker in workers
+                ],
+                "capabilities": [
+                    {
+                        "device_id": row.device_id,
+                        "firmware_version": row.firmware_version,
+                        "hardware_model": row.hardware_model,
+                        "command_count": len(row.commands or []),
+                        "seen_at": iso_utc(row.seen_at),
+                    }
+                    for row in capabilities
+                ],
+            }
+
+    def trace_timeline(self, trace_id: str) -> dict[str, Any]:
+        with self.session_factory() as db:
+            events = (
+                db.query(models.TraceEvent)
+                .filter(models.TraceEvent.trace_id == trace_id)
+                .order_by(models.TraceEvent.occurred_at, models.TraceEvent.id)
+                .all()
+            )
+            return {
+                "trace_id": trace_id,
+                "events": [
+                    {
+                        "event_id": event.event_id,
+                        "trace_id": event.trace_id,
+                        "device_id": event.device_id,
+                        "component": event.component,
+                        "event_type": event.event_type,
+                        "status": event.status,
+                        "detail": event.detail or {},
+                        "occurred_at": iso_utc(event.occurred_at),
+                    }
+                    for event in events
+                ],
+            }
 
 
 class SqlAlchemyCommandRepository:

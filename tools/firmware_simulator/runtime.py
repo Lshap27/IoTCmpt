@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import uuid
 from pathlib import Path
@@ -28,9 +29,10 @@ class FirmwareSimulator:
         self.store.clear_stop_request()
         self.model = FirmwareModel(args.device_id, args.scenario, self.store.load_nvs())
         self.encoder = EnvelopeEncoder(args.device_id, self.model.boot_id)
-        self.command_queue: asyncio.Queue[tuple[dict[str, Any], str]] = asyncio.Queue(
-            maxsize=COMMAND_QUEUE_LENGTH
-        )
+        self.command_queue: asyncio.Queue[tuple[dict[str, Any], str]] = asyncio.Queue(maxsize=COMMAND_QUEUE_LENGTH)
+        self.ack_queue: asyncio.Queue[tuple[dict[str, Any], str]] = asyncio.Queue()
+        self.event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        self._previous_smoke: bool | None = None
         self.stop_event = asyncio.Event()
         self.mqtt_connected = False
         self.started_at = iso_now()
@@ -58,9 +60,7 @@ class FirmwareSimulator:
     def capabilities(self) -> dict[str, Any]:
         return self.model.capabilities()
 
-    def envelope(
-        self, payload: dict[str, Any], *, trace_id: str | None = None
-    ) -> dict[str, Any]:
+    def envelope(self, payload: dict[str, Any], *, trace_id: str | None = None) -> dict[str, Any]:
         return self.encoder.encode(payload, trace_id=trace_id)
 
     def apply_command(self, payload: dict[str, Any]) -> tuple[str, str]:
@@ -81,6 +81,8 @@ class FirmwareSimulator:
             mqtt_task,
             asyncio.create_task(self._stop_file_monitor(), name="stop-file-monitor"),
             asyncio.create_task(self._status_loop(), name="status-heartbeat"),
+            asyncio.create_task(self._command_execute_loop(), name="command-execute"),
+            asyncio.create_task(self._safety_loop(), name="smoke-safety"),
         ]
         if image_enabled:
             tasks.append(asyncio.create_task(self._image_loop(), name="image-loop"))
@@ -127,10 +129,8 @@ class FirmwareSimulator:
                 return
             delay = RECONNECT_DELAYS[min(retry, len(RECONNECT_DELAYS) - 1)]
             retry += 1
-            try:
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self.stop_event.wait(), timeout=delay)
-            except TimeoutError:
-                pass
 
     async def _run_connection(self, client: aiomqtt.Client) -> None:
         prefix = f"devices/{self.args.device_id}"
@@ -142,21 +142,16 @@ class FirmwareSimulator:
         )
         await client.publish(
             f"{prefix}/capabilities",
-            json.dumps(
-                self.encoder.encode(self.model.capabilities()), ensure_ascii=False
-            ),
+            json.dumps(self.encoder.encode(self.model.capabilities()), ensure_ascii=False),
             qos=1,
             retain=True,
         )
         await client.subscribe(f"{prefix}/command", qos=1)
         tasks = [
             asyncio.create_task(self._telemetry_loop(client), name="telemetry"),
-            asyncio.create_task(
-                self._command_receive_loop(client), name="command-receive"
-            ),
-            asyncio.create_task(
-                self._command_execute_loop(client), name="command-execute"
-            ),
+            asyncio.create_task(self._command_receive_loop(client), name="command-receive"),
+            asyncio.create_task(self._ack_publish_loop(client), name="ack-publish"),
+            asyncio.create_task(self._event_publish_loop(client), name="event-publish"),
             asyncio.create_task(self.stop_event.wait(), name="connection-stop"),
         ]
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -170,42 +165,18 @@ class FirmwareSimulator:
             if error:
                 raise error
         if self.stop_event.is_set():
-            try:
+            with contextlib.suppress(aiomqtt.MqttError):
                 await client.publish(
                     f"{prefix}/status",
-                    json.dumps(
-                        self.encoder.encode({"status": "offline"}), ensure_ascii=False
-                    ),
+                    json.dumps(self.encoder.encode({"status": "offline"}), ensure_ascii=False),
                     qos=1,
                     retain=True,
                 )
-            except aiomqtt.MqttError:
-                pass
 
     async def _telemetry_loop(self, client: aiomqtt.Client) -> None:
         prefix = f"devices/{self.args.device_id}"
-        previous_smoke = False
         while True:
             payload = self.model.telemetry()
-            smoke = bool(payload["sensors"]["smoke_detected"])
-            if smoke != previous_smoke:
-                await client.publish(
-                    f"{prefix}/event",
-                    json.dumps(
-                        self.encoder.encode(
-                            {
-                                "type": "smoke.detected" if smoke else "smoke.cleared",
-                                "severity": "critical" if smoke else "info",
-                                "message": "固件模拟器检测到烟雾"
-                                if smoke
-                                else "固件模拟器烟雾状态已清除",
-                            }
-                        ),
-                        ensure_ascii=False,
-                    ),
-                    qos=1,
-                )
-            previous_smoke = smoke
             await client.publish(
                 f"{prefix}/telemetry",
                 json.dumps(self.encoder.encode(payload), ensure_ascii=False),
@@ -232,7 +203,6 @@ class FirmwareSimulator:
             if validation:
                 error_code, message_text = validation
                 await self._publish_terminal(
-                    client,
                     command_id,
                     trace_id,
                     "rejected",
@@ -247,7 +217,6 @@ class FirmwareSimulator:
                 continue
             if self.command_queue.full():
                 await self._publish_terminal(
-                    client,
                     command_id,
                     trace_id,
                     "rejected",
@@ -262,7 +231,7 @@ class FirmwareSimulator:
                 trace_id,
             )
 
-    async def _command_execute_loop(self, client: aiomqtt.Client) -> None:
+    async def _command_execute_loop(self) -> None:
         while True:
             payload, trace_id = await self.command_queue.get()
             try:
@@ -271,7 +240,6 @@ class FirmwareSimulator:
                     await asyncio.sleep(self.args.ack_delay)
                 status, message, error_code = self.model.apply_command(payload)
                 await self._publish_terminal(
-                    client,
                     str(payload["command_id"]),
                     trace_id,
                     status,
@@ -283,7 +251,6 @@ class FirmwareSimulator:
 
     async def _publish_terminal(
         self,
-        client: aiomqtt.Client,
         command_id: str,
         trace_id: str,
         status: str,
@@ -297,20 +264,63 @@ class FirmwareSimulator:
             self.model.remember_terminal_ack(ack)
             self.store.save_nvs(self.model.nvs_snapshot())
             self._write_status()
-        await self._publish_ack(client, ack, trace_id)
+        await self.ack_queue.put((ack, trace_id))
 
-    async def _publish_ack(
-        self, client: aiomqtt.Client, ack: dict[str, Any], trace_id: str
-    ) -> None:
+    async def _ack_publish_loop(self, client: aiomqtt.Client) -> None:
+        while True:
+            ack, trace_id = await self.ack_queue.get()
+            try:
+                await self._publish_ack(client, ack, trace_id)
+            except Exception:
+                await self.ack_queue.put((ack, trace_id))
+                raise
+            finally:
+                self.ack_queue.task_done()
+
+    async def _safety_loop(self) -> None:
+        while True:
+            smoke = self.model.update_safety()
+            if self._previous_smoke is None:
+                self._previous_smoke = smoke
+                if smoke:
+                    await self.event_queue.put(self._smoke_event(True))
+            elif smoke != self._previous_smoke:
+                self._previous_smoke = smoke
+                await self.event_queue.put(self._smoke_event(smoke))
+            await asyncio.sleep(0.1)
+
+    @staticmethod
+    def _smoke_event(smoke: bool) -> dict[str, Any]:
+        return {
+            "type": "smoke.detected" if smoke else "smoke.cleared",
+            "severity": "critical" if smoke else "info",
+            "message": "固件模拟器检测到烟雾" if smoke else "固件模拟器烟雾状态已清除",
+        }
+
+    async def _event_publish_loop(self, client: aiomqtt.Client) -> None:
+        topic = f"devices/{self.args.device_id}/event"
+        while True:
+            event = await self.event_queue.get()
+            try:
+                await client.publish(
+                    topic,
+                    json.dumps(self.encoder.encode(event), ensure_ascii=False),
+                    qos=1,
+                )
+            except Exception:
+                await self.event_queue.put(event)
+                raise
+            finally:
+                self.event_queue.task_done()
+
+    async def _publish_ack(self, client: aiomqtt.Client, ack: dict[str, Any], trace_id: str) -> None:
         await client.publish(
             f"devices/{self.args.device_id}/command_ack",
             json.dumps(self.encoder.encode(ack, trace_id=trace_id), ensure_ascii=False),
             qos=1,
         )
 
-    def _ack(
-        self, command_id: str, status: str, message: str, error_code: str | None
-    ) -> dict[str, Any]:
+    def _ack(self, command_id: str, status: str, message: str, error_code: str | None) -> dict[str, Any]:
         return {
             "command_id": command_id,
             "status": status,
@@ -334,12 +344,8 @@ class FirmwareSimulator:
             except Exception as exc:  # Image upload is deliberately fail-soft.
                 self.last_image_error = str(exc)
             self._write_status()
-            try:
-                await asyncio.wait_for(
-                    self.stop_event.wait(), timeout=self.args.image_interval
-                )
-            except TimeoutError:
-                pass
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self.stop_event.wait(), timeout=self.args.image_interval)
 
     async def _stop_file_monitor(self) -> None:
         while not self.stop_event.is_set():
@@ -351,10 +357,8 @@ class FirmwareSimulator:
     async def _status_loop(self) -> None:
         while not self.stop_event.is_set():
             self._write_status()
-            try:
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self.stop_event.wait(), timeout=2)
-            except TimeoutError:
-                pass
 
     def _write_status(self, *, running: bool = True) -> None:
         telemetry = self.model.last_telemetry
@@ -389,7 +393,5 @@ class FirmwareSimulator:
             signal_value = getattr(__import__("signal"), signal_name, None)
             if signal_value is None:
                 continue
-            try:
+            with contextlib.suppress(NotImplementedError, RuntimeError):
                 loop.add_signal_handler(signal_value, self.stop_event.set)
-            except (NotImplementedError, RuntimeError):
-                pass

@@ -20,6 +20,10 @@ class RunCancelled(RuntimeError):
     pass
 
 
+class RunLeaseLost(RuntimeError):
+    pass
+
+
 class SqlAlchemyJobStore:
     def __init__(
         self,
@@ -74,6 +78,7 @@ class SqlAlchemyJobStore:
             run.attempt_count += 1
             run.max_attempts = run.max_attempts or self.max_attempts
             run.lease_owner = self.instance_id
+            run.lease_token = str(uuid4())
             run.lease_expires_at = now + timedelta(seconds=self.lease_seconds)
             run.heartbeat_at = now
             self._append_events(db, run, "ai.run.running", "running")
@@ -99,18 +104,24 @@ class SqlAlchemyJobStore:
                     run.status = "queued"
                     run.available_at = now + timedelta(seconds=min(30, 2 ** max(run.attempt_count, 1)))
                 run.lease_owner = None
+                run.lease_token = None
                 run.lease_expires_at = None
                 self._append_events(db, run, "ai.run.lease_expired", run.status)
                 changed += 1
             db.commit()
         return changed
 
-    def renew(self, run_id: str) -> bool:
+    def renew(self, run_id: str, lease_token: str) -> bool:
         now = utcnow()
         with self.session_factory() as db:
             run = (
                 db.query(models.AiRun)
-                .filter(models.AiRun.run_id == run_id, models.AiRun.lease_owner == self.instance_id)
+                .filter(
+                    models.AiRun.run_id == run_id,
+                    models.AiRun.lease_owner == self.instance_id,
+                    models.AiRun.lease_token == lease_token,
+                    models.AiRun.lease_expires_at >= now,
+                )
                 .one_or_none()
             )
             if run is None or run.status not in ACTIVE_RUN_STATUSES:
@@ -121,13 +132,25 @@ class SqlAlchemyJobStore:
             db.commit()
             return True
 
-    def transition(self, run_id: str, status: str, *, detail: dict[str, Any] | None = None) -> dict[str, Any]:
+    def ensure_owned(self, run_id: str, lease_token: str) -> None:
         with self.session_factory() as db:
-            run = db.query(models.AiRun).filter(models.AiRun.run_id == run_id).one()
+            self._owned_run(db, run_id, lease_token)
+
+    def transition(
+        self,
+        run_id: str,
+        status: str,
+        lease_token: str,
+        *,
+        detail: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        with self.session_factory() as db:
+            run = self._owned_run(db, run_id, lease_token)
             if run.cancel_requested_at is not None:
                 run.status = "cancelled"
                 run.completed_at = utcnow()
                 run.lease_owner = None
+                run.lease_token = None
                 run.lease_expires_at = None
                 self._append_events(db, run, "ai.run.cancelled", "cancelled")
                 db.commit()
@@ -137,16 +160,38 @@ class SqlAlchemyJobStore:
             db.commit()
             return self._run_dict(run)
 
-    def complete(self, run_id: str, output: dict[str, Any], model: str) -> None:
+    def complete(self, run_id: str, output: dict[str, Any], model: str, lease_token: str) -> None:
         now = utcnow()
         with self.session_factory() as db:
-            run = db.query(models.AiRun).filter(models.AiRun.run_id == run_id).one()
+            run = self._owned_run(db, run_id, lease_token)
+            if run.cancel_requested_at is not None:
+                run.status = "cancelled"
+                run.completed_at = now
+                run.lease_owner = None
+                run.lease_token = None
+                run.lease_expires_at = None
+                self._append_events(db, run, "ai.run.cancelled", "cancelled")
+                db.commit()
+                raise RunCancelled(run_id)
             run.status = "succeeded"
             run.output_payload = output
             run.model = model
             run.completed_at = now
             run.lease_owner = None
+            run.lease_token = None
             run.lease_expires_at = None
+            if run.kind == "report":
+                report = db.query(models.AiReport).filter(models.AiReport.run_id == run.run_id).one_or_none()
+                if report is None:
+                    report = models.AiReport(
+                        run_id=run.run_id,
+                        device_id=run.device_id,
+                        period=str(output.get("period") or "day"),
+                        content=output,
+                    )
+                else:
+                    report.content = output
+                db.add(report)
             if run.kind == "patrol":
                 policy = (
                     db.query(models.AutomationPolicy)
@@ -159,13 +204,18 @@ class SqlAlchemyJobStore:
             self._append_events(db, run, "ai.run.succeeded", "succeeded", {"output": output})
             db.commit()
 
-    def fail(self, run_id: str, error: Exception, *, retryable: bool = True) -> None:
+    def fail(self, run_id: str, error: Exception, lease_token: str, *, retryable: bool = True) -> None:
         now = utcnow()
         with self.session_factory() as db:
-            run = db.query(models.AiRun).filter(models.AiRun.run_id == run_id).one_or_none()
-            if run is None:
+            try:
+                run = self._owned_run(db, run_id, lease_token)
+            except RunLeaseLost:
                 return
-            if retryable and run.attempt_count < (run.max_attempts or self.max_attempts):
+            if run.cancel_requested_at is not None:
+                run.status = "cancelled"
+                run.completed_at = now
+                event_type = "ai.run.cancelled"
+            elif retryable and run.attempt_count < (run.max_attempts or self.max_attempts):
                 run.status = "queued"
                 run.available_at = now + timedelta(seconds=min(30, 2 ** max(run.attempt_count, 1)))
                 event_type = "ai.run.retry_scheduled"
@@ -176,14 +226,17 @@ class SqlAlchemyJobStore:
                 run.completed_at = now
                 event_type = "ai.run.failed"
             run.lease_owner = None
+            run.lease_token = None
             run.lease_expires_at = None
             self._append_events(db, run, event_type, run.status, {"error": str(error)[:500]})
             db.commit()
 
     def tool_started(self, run: dict[str, Any], call_id: str, name: str, arguments: dict[str, Any]) -> None:
         with self.session_factory() as db:
-            db.add(
-                models.AiToolCall(
+            self._owned_run(db, run["run_id"], run["lease_token"])
+            call = db.query(models.AiToolCall).filter(models.AiToolCall.call_id == call_id).one_or_none()
+            if call is None:
+                call = models.AiToolCall(
                     call_id=call_id,
                     run_id=run["run_id"],
                     trace_id=run["trace_id"],
@@ -191,7 +244,12 @@ class SqlAlchemyJobStore:
                     arguments=arguments,
                     status="started",
                 )
-            )
+            else:
+                call.arguments = arguments
+                call.status = "started"
+                call.error_message = None
+                call.completed_at = None
+            db.add(call)
             self._append_trace(
                 db,
                 run["trace_id"],
@@ -203,8 +261,15 @@ class SqlAlchemyJobStore:
             )
             db.commit()
 
-    def tool_finished(self, call_id: str, result: dict[str, Any] | None, error: Exception | None) -> None:
+    def tool_finished(
+        self,
+        run: dict[str, Any],
+        call_id: str,
+        result: dict[str, Any] | None,
+        error: Exception | None,
+    ) -> None:
         with self.session_factory() as db:
+            self._owned_run(db, run["run_id"], run["lease_token"])
             call = db.query(models.AiToolCall).filter(models.AiToolCall.call_id == call_id).one()
             call.status = "failed" if error else "succeeded"
             call.result = result
@@ -228,7 +293,16 @@ class SqlAlchemyJobStore:
 
     def persist_report(self, run: dict[str, Any], period: str, output: dict[str, Any]) -> None:
         with self.session_factory() as db:
-            db.add(models.AiReport(run_id=run["run_id"], device_id=run["device_id"], period=period, content=output))
+            self._owned_run(db, run["run_id"], run["lease_token"])
+            report = db.query(models.AiReport).filter(models.AiReport.run_id == run["run_id"]).one_or_none()
+            if report is None:
+                report = models.AiReport(
+                    run_id=run["run_id"], device_id=run["device_id"], period=period, content=output
+                )
+            else:
+                report.period = period
+                report.content = output
+            db.add(report)
             db.commit()
 
     def acquire_runtime_lease(self, name: str, seconds: int) -> bool:
@@ -258,7 +332,25 @@ class SqlAlchemyJobStore:
             "kind": run.kind,
             "trigger": run.trigger,
             "input": run.input_payload or {},
+            "lease_token": run.lease_token or "",
         }
+
+    def _owned_run(self, db: Session, run_id: str, lease_token: str) -> models.AiRun:
+        now = utcnow()
+        run = (
+            db.query(models.AiRun)
+            .filter(
+                models.AiRun.run_id == run_id,
+                models.AiRun.lease_owner == self.instance_id,
+                models.AiRun.lease_token == lease_token,
+                models.AiRun.status.in_(ACTIVE_RUN_STATUSES),
+                models.AiRun.lease_expires_at >= now,
+            )
+            .one_or_none()
+        )
+        if run is None:
+            raise RunLeaseLost(run_id)
+        return run
 
     def _append_events(
         self,

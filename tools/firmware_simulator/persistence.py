@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -29,16 +30,12 @@ class SimulatorStateStore:
         self._write_json(self.status_path, data)
 
     def clear_nvs(self) -> None:
-        try:
+        with contextlib.suppress(FileNotFoundError):
             self.nvs_path.unlink()
-        except FileNotFoundError:
-            pass
 
     def clear_stop_request(self) -> None:
-        try:
+        with contextlib.suppress(FileNotFoundError):
             self.stop_path.unlink()
-        except FileNotFoundError:
-            pass
 
     def request_stop(self) -> None:
         self.directory.mkdir(parents=True, exist_ok=True)

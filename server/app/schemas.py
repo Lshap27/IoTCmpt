@@ -279,43 +279,6 @@ class PoseSnapshot(BaseModel):
     created_at: str
 
 
-class AiResultInfo(BaseModel):
-    command_id: str
-    risk_level: str
-    confidence: float
-    reason: str
-    summary: str
-    model: str
-    speech: str = ""
-    scene_summary: str = ""
-
-
-class AutopilotEnabled(BaseModel):
-    enabled: bool
-    vision_capability: Literal["unknown", "supported", "unsupported"] = "unknown"
-    vision_interval_enabled: bool = False
-    vision_interval_seconds: float = 300
-    sedentary_threshold_seconds: float = 7200
-    smoke_silence_seconds: int = 60
-
-
-class AutopilotState(BaseModel):
-    device_id: str
-    enabled: bool
-    cooldown_seconds: float
-    min_confidence: float
-    trigger_levels: list[str] = Field(
-        description="Deprecated: 空气质量与烟雾自动规则已移至固件；保留此字段仅用于兼容旧客户端。",
-        json_schema_extra={"deprecated": True},
-    )
-    vision_capability: Literal["unknown", "supported", "unsupported"]
-    vision_interval_enabled: bool
-    vision_interval_effective: bool
-    vision_interval_seconds: float
-    sedentary_threshold_seconds: float
-    smoke_silence_seconds: int
-
-
 class LatestState(BaseModel):
     device: DeviceSummary
     telemetry: TelemetryPoint | None = None

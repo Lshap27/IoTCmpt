@@ -12,6 +12,7 @@ export const deviceKeys = {
   capabilities: (deviceId: string) => ["device", deviceId, "capabilities"] as const,
   pendingCommands: (deviceId: string) => ["device", deviceId, "pending-commands"] as const,
   commandStatuses: (deviceId: string) => ["device", deviceId, "command-statuses"] as const,
+  processedEvents: (deviceId: string) => ["device", deviceId, "processed-events"] as const,
 };
 
 export const devicesKey = ["devices"] as const;

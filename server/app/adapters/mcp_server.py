@@ -5,6 +5,7 @@ import time
 from collections import defaultdict, deque
 from contextvars import ContextVar
 from typing import Any
+from urllib.parse import urlsplit
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -52,8 +53,10 @@ class McpBearerMiddleware:
             token = ""
             scopes = frozenset()
         origin = headers.get(b"origin", b"").decode("utf-8")
-        host = headers.get(b"host", b"").decode("utf-8")
-        if token != "internal" and host not in self.settings.mcp_allowed_hosts:
+        host_header = headers.get(b"host", b"").decode("utf-8")
+        host = urlsplit(f"//{host_header}").hostname or ""
+        allowed_hosts = {urlsplit(f"//{item}").hostname or item for item in self.settings.mcp_allowed_hosts}
+        if token != "internal" and host not in allowed_hosts:
             await JSONResponse({"detail": "MCP host is not allowed"}, status_code=421)(scope, receive, send)
             return
         if token != "internal" and origin and origin not in self.settings.mcp_allowed_origins:
@@ -62,9 +65,9 @@ class McpBearerMiddleware:
         if token != "internal":
             authorization = headers.get(b"authorization", b"").decode("utf-8")
             token = authorization.removeprefix("Bearer ") if authorization.startswith("Bearer ") else ""
-            if token and token == self.settings.mcp_control_token:
+            if token and secrets.compare_digest(token, self.settings.mcp_control_token):
                 scopes = frozenset({"mcp:read", "mcp:control"})
-            elif token and token == self.settings.mcp_read_token:
+            elif token and secrets.compare_digest(token, self.settings.mcp_read_token):
                 scopes = frozenset({"mcp:read"})
             else:
                 await JSONResponse(
@@ -135,17 +138,23 @@ def create_mcp_server(app: Any, settings: Settings, internal_token: str) -> tupl
     ) -> dict[str, Any]:
         """Return recent telemetry points for one device, newest first."""
         require_scope("mcp:read")
-        from datetime import datetime
+        from datetime import UTC, datetime
 
         if bucket_seconds is not None and not 10 <= bucket_seconds <= 86400:
             return tool_result(error={"code": "invalid_parameter", "message": "bucket_seconds must be 10..86400"})
         try:
-            start = datetime.fromisoformat(start_at.replace("Z", "+00:00")).replace(tzinfo=None) if start_at else None
-            end = datetime.fromisoformat(end_at.replace("Z", "+00:00")).replace(tzinfo=None) if end_at else None
+            start_value = datetime.fromisoformat(start_at.replace("Z", "+00:00")) if start_at else None
+            end_value = datetime.fromisoformat(end_at.replace("Z", "+00:00")) if end_at else None
+            start = start_value.astimezone(UTC).replace(tzinfo=None) if start_value else None
+            end = end_value.astimezone(UTC).replace(tzinfo=None) if end_value else None
         except ValueError:
             return tool_result(error={"code": "invalid_parameter", "message": "invalid ISO timestamp"})
         data = await app.state.device_queries.history(
-            device_id, limit=max(1, min(limit, 2000)), start_at=start, end_at=end
+            device_id,
+            limit=max(1, min(limit, 2000)),
+            start_at=start,
+            end_at=end,
+            bucket_seconds=bucket_seconds,
         )
         return tool_result(data={"points": data, "bucket_seconds": bucket_seconds})
 

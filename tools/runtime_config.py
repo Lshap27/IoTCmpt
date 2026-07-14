@@ -78,16 +78,10 @@ def build_values(
             values.pop(key, None)
     for key, field in spec.items():
         owner = field["owner"]
-        paths = (
-            [ENV_PATHS["compose"], ENV_PATHS["shared"]]
-            if owner == "shared"
-            else [ENV_PATHS[owner]]
-        )
+        paths = [ENV_PATHS["compose"], ENV_PATHS["shared"]] if owner == "shared" else [ENV_PATHS[owner]]
         # Shared values are resolved once and copied verbatim to both files.
         # In particular, Gateway and Worker must receive the same MCP token.
-        current = next(
-            (files[path].get(key, "") for path in paths if files[path].get(key)), ""
-        )
+        current = next((files[path].get(key, "") for path in paths if files[path].get(key)), "")
         value = changes.get(key)
         if value is None:
             value = current or field["default"]
@@ -125,10 +119,7 @@ def apply_config(changes: dict[str, Any], *, dry_run: bool = False) -> dict[str,
     if not dry_run:
         for path, values in files.items():
             path.parent.mkdir(parents=True, exist_ok=True)
-            content = (
-                "\n".join(f"{key}={value}" for key, value in sorted(values.items()))
-                + "\n"
-            )
+            content = "\n".join(f"{key}={value}" for key, value in sorted(values.items())) + "\n"
             path.write_text(content, encoding="utf-8")
     return {"ok": True, "dryRun": dry_run, "diff": diff, "affectedServices": affected}
 
@@ -138,16 +129,8 @@ def main() -> int:
     parser.add_argument("--input", help="JSON file containing AIOT_* values")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
-    payload = (
-        json.loads(Path(args.input).read_text(encoding="utf-8"))
-        if args.input
-        else json.load(sys.stdin)
-    )
-    print(
-        json.dumps(
-            apply_config(payload, dry_run=args.dry_run), ensure_ascii=False, indent=2
-        )
-    )
+    payload = json.loads(Path(args.input).read_text(encoding="utf-8")) if args.input else json.load(sys.stdin)
+    print(json.dumps(apply_config(payload, dry_run=args.dry_run), ensure_ascii=False, indent=2))
     return 0
 
 

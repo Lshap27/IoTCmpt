@@ -3442,6 +3442,22 @@
         "summary": "Analyze Latest Pose"
       }
     },
+    "/api/v1/diagnostics/overview": {
+      "get": {
+        "operationId": "get_diagnostics_overview",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Diagnostics Overview"
+      }
+    },
     "/api/v1/diagnostics/traces/{trace_id}": {
       "get": {
         "operationId": "get_trace_timeline",
