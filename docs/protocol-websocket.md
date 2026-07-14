@@ -73,8 +73,13 @@ switching on `type` (`web/src/lib/ws-dispatcher.ts`).
 
 `event` payloads for `smoke.detected` and `smoke.cleared` include the
 persisted event `id`, so the dashboard can acknowledge the exact ledger entry.
-`pose_result` contains `human_present`, `label`, `confidence`,
-`source_image_url`, `annotated_image_url`, and `created_at`.
+`pose_result` keeps the compatibility fields `human_present`, `label`, and
+`confidence`, and adds independent presence/posture fields:
+`presence_confidence`, `presence_source`, `body_coverage`, `seated_state`,
+`posture_code`, `posture_issues`, `posture_confidence`, and `posture_fresh`.
+Image links remain in `source_image_url` and `annotated_image_url`. A detected
+person may therefore have `posture_code=unknown`; clients must not interpret
+that as an empty room.
 
 ## Client Behavior
 

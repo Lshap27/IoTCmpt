@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     pose_model_path: Path = Path("models/pose_landmarker_full.task")
     pose_detection_confidence: float = Field(default=0.3, ge=0.0, le=1.0)
     pose_presence_confidence: float = Field(default=0.3, ge=0.0, le=1.0)
+    pose_tracking_confidence: float = Field(default=0.3, ge=0.0, le=1.0)
+    pose_landmark_visibility: float = Field(default=0.5, ge=0.0, le=1.0)
+    pose_forward_lean_degrees: float = Field(default=20.0, ge=0.0, le=90.0)
+    pose_hunch_ratio: float = Field(default=0.25, ge=0.0, le=2.0)
+    pose_head_down_degrees: float = Field(default=25.0, ge=-90.0, le=90.0)
+    person_detection_enabled: bool = True
+    person_detection_model_path: Path = Path("models/efficientdet_lite0_int8.tflite")
+    person_detection_confidence: float = Field(default=0.35, ge=0.0, le=1.0)
 
     mqtt_enabled: bool = False
     mqtt_host: str = "127.0.0.1"

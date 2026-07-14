@@ -104,9 +104,11 @@ Response:
 ```
 
 When `AIOT_POSE_ENABLED=true`, a successful upload is queued for local
-MediaPipe analysis. The upload response does not wait for pose inference; the
-result is delivered through `pose_result` WebSocket messages and the latest
-device snapshot.
+MediaPipe analysis. EfficientDet-Lite0 determines person presence independently
+from BlazePose posture landmarks. The upload response does not wait for vision
+inference; the structured result is delivered through `pose_result` WebSocket
+messages and the latest device snapshot. A pose miss yields an unknown posture,
+not an immediate absent-person result.
 
 ## Pose and Safety Events
 

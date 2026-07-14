@@ -16,6 +16,7 @@ from app.services.mqtt import MqttGateway
 from app.services.websocket import manager
 
 LOGGER = logging.getLogger(__name__)
+_monotonic = time.monotonic
 
 
 class AutoPilot:
@@ -41,7 +42,7 @@ class AutoPilot:
         self._lighting_state: dict[str, tuple[bool, bool | None]] = {}
         self._sedentary_started: dict[str, float] = {}
         self._sedentary_announced: set[str] = set()
-        self._nonseated_frames: dict[str, int] = {}
+        self._nonseated_since: dict[str, float] = {}
         self._last_present_at: dict[str, float] = {}
 
     def is_enabled(self, device_id: str) -> bool:
@@ -91,7 +92,7 @@ class AutoPilot:
         state = self.describe(device_id)
         if not state["vision_interval_effective"]:
             return
-        now = time.monotonic()
+        now = _monotonic()
         if now - self._last_vision_run.get(device_id, 0.0) < state["vision_interval_seconds"]:
             return
         self._last_vision_run[device_id] = now
@@ -121,12 +122,14 @@ class AutoPilot:
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
 
-        seated = present and str(payload.get("label") or "").startswith("坐姿")
-        now = time.monotonic()
+        seated_state = str(payload.get("seated_state") or "")
+        if not seated_state:
+            seated_state = "seated" if str(payload.get("label") or "").startswith("坐姿") else "unknown"
+        now = _monotonic()
         if present:
             self._last_present_at[device_id] = now
-        if seated:
-            self._nonseated_frames[device_id] = 0
+        if present and seated_state == "seated":
+            self._nonseated_since.pop(device_id, None)
             self._sedentary_started.setdefault(device_id, now)
             threshold = self.describe(device_id)["sedentary_threshold_seconds"]
             if (
@@ -138,14 +141,16 @@ class AutoPilot:
                 task = asyncio.create_task(self.run_once(device_id, "sedentary", analysis_intent="sedentary"))
                 self._tasks.add(task)
                 task.add_done_callback(self._tasks.discard)
+        elif present and seated_state == "not_seated":
+            nonseated_since = self._nonseated_since.setdefault(device_id, now)
+            if now - nonseated_since >= 10:
+                self._sedentary_started.pop(device_id, None)
+                self._sedentary_announced.discard(device_id)
         elif present:
-            self._nonseated_frames[device_id] = self._nonseated_frames.get(device_id, 0) + 1
-            if self._nonseated_frames[device_id] < 2:
-                return
-            self._sedentary_started.pop(device_id, None)
-            self._sedentary_announced.discard(device_id)
+            # Unknown posture neither starts nor resets a sedentary interval.
+            self._nonseated_since.pop(device_id, None)
         elif now - self._last_present_at.get(device_id, now) >= 30:
-            self._nonseated_frames[device_id] = 0
+            self._nonseated_since.pop(device_id, None)
             self._sedentary_started.pop(device_id, None)
             self._sedentary_announced.discard(device_id)
 
@@ -163,7 +168,7 @@ class AutoPilot:
             return
         async with lock:
             # 真正开跑才记账冷却期，被锁丢弃的触发不应重置计时
-            self._last_run[device_id] = time.monotonic()
+            self._last_run[device_id] = _monotonic()
             db = SessionLocal()
             try:
 

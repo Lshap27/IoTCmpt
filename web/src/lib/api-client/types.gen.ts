@@ -893,6 +893,10 @@ export type PoseResultOut = {
      */
     annotated_image_url?: string | null;
     /**
+     * Body Coverage
+     */
+    body_coverage: 'upper_body' | 'full_body' | 'insufficient';
+    /**
      * Confidence
      */
     confidence: number;
@@ -917,6 +921,34 @@ export type PoseResultOut = {
      */
     label: string;
     /**
+     * Posture Code
+     */
+    posture_code: 'upright' | 'forward_lean' | 'hunched' | 'head_down' | 'not_seated' | 'unknown';
+    /**
+     * Posture Confidence
+     */
+    posture_confidence: number;
+    /**
+     * Posture Fresh
+     */
+    posture_fresh: boolean;
+    /**
+     * Posture Issues
+     */
+    posture_issues: Array<'forward_lean' | 'hunched' | 'head_down'>;
+    /**
+     * Presence Confidence
+     */
+    presence_confidence: number;
+    /**
+     * Presence Source
+     */
+    presence_source: 'object_detector' | 'pose_fallback' | 'none' | 'error';
+    /**
+     * Seated State
+     */
+    seated_state: 'seated' | 'not_seated' | 'unknown';
+    /**
      * Source Image Url
      */
     source_image_url: string;
@@ -930,6 +962,10 @@ export type PoseSnapshot = {
      * Annotated Image Url
      */
     annotated_image_url?: string | null;
+    /**
+     * Body Coverage
+     */
+    body_coverage: 'upper_body' | 'full_body' | 'insufficient';
     /**
      * Confidence
      */
@@ -950,6 +986,34 @@ export type PoseSnapshot = {
      * Label
      */
     label: string;
+    /**
+     * Posture Code
+     */
+    posture_code: 'upright' | 'forward_lean' | 'hunched' | 'head_down' | 'not_seated' | 'unknown';
+    /**
+     * Posture Confidence
+     */
+    posture_confidence: number;
+    /**
+     * Posture Fresh
+     */
+    posture_fresh: boolean;
+    /**
+     * Posture Issues
+     */
+    posture_issues: Array<'forward_lean' | 'hunched' | 'head_down'>;
+    /**
+     * Presence Confidence
+     */
+    presence_confidence: number;
+    /**
+     * Presence Source
+     */
+    presence_source: 'object_detector' | 'pose_fallback' | 'none' | 'error';
+    /**
+     * Seated State
+     */
+    seated_state: 'seated' | 'not_seated' | 'unknown';
     /**
      * Source Image Url
      */

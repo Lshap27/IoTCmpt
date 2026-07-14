@@ -269,6 +269,56 @@ def test_runtime_automation_settings_are_reported():
     assert state["smoke_silence_seconds"] == 45
 
 
+def test_sedentary_timer_survives_unknown_pose_and_resets_only_after_sustained_exit(monkeypatch):
+    class FakeDb:
+        def query(self, _model):
+            return self
+
+        def filter(self, *_args):
+            return self
+
+        def order_by(self, *_args):
+            return self
+
+        def first(self):
+            return None
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("app.services.autopilot.SessionLocal", FakeDb)
+    pilot = AutoPilot(make_settings(autopilot_enabled=False), None)
+    now = 0.0
+    monkeypatch.setattr("app.services.autopilot._monotonic", lambda: now)
+
+    pilot.on_pose_result("dev", {"human_present": True, "seated_state": "seated", "label": "坐姿端正"})
+    assert pilot._sedentary_started["dev"] == 0.0
+
+    now = 2.0
+    pilot.on_pose_result("dev", {"human_present": True, "seated_state": "unknown", "label": "姿态暂不可判"})
+    now = 4.0
+    pilot.on_pose_result("dev", {"human_present": True, "seated_state": "unknown", "label": "姿态暂不可判"})
+    assert pilot._sedentary_started["dev"] == 0.0
+
+    now = 5.0
+    pilot.on_pose_result("dev", {"human_present": True, "seated_state": "not_seated", "label": "非坐姿"})
+    now = 14.9
+    pilot.on_pose_result("dev", {"human_present": True, "seated_state": "not_seated", "label": "非坐姿"})
+    assert pilot._sedentary_started["dev"] == 0.0
+    now = 15.0
+    pilot.on_pose_result("dev", {"human_present": True, "seated_state": "not_seated", "label": "非坐姿"})
+    assert "dev" not in pilot._sedentary_started
+
+    now = 20.0
+    pilot.on_pose_result("dev", {"human_present": True, "seated_state": "seated", "label": "坐姿驼背"})
+    now = 49.9
+    pilot.on_pose_result("dev", {"human_present": False, "seated_state": "unknown", "label": "未检测到人体"})
+    assert pilot._sedentary_started["dev"] == 20.0
+    now = 50.0
+    pilot.on_pose_result("dev", {"human_present": False, "seated_state": "unknown", "label": "未检测到人体"})
+    assert "dev" not in pilot._sedentary_started
+
+
 # ---- 自动决策闭环 ----
 
 
@@ -314,9 +364,7 @@ def test_autopilot_endpoints_toggle_and_latest_reflects(client):
     minimum = client.put("/api/devices/esp32s3-001/autopilot", json={"sedentary_threshold_seconds": 5})
     assert minimum.status_code == 200
     assert minimum.json()["sedentary_threshold_seconds"] == 5
-    assert client.put(
-        "/api/devices/esp32s3-001/autopilot", json={"sedentary_threshold_seconds": 4}
-    ).status_code == 422
+    assert client.put("/api/devices/esp32s3-001/autopilot", json={"sedentary_threshold_seconds": 4}).status_code == 422
 
     schema = client.get("/openapi.json").json()["components"]["schemas"]["AutopilotState"]
     assert schema["properties"]["trigger_levels"]["deprecated"] is True

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+  Activity,
   BrainCircuit,
   Camera,
   CameraOff,
@@ -27,17 +28,7 @@ export function CameraPanel({
   className,
 }: {
   image: { url: string; created_at: string } | null | undefined;
-  pose:
-    | {
-        human_present: boolean;
-        label: string;
-        confidence: number;
-        source_image_url: string;
-        annotated_image_url?: string | null;
-        created_at: string;
-      }
-    | null
-    | undefined;
+  pose: LatestState["pose"] | undefined;
   onAnalyze: () => void;
   onAiAnalyze: () => void;
   aiAnalyzing: boolean;
@@ -54,6 +45,21 @@ export function CameraPanel({
   const showingAnnotated = showAnnotated && Boolean(pose?.annotated_image_url);
   const imageUrl = showingAnnotated ? pose?.annotated_image_url : image?.url;
   const capturedAt = showingAnnotated ? pose?.created_at : image?.created_at;
+  const coverageLabel =
+    pose?.body_coverage === "full_body"
+      ? "全身"
+      : pose?.body_coverage === "upper_body"
+        ? "上半身"
+        : "关键点不足";
+  const postureLabel = !pose
+    ? "等待姿态识别"
+    : !pose.human_present
+      ? "无人时不评估"
+      : pose.posture_code === "unknown"
+        ? pose.label === "姿态确认中"
+          ? "姿态确认中"
+          : "姿态暂不可判"
+        : pose.label;
   return (
     <Panel
       title="现场画面与姿态"
@@ -106,12 +112,44 @@ export function CameraPanel({
           <p className="text-xs">等待设备上传画面</p>
         </div>
       )}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm text-ink2">
-          <PersonStanding size={15} className={pose?.human_present ? "text-good" : "text-ink3"} />
-          <span>{pose?.label ?? "等待姿态识别"}</span>
-          {pose ? <span className="tnum text-ink3">{Math.round(pose.confidence * 100)}%</span> : null}
+      <div className="mt-3 grid gap-2 sm:grid-cols-2" aria-live="polite">
+        <div className="rounded-xl border border-line bg-raised px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2 text-xs text-ink3">
+            <span className="inline-flex items-center gap-1.5">
+              <PersonStanding size={14} className={pose?.human_present ? "text-good" : "text-ink3"} />
+              人体存在
+            </span>
+            <span className="tnum">{pose ? `${Math.round(pose.presence_confidence * 100)}%` : "--"}</span>
+          </div>
+          <p className={`mt-1 text-sm font-medium ${pose?.human_present ? "text-good" : "text-ink2"}`}>
+            {pose ? (pose.human_present ? "检测到人体" : "未检测到人体") : "等待人体检测"}
+          </p>
         </div>
+        <div className="rounded-xl border border-line bg-raised px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2 text-xs text-ink3">
+            <span className="inline-flex items-center gap-1.5">
+              <Activity
+                size={14}
+                className={pose?.posture_code !== "unknown" ? "text-accent" : "text-ink3"}
+              />
+              坐姿状态
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              {pose && !pose.posture_fresh && pose.posture_code !== "unknown" ? (
+                <span className="rounded bg-warn/10 px-1.5 py-0.5 text-warn">短暂保持</span>
+              ) : null}
+              <span className="tnum">
+                {pose?.human_present ? `${Math.round(pose.posture_confidence * 100)}%` : "--"}
+              </span>
+            </span>
+          </div>
+          <p className="mt-1 text-sm font-medium text-ink2">{postureLabel}</p>
+          {pose?.human_present ? (
+            <p className="mt-0.5 text-[11px] text-ink3">识别范围：{coverageLabel}</p>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-2 flex justify-end">
         {pose?.annotated_image_url ? (
           <div className="flex rounded-md border border-line bg-raised p-0.5" aria-label="画面类型">
             <button

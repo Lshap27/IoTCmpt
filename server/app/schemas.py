@@ -21,6 +21,11 @@ CommandType = Literal[
     "display.message",
 ]
 CommandSource = Literal["frontend", "llm", "rule"]
+PresenceSource = Literal["object_detector", "pose_fallback", "none", "error"]
+BodyCoverage = Literal["upper_body", "full_body", "insufficient"]
+SeatedState = Literal["seated", "not_seated", "unknown"]
+PostureCode = Literal["upright", "forward_lean", "hunched", "head_down", "not_seated", "unknown"]
+PostureIssue = Literal["forward_lean", "hunched", "head_down"]
 
 
 class SensorPayload(BaseModel):
@@ -154,6 +159,14 @@ class PoseResultOut(BaseModel):
     human_present: bool
     label: str
     confidence: float
+    presence_confidence: float
+    presence_source: PresenceSource
+    body_coverage: BodyCoverage
+    seated_state: SeatedState
+    posture_code: PostureCode
+    posture_issues: list[PostureIssue]
+    posture_confidence: float
+    posture_fresh: bool
     source_image_url: str
     annotated_image_url: str | None = None
     created_at: str
@@ -260,6 +273,14 @@ class PoseSnapshot(BaseModel):
     human_present: bool
     label: str
     confidence: float
+    presence_confidence: float
+    presence_source: PresenceSource
+    body_coverage: BodyCoverage
+    seated_state: SeatedState
+    posture_code: PostureCode
+    posture_issues: list[PostureIssue]
+    posture_confidence: float
+    posture_fresh: bool
     source_image_url: str
     annotated_image_url: str | None = None
     created_at: str

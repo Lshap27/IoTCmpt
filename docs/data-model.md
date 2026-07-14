@@ -60,6 +60,13 @@ these aggregates without inventing samples for missing periods.
 - `message`
 - `raw_payload`
 - `created_at`
+
+`human_present`, `label`, and `confidence` remain the compatibility fields.
+Structured presence and posture data is stored in `raw_payload` and exposed by
+the HTTP/WebSocket serializers as `presence_confidence`, `presence_source`,
+`body_coverage`, `seated_state`, `posture_code`, `posture_issues`,
+`posture_confidence`, and `posture_fresh`. This keeps existing rows readable
+without a schema migration while separating occupancy from posture quality.
 - `acknowledged_at`
 
 ## command

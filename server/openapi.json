@@ -1491,6 +1491,15 @@
             "default": null,
             "title": "Annotated Image Url"
           },
+          "body_coverage": {
+            "enum": [
+              "upper_body",
+              "full_body",
+              "insufficient"
+            ],
+            "title": "Body Coverage",
+            "type": "string"
+          },
           "confidence": {
             "title": "Confidence",
             "type": "number"
@@ -1515,6 +1524,61 @@
             "title": "Label",
             "type": "string"
           },
+          "posture_code": {
+            "enum": [
+              "upright",
+              "forward_lean",
+              "hunched",
+              "head_down",
+              "not_seated",
+              "unknown"
+            ],
+            "title": "Posture Code",
+            "type": "string"
+          },
+          "posture_confidence": {
+            "title": "Posture Confidence",
+            "type": "number"
+          },
+          "posture_fresh": {
+            "title": "Posture Fresh",
+            "type": "boolean"
+          },
+          "posture_issues": {
+            "items": {
+              "enum": [
+                "forward_lean",
+                "hunched",
+                "head_down"
+              ],
+              "type": "string"
+            },
+            "title": "Posture Issues",
+            "type": "array"
+          },
+          "presence_confidence": {
+            "title": "Presence Confidence",
+            "type": "number"
+          },
+          "presence_source": {
+            "enum": [
+              "object_detector",
+              "pose_fallback",
+              "none",
+              "error"
+            ],
+            "title": "Presence Source",
+            "type": "string"
+          },
+          "seated_state": {
+            "enum": [
+              "seated",
+              "not_seated",
+              "unknown"
+            ],
+            "title": "Seated State",
+            "type": "string"
+          },
           "source_image_url": {
             "title": "Source Image Url",
             "type": "string"
@@ -1526,6 +1590,14 @@
           "human_present",
           "label",
           "confidence",
+          "presence_confidence",
+          "presence_source",
+          "body_coverage",
+          "seated_state",
+          "posture_code",
+          "posture_issues",
+          "posture_confidence",
+          "posture_fresh",
           "source_image_url",
           "created_at"
         ],
@@ -1544,6 +1616,15 @@
               }
             ],
             "title": "Annotated Image Url"
+          },
+          "body_coverage": {
+            "enum": [
+              "upper_body",
+              "full_body",
+              "insufficient"
+            ],
+            "title": "Body Coverage",
+            "type": "string"
           },
           "confidence": {
             "title": "Confidence",
@@ -1565,6 +1646,61 @@
             "title": "Label",
             "type": "string"
           },
+          "posture_code": {
+            "enum": [
+              "upright",
+              "forward_lean",
+              "hunched",
+              "head_down",
+              "not_seated",
+              "unknown"
+            ],
+            "title": "Posture Code",
+            "type": "string"
+          },
+          "posture_confidence": {
+            "title": "Posture Confidence",
+            "type": "number"
+          },
+          "posture_fresh": {
+            "title": "Posture Fresh",
+            "type": "boolean"
+          },
+          "posture_issues": {
+            "items": {
+              "enum": [
+                "forward_lean",
+                "hunched",
+                "head_down"
+              ],
+              "type": "string"
+            },
+            "title": "Posture Issues",
+            "type": "array"
+          },
+          "presence_confidence": {
+            "title": "Presence Confidence",
+            "type": "number"
+          },
+          "presence_source": {
+            "enum": [
+              "object_detector",
+              "pose_fallback",
+              "none",
+              "error"
+            ],
+            "title": "Presence Source",
+            "type": "string"
+          },
+          "seated_state": {
+            "enum": [
+              "seated",
+              "not_seated",
+              "unknown"
+            ],
+            "title": "Seated State",
+            "type": "string"
+          },
           "source_image_url": {
             "title": "Source Image Url",
             "type": "string"
@@ -1575,6 +1711,14 @@
           "human_present",
           "label",
           "confidence",
+          "presence_confidence",
+          "presence_source",
+          "body_coverage",
+          "seated_state",
+          "posture_code",
+          "posture_issues",
+          "posture_confidence",
+          "posture_fresh",
           "source_image_url",
           "created_at"
         ],

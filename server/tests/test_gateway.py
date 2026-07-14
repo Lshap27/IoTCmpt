@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import base64
 from datetime import datetime
-from types import SimpleNamespace
 
 from app.core import config
 from app.db import models
@@ -11,7 +10,7 @@ from app.schemas import TelemetryIn
 from app.services.commands import create_command, validate_command_type
 from app.services.llm import LLMService
 from app.services.mqtt_ingest import ingest_mqtt_message
-from app.services.pose import PoseService, _pose_label
+from app.services.pose import PoseService
 from app.services.telemetry import fetch_history_bucketed, record_telemetry
 
 
@@ -388,23 +387,6 @@ def test_pose_queue_keeps_only_latest_image(client):
     assert asyncio.run(exercise()) == ("esp32s3-001", 2)
 
 
-def test_pose_label_reports_standing_issues():
-    points = [SimpleNamespace(x=0.5, y=0.5, visibility=1.0) for _ in range(33)]
-    points[0] = SimpleNamespace(x=0.8, y=0.6, visibility=1.0)
-    points[11] = SimpleNamespace(x=0.8, y=0.3, visibility=1.0)
-    points[12] = SimpleNamespace(x=0.8, y=0.3, visibility=1.0)
-    points[23] = SimpleNamespace(x=0.5, y=0.5, visibility=1.0)
-    points[24] = SimpleNamespace(x=0.5, y=0.5, visibility=1.0)
-    points[25] = SimpleNamespace(x=0.5, y=0.7, visibility=1.0)
-    points[26] = SimpleNamespace(x=0.5, y=0.7, visibility=1.0)
-    points[27] = SimpleNamespace(x=0.5, y=0.9, visibility=1.0)
-    points[28] = SimpleNamespace(x=0.5, y=0.9, visibility=1.0)
-
-    import numpy as np
-
-    assert _pose_label(np, points) == "站姿驼背、低头"
-
-
 def test_pose_service_rejects_missing_model(client, tmp_path):
     settings = config.get_settings()
     settings.pose_model_path = tmp_path / "missing.task"
@@ -441,4 +423,6 @@ def test_latest_includes_pose_result(client):
 
     latest = client.get("/api/devices/esp32s3-001/latest").json()
     assert latest["pose"]["label"] == "坐姿低头"
+    assert latest["pose"]["presence_source"] == "pose_fallback"
+    assert latest["pose"]["posture_code"] == "head_down"
     assert latest["pose"]["source_image_url"].startswith("http://testserver/uploads/")
