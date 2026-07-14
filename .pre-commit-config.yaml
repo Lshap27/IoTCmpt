@@ -21,6 +21,12 @@ repos:
   # Use the project-local prettier so the hook and `pnpm format` agree on output.
   - repo: local
     hooks:
+      - id: contract-drift
+        name: contract drift
+        language: system
+        entry: python tools/generate-contracts.py --check
+        pass_filenames: false
+        files: ^(contracts/|tools/generate-contracts\.py|tools/firmware_simulator/generated_behavior\.py|server/app/generated/|firmware/esp32s3/main/include/(command_catalog|firmware_behavior)\.generated\.h)
       - id: prettier
         name: prettier
         language: system
@@ -34,3 +40,4 @@ repos:
     hooks:
       - id: clang-format
         files: ^firmware/esp32s3/main/.*\.(c|h)$
+        exclude: ^firmware/esp32s3/main/include/(command_catalog|firmware_behavior)\.generated\.h$

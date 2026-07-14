@@ -40,32 +40,50 @@ class Settings(BaseSettings):
     mqtt_username: str = ""
     mqtt_password: str = ""
     mqtt_reconnect_seconds: float = 3.0
+    command_ack_timeout_seconds: float = Field(default=60.0, ge=5.0, le=3600.0)
+
+    mcp_enabled: bool = False
+    mcp_internal_token: str = ""
+    mcp_read_token: str = ""
+    mcp_control_token: str = ""
+    mcp_allowed_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
+    )
+    mcp_allowed_hosts: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["localhost", "127.0.0.1", "aiot.internal", "testserver"]
+    )
+    mcp_rate_limit_per_minute: int = Field(default=60, ge=1, le=10000)
+
+    ai_worker_enabled: bool = True
+    ai_worker_poll_seconds: float = Field(default=0.5, ge=0.1, le=30.0)
+    ai_worker_lease_seconds: int = Field(default=90, ge=30, le=900)
+    ai_worker_heartbeat_seconds: int = Field(default=15, ge=5, le=120)
+    ai_worker_max_attempts: int = Field(default=3, ge=1, le=10)
+    ai_tool_max_rounds: int = Field(default=4, ge=1, le=10)
+    ai_tool_max_calls: int = Field(default=8, ge=1, le=32)
+    patrol_scheduler_seconds: float = Field(default=5.0, ge=1.0, le=300.0)
+    gateway_internal_url: str = "http://127.0.0.1:8000"
+    outbox_lease_seconds: int = Field(default=30, ge=10, le=300)
 
     cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["http://localhost:3000"])
 
     llm_endpoint: str = "https://api.deepseek.com"
     llm_api_key: str = ""
     llm_model: str = "deepseek-v4-flash"
-    llm_timeout_seconds: float = 12.0
+    llm_timeout_seconds: float = 60.0
     llm_image_max_age_seconds: float = 600.0
     llm_response_format: str = "json_object"
     llm_thinking_enabled: bool = False
     llm_reasoning_effort: str = "high"
 
-    autopilot_enabled: bool = True
-    autopilot_cooldown_seconds: float = 120.0
-    autopilot_min_confidence: float = Field(default=0.6, ge=0.0, le=1.0)
-    autopilot_trigger_levels: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["alert"],
-        description="Deprecated: 空气质量与烟雾自动规则已移至固件；保留此配置仅用于兼容旧部署。",
-    )
-    vision_interval_enabled: bool = False
-    vision_interval_seconds: float = Field(default=300.0, ge=30.0, le=3600.0)
     vision_image_max_age_seconds: float = Field(default=15.0, ge=1.0, le=120.0)
-    sedentary_threshold_seconds: float = Field(default=7200.0, ge=5.0, le=28800.0)
-    smoke_silence_seconds: int = Field(default=60, ge=10, le=600)
 
-    @field_validator("cors_origins", "autopilot_trigger_levels", mode="before")
+    @field_validator(
+        "cors_origins",
+        "mcp_allowed_origins",
+        "mcp_allowed_hosts",
+        mode="before",
+    )
     @classmethod
     def split_comma_list(cls, value):
         if isinstance(value, str):
@@ -88,16 +106,7 @@ class Settings(BaseSettings):
             raise ValueError(f"llm_reasoning_effort must be one of {sorted(allowed)}")
         return value
 
-    @field_validator("autopilot_trigger_levels")
-    @classmethod
-    def check_autopilot_trigger_levels(cls, value: list[str]) -> list[str]:
-        allowed = {"good", "watch", "alert"}
-        normalized = list(dict.fromkeys(item.strip().lower() for item in value if item.strip()))
-        if not normalized or any(item not in allowed for item in normalized):
-            raise ValueError("autopilot_trigger_levels must contain one or more of: good, watch, alert")
-        return normalized
-
-    @field_validator("base_url")
+    @field_validator("base_url", "gateway_internal_url")
     @classmethod
     def trim_base_url(cls, value: str) -> str:
         return value.rstrip("/")

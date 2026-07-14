@@ -1,20 +1,23 @@
 import { client } from "./api-client/client.gen";
 import {
-  analyzeDevice,
-  analyzeDeviceImage,
   ackDeviceEvent,
   analyzeLatestPose,
+  createAiRun,
+  cancelAiRun,
+  getAiRun,
+  getTraceTimeline,
+  getAutomationPolicy,
+  getDeviceCapabilities,
   deviceEvents,
   deviceNotifications,
-  getAutopilotState,
   latestDeviceState,
+  listAiRuns,
   listDevices,
   sendCommand as sendCommandSdk,
   sendNotification as sendNotificationSdk,
   telemetryHistory,
   telemetryHistoryBucketed,
-  updateAutopilotState,
-  createAiHealthReport,
+  updateAutomationPolicy,
 } from "./api-client/sdk.gen";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -23,10 +26,10 @@ client.setConfig({ baseUrl: API_BASE_URL });
 
 // 所有类型均由 `pnpm codegen` 从 server/openapi.json 生成——不要手写协议类型。
 export type {
-  AiDecisionOut as AiDecisionPayload,
-  AiHealthReport,
-  AiResultInfo,
-  AutopilotState,
+  AiRunOut,
+  AutomationPolicyIn,
+  AutomationPolicyOut,
+  DeviceCapabilitiesOut,
   CommandOut as CommandInfo,
   DeviceSummary,
   LatestState,
@@ -34,15 +37,17 @@ export type {
   NotificationOut,
   TelemetryBucketPoint,
   TelemetryPoint,
+  TraceTimelineOut,
   WsMessage,
 } from "./api-client/types.gen";
 
 import type {
-  AiDecisionOut,
-  AiHealthReport as AiHealthReportT,
-  AiReportIn as AiReportInT,
-  AutopilotState as AutopilotStateT,
-  CommandOut,
+  AiRunCreate,
+  AiRunOut as AiRunOutT,
+  AutomationPolicyIn as AutomationPolicyInT,
+  AutomationPolicyOut as AutomationPolicyOutT,
+  CommandV1Out,
+  DeviceCapabilitiesOut as DeviceCapabilitiesOutT,
   DeviceSummary as DeviceSummaryT,
   LatestState as LatestStateT,
   EventOut as EventOutT,
@@ -51,7 +56,20 @@ import type {
   TelemetryPoint as TelemetryPointT,
 } from "./api-client/types.gen";
 
-export type ReportPeriod = AiReportInT["period"];
+export type ReportPeriod = "hour" | "day" | "week";
+export type AiHealthReport = {
+  device_id: string;
+  period: ReportPeriod;
+  generated_at: string;
+  model: string;
+  headline: string;
+  summary: string;
+  risk_score: number;
+  anomalies: string[];
+  recommendations: string[];
+  next_checks: string[];
+  coverage: { completeness_percent: number; sample_count: number };
+};
 
 /** WebSocket 信封的宽松视图；WF5 将切换到判别联合 WsMessage。 */
 export type Envelope = {
@@ -113,23 +131,11 @@ export async function sendCommand(
   deviceId: string,
   type: string,
   parameter: Record<string, unknown> = {},
-): Promise<CommandOut> {
+): Promise<CommandV1Out> {
   const { data } = await sendCommandSdk({
     path: { device_id: deviceId },
     body: {
-      type: type as
-        | "none"
-        | "window.open"
-        | "window.close"
-        | "alarm.on"
-        | "alarm.off"
-        | "led.on"
-        | "led.off"
-        | "control.set_priority"
-        | "control.resume_auto"
-        | "alarm.silence"
-        | "voice.speak"
-        | "display.message",
+      type,
       parameter,
       reason: "dashboard command",
     },
@@ -138,10 +144,10 @@ export async function sendCommand(
   return data;
 }
 
-export async function fetchDeviceEvents(deviceId: string, type?: string): Promise<EventOutT[]> {
+export async function fetchDeviceEvents(deviceId: string): Promise<EventOutT[]> {
   const { data } = await deviceEvents({
     path: { device_id: deviceId },
-    query: { type, limit: 500 },
+    query: { limit: 500 },
     cache: "no-store",
     throwOnError: true,
   });
@@ -184,27 +190,62 @@ export async function requestPoseAnalysis(deviceId: string) {
   return data;
 }
 
-export async function requestAiAnalysis(deviceId: string): Promise<AiDecisionOut> {
-  const { data } = await analyzeDevice({ path: { device_id: deviceId }, throwOnError: true });
-  return data;
-}
-
-export async function requestAiImageAnalysis(deviceId: string): Promise<AiDecisionOut> {
-  const { data } = await analyzeDeviceImage({ path: { device_id: deviceId }, throwOnError: true });
-  return data;
-}
-
-export async function requestAiReport(deviceId: string, period: ReportPeriod): Promise<AiHealthReportT> {
-  const { data } = await createAiHealthReport({
+export async function startAiRun(deviceId: string, body: AiRunCreate): Promise<AiRunOutT> {
+  const { data } = await createAiRun({
     path: { device_id: deviceId },
-    body: { period },
+    body,
     throwOnError: true,
   });
   return data;
 }
 
-export async function fetchAutopilot(deviceId: string): Promise<AutopilotStateT> {
-  const { data } = await getAutopilotState({
+export async function fetchAiRun(deviceId: string, runId: string): Promise<AiRunOutT> {
+  const { data } = await getAiRun({
+    path: { device_id: deviceId, run_id: runId },
+    cache: "no-store",
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function fetchAiRuns(deviceId: string, limit = 50): Promise<AiRunOutT[]> {
+  const { data } = await listAiRuns({
+    path: { device_id: deviceId },
+    query: { limit },
+    cache: "no-store",
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function cancelDeviceAiRun(deviceId: string, runId: string): Promise<AiRunOutT> {
+  const { data } = await cancelAiRun({
+    path: { device_id: deviceId, run_id: runId },
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function fetchTrace(traceId: string) {
+  const { data } = await getTraceTimeline({
+    path: { trace_id: traceId },
+    cache: "no-store",
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function fetchReadiness(): Promise<{
+  status: string;
+  dependencies: Record<string, string>;
+}> {
+  const response = await fetch(`${API_BASE_URL}/health/ready`, { cache: "no-store" });
+  if (!response.ok) throw new Error("无法读取网关健康状态");
+  return response.json();
+}
+
+export async function fetchAutomationPolicy(deviceId: string): Promise<AutomationPolicyOutT> {
+  const { data } = await getAutomationPolicy({
     path: { device_id: deviceId },
     cache: "no-store",
     throwOnError: true,
@@ -212,19 +253,22 @@ export async function fetchAutopilot(deviceId: string): Promise<AutopilotStateT>
   return data;
 }
 
-export async function updateAutopilot(
+export async function saveAutomationPolicy(
   deviceId: string,
-  values: {
-    enabled?: boolean;
-    vision_interval_enabled?: boolean;
-    vision_interval_seconds?: number;
-    sedentary_threshold_seconds?: number;
-    smoke_silence_seconds?: number;
-  },
-): Promise<AutopilotStateT> {
-  const { data } = await updateAutopilotState({
+  values: AutomationPolicyInT,
+): Promise<AutomationPolicyOutT> {
+  const { data } = await updateAutomationPolicy({
     path: { device_id: deviceId },
     body: values,
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function fetchCapabilities(deviceId: string): Promise<DeviceCapabilitiesOutT> {
+  const { data } = await getDeviceCapabilities({
+    path: { device_id: deviceId },
+    cache: "no-store",
     throwOnError: true,
   });
   return data;

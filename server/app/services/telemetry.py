@@ -10,6 +10,19 @@ from app.db import models
 from app.schemas import CommandAckIn, TelemetryIn
 from app.services.commands import ensure_device
 
+COMMAND_STATUS_ORDER = {
+    "created": 0,
+    "pending": 0,
+    "queued": 1,
+    "published": 2,
+    "accepted": 3,
+    "executed": 4,
+    "rejected": 4,
+    "failed": 4,
+    "expired": 4,
+    "timed_out": 4,
+}
+
 
 def naive_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
@@ -55,6 +68,12 @@ def record_telemetry(db: Session, payload: TelemetryIn) -> models.Telemetry:
         raw_payload=payload.model_dump(mode="json"),
     )
     db.add(sample)
+    twin = db.query(models.DeviceTwin).filter(models.DeviceTwin.device_id == payload.device_id).one_or_none()
+    if twin is None:
+        twin = models.DeviceTwin(device_id=payload.device_id, desired_state={}, reported_state={})
+    twin.reported_state = payload.state.model_dump(mode="json", exclude_none=True)
+    twin.reported_at = naive_utc(payload.sampled_at)
+    db.add(twin)
     db.commit()
     db.refresh(sample)
     return sample
@@ -64,8 +83,34 @@ def record_command_ack(db: Session, payload: CommandAckIn) -> models.Command | N
     command = db.query(models.Command).filter(models.Command.command_id == payload.command_id).one_or_none()
     if command is None:
         return None
+    current_rank = COMMAND_STATUS_ORDER.get(command.status, -1)
+    incoming_rank = COMMAND_STATUS_ORDER.get(payload.status, -1)
+    if incoming_rank <= current_rank:
+        return command
+    previous = command.status
     command.status = payload.status
-    command.executed_at = naive_utc(payload.executed_at)
+    command.error_code = payload.error_code
+    if payload.status == "accepted":
+        command.accepted_at = naive_utc(payload.executed_at)
+    else:
+        command.executed_at = naive_utc(payload.executed_at)
+    db.add(
+        models.CommandEvent(
+            command_id=command.command_id,
+            trace_id=payload.trace_id or command.trace_id,
+            from_status=previous,
+            to_status=payload.status,
+            error_code=payload.error_code,
+            detail={"message": payload.message, "reported_state": payload.reported_state},
+        )
+    )
+    if payload.reported_state:
+        twin = db.query(models.DeviceTwin).filter(models.DeviceTwin.device_id == payload.device_id).one_or_none()
+        if twin is None:
+            twin = models.DeviceTwin(device_id=payload.device_id, desired_state={}, reported_state={})
+        twin.reported_state = {**(twin.reported_state or {}), **payload.reported_state}
+        twin.reported_at = naive_utc(payload.executed_at)
+        db.add(twin)
     db.add(command)
     db.commit()
     db.refresh(command)

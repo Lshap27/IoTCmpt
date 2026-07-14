@@ -90,6 +90,7 @@ build-*/
 *.img
 
 # Local runtime/deployment data
+.runtime/
 postgres_data/
 emqx_data/
 emqx_log/

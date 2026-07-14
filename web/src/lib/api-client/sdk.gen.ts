@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AckDeviceEventData, AckDeviceEventErrors, AckDeviceEventResponses, AnalyzeDeviceData, AnalyzeDeviceErrors, AnalyzeDeviceImageData, AnalyzeDeviceImageErrors, AnalyzeDeviceImageResponses, AnalyzeDeviceResponses, AnalyzeLatestPoseData, AnalyzeLatestPoseErrors, AnalyzeLatestPoseResponses, CreateAiHealthReportData, CreateAiHealthReportErrors, CreateAiHealthReportResponses, DeviceEventsData, DeviceEventsErrors, DeviceEventsResponses, DeviceNotificationsData, DeviceNotificationsErrors, DeviceNotificationsResponses, GetAutopilotStateData, GetAutopilotStateErrors, GetAutopilotStateResponses, HealthData, HealthResponses, LatestDeviceStateData, LatestDeviceStateErrors, LatestDeviceStateResponses, ListDevicesData, ListDevicesResponses, SendCommandData, SendCommandErrors, SendCommandResponses, SendNotificationData, SendNotificationErrors, SendNotificationResponses, TelemetryHistoryBucketedData, TelemetryHistoryBucketedErrors, TelemetryHistoryBucketedResponses, TelemetryHistoryData, TelemetryHistoryErrors, TelemetryHistoryResponses, UpdateAutopilotStateData, UpdateAutopilotStateErrors, UpdateAutopilotStateResponses, UploadImageData, UploadImageErrors, UploadImageResponses } from './types.gen';
+import type { AckDeviceEventData, AckDeviceEventErrors, AckDeviceEventResponses, AnalyzeLatestPoseData, AnalyzeLatestPoseErrors, AnalyzeLatestPoseResponses, CancelAiRunData, CancelAiRunErrors, CancelAiRunResponses, CreateAiRunData, CreateAiRunErrors, CreateAiRunResponses, DeviceEventsData, DeviceEventsErrors, DeviceEventsResponses, DeviceNotificationsData, DeviceNotificationsErrors, DeviceNotificationsResponses, GetAiRunData, GetAiRunErrors, GetAiRunResponses, GetAutomationPolicyData, GetAutomationPolicyErrors, GetAutomationPolicyResponses, GetCommandV1Data, GetCommandV1Errors, GetCommandV1Responses, GetDeviceCapabilitiesData, GetDeviceCapabilitiesErrors, GetDeviceCapabilitiesResponses, GetTraceTimelineData, GetTraceTimelineErrors, GetTraceTimelineResponses, HealthData, HealthLiveData, HealthLiveResponses, HealthReadyData, HealthReadyResponses, HealthResponses, LatestDeviceStateData, LatestDeviceStateErrors, LatestDeviceStateResponses, ListAiRunsData, ListAiRunsErrors, ListAiRunsResponses, ListDevicesData, ListDevicesResponses, SendCommandData, SendCommandErrors, SendCommandResponses, SendNotificationData, SendNotificationErrors, SendNotificationResponses, TelemetryHistoryBucketedData, TelemetryHistoryBucketedErrors, TelemetryHistoryBucketedResponses, TelemetryHistoryData, TelemetryHistoryErrors, TelemetryHistoryResponses, UpdateAutomationPolicyData, UpdateAutomationPolicyErrors, UpdateAutomationPolicyResponses, UploadImageData, UploadImageErrors, UploadImageResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -21,23 +21,18 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 /**
  * List Devices
  */
-export const listDevices = <ThrowOnError extends boolean = false>(options?: Options<ListDevicesData, ThrowOnError>): RequestResult<ListDevicesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListDevicesResponses, unknown, ThrowOnError>({ url: '/api/devices', ...options });
+export const listDevices = <ThrowOnError extends boolean = false>(options?: Options<ListDevicesData, ThrowOnError>): RequestResult<ListDevicesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListDevicesResponses, unknown, ThrowOnError>({ url: '/api/v1/devices', ...options });
 
 /**
- * Analyze Device
+ * List Ai Runs
  */
-export const analyzeDevice = <ThrowOnError extends boolean = false>(options: Options<AnalyzeDeviceData, ThrowOnError>): RequestResult<AnalyzeDeviceResponses, AnalyzeDeviceErrors, ThrowOnError> => (options.client ?? client).post<AnalyzeDeviceResponses, AnalyzeDeviceErrors, ThrowOnError>({ url: '/api/devices/{device_id}/ai/analyze', ...options });
+export const listAiRuns = <ThrowOnError extends boolean = false>(options: Options<ListAiRunsData, ThrowOnError>): RequestResult<ListAiRunsResponses, ListAiRunsErrors, ThrowOnError> => (options.client ?? client).get<ListAiRunsResponses, ListAiRunsErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/ai/runs', ...options });
 
 /**
- * Analyze Device Image
+ * Create Ai Run
  */
-export const analyzeDeviceImage = <ThrowOnError extends boolean = false>(options: Options<AnalyzeDeviceImageData, ThrowOnError>): RequestResult<AnalyzeDeviceImageResponses, AnalyzeDeviceImageErrors, ThrowOnError> => (options.client ?? client).post<AnalyzeDeviceImageResponses, AnalyzeDeviceImageErrors, ThrowOnError>({ url: '/api/devices/{device_id}/ai/analyze-image', ...options });
-
-/**
- * Create Ai Health Report
- */
-export const createAiHealthReport = <ThrowOnError extends boolean = false>(options: Options<CreateAiHealthReportData, ThrowOnError>): RequestResult<CreateAiHealthReportResponses, CreateAiHealthReportErrors, ThrowOnError> => (options.client ?? client).post<CreateAiHealthReportResponses, CreateAiHealthReportErrors, ThrowOnError>({
-    url: '/api/devices/{device_id}/ai/report',
+export const createAiRun = <ThrowOnError extends boolean = false>(options: Options<CreateAiRunData, ThrowOnError>): RequestResult<CreateAiRunResponses, CreateAiRunErrors, ThrowOnError> => (options.client ?? client).post<CreateAiRunResponses, CreateAiRunErrors, ThrowOnError>({
+    url: '/api/v1/devices/{device_id}/ai/runs',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -46,27 +41,42 @@ export const createAiHealthReport = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * Get Autopilot State
+ * Get Ai Run
  */
-export const getAutopilotState = <ThrowOnError extends boolean = false>(options: Options<GetAutopilotStateData, ThrowOnError>): RequestResult<GetAutopilotStateResponses, GetAutopilotStateErrors, ThrowOnError> => (options.client ?? client).get<GetAutopilotStateResponses, GetAutopilotStateErrors, ThrowOnError>({ url: '/api/devices/{device_id}/autopilot', ...options });
+export const getAiRun = <ThrowOnError extends boolean = false>(options: Options<GetAiRunData, ThrowOnError>): RequestResult<GetAiRunResponses, GetAiRunErrors, ThrowOnError> => (options.client ?? client).get<GetAiRunResponses, GetAiRunErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/ai/runs/{run_id}', ...options });
 
 /**
- * Update Autopilot State
+ * Cancel Ai Run
  */
-export const updateAutopilotState = <ThrowOnError extends boolean = false>(options: Options<UpdateAutopilotStateData, ThrowOnError>): RequestResult<UpdateAutopilotStateResponses, UpdateAutopilotStateErrors, ThrowOnError> => (options.client ?? client).put<UpdateAutopilotStateResponses, UpdateAutopilotStateErrors, ThrowOnError>({
-    url: '/api/devices/{device_id}/autopilot',
+export const cancelAiRun = <ThrowOnError extends boolean = false>(options: Options<CancelAiRunData, ThrowOnError>): RequestResult<CancelAiRunResponses, CancelAiRunErrors, ThrowOnError> => (options.client ?? client).post<CancelAiRunResponses, CancelAiRunErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/ai/runs/{run_id}/cancel', ...options });
+
+/**
+ * Get Automation Policy
+ */
+export const getAutomationPolicy = <ThrowOnError extends boolean = false>(options: Options<GetAutomationPolicyData, ThrowOnError>): RequestResult<GetAutomationPolicyResponses, GetAutomationPolicyErrors, ThrowOnError> => (options.client ?? client).get<GetAutomationPolicyResponses, GetAutomationPolicyErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/automation-policy', ...options });
+
+/**
+ * Update Automation Policy
+ */
+export const updateAutomationPolicy = <ThrowOnError extends boolean = false>(options: Options<UpdateAutomationPolicyData, ThrowOnError>): RequestResult<UpdateAutomationPolicyResponses, UpdateAutomationPolicyErrors, ThrowOnError> => (options.client ?? client).put<UpdateAutomationPolicyResponses, UpdateAutomationPolicyErrors, ThrowOnError>({
+    url: '/api/v1/devices/{device_id}/automation-policy',
     ...options,
     headers: {
         'Content-Type': 'application/json',
         ...options.headers
     }
 });
+
+/**
+ * Get Device Capabilities
+ */
+export const getDeviceCapabilities = <ThrowOnError extends boolean = false>(options: Options<GetDeviceCapabilitiesData, ThrowOnError>): RequestResult<GetDeviceCapabilitiesResponses, GetDeviceCapabilitiesErrors, ThrowOnError> => (options.client ?? client).get<GetDeviceCapabilitiesResponses, GetDeviceCapabilitiesErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/capabilities', ...options });
 
 /**
  * Send Command
  */
 export const sendCommand = <ThrowOnError extends boolean = false>(options: Options<SendCommandData, ThrowOnError>): RequestResult<SendCommandResponses, SendCommandErrors, ThrowOnError> => (options.client ?? client).post<SendCommandResponses, SendCommandErrors, ThrowOnError>({
-    url: '/api/devices/{device_id}/commands',
+    url: '/api/v1/devices/{device_id}/commands',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -75,31 +85,36 @@ export const sendCommand = <ThrowOnError extends boolean = false>(options: Optio
 });
 
 /**
+ * Get Command V1
+ */
+export const getCommandV1 = <ThrowOnError extends boolean = false>(options: Options<GetCommandV1Data, ThrowOnError>): RequestResult<GetCommandV1Responses, GetCommandV1Errors, ThrowOnError> => (options.client ?? client).get<GetCommandV1Responses, GetCommandV1Errors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/commands/{command_id}', ...options });
+
+/**
  * Device Events
  */
-export const deviceEvents = <ThrowOnError extends boolean = false>(options: Options<DeviceEventsData, ThrowOnError>): RequestResult<DeviceEventsResponses, DeviceEventsErrors, ThrowOnError> => (options.client ?? client).get<DeviceEventsResponses, DeviceEventsErrors, ThrowOnError>({ url: '/api/devices/{device_id}/events', ...options });
+export const deviceEvents = <ThrowOnError extends boolean = false>(options: Options<DeviceEventsData, ThrowOnError>): RequestResult<DeviceEventsResponses, DeviceEventsErrors, ThrowOnError> => (options.client ?? client).get<DeviceEventsResponses, DeviceEventsErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/events', ...options });
 
 /**
  * Ack Device Event
  */
-export const ackDeviceEvent = <ThrowOnError extends boolean = false>(options: Options<AckDeviceEventData, ThrowOnError>): RequestResult<AckDeviceEventResponses, AckDeviceEventErrors, ThrowOnError> => (options.client ?? client).post<AckDeviceEventResponses, AckDeviceEventErrors, ThrowOnError>({ url: '/api/devices/{device_id}/events/{event_id}/ack', ...options });
+export const ackDeviceEvent = <ThrowOnError extends boolean = false>(options: Options<AckDeviceEventData, ThrowOnError>): RequestResult<AckDeviceEventResponses, AckDeviceEventErrors, ThrowOnError> => (options.client ?? client).post<AckDeviceEventResponses, AckDeviceEventErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/events/{event_id}/ack', ...options });
 
 /**
  * Telemetry History
  */
-export const telemetryHistory = <ThrowOnError extends boolean = false>(options: Options<TelemetryHistoryData, ThrowOnError>): RequestResult<TelemetryHistoryResponses, TelemetryHistoryErrors, ThrowOnError> => (options.client ?? client).get<TelemetryHistoryResponses, TelemetryHistoryErrors, ThrowOnError>({ url: '/api/devices/{device_id}/history', ...options });
+export const telemetryHistory = <ThrowOnError extends boolean = false>(options: Options<TelemetryHistoryData, ThrowOnError>): RequestResult<TelemetryHistoryResponses, TelemetryHistoryErrors, ThrowOnError> => (options.client ?? client).get<TelemetryHistoryResponses, TelemetryHistoryErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/history', ...options });
 
 /**
  * Telemetry History Bucketed
  */
-export const telemetryHistoryBucketed = <ThrowOnError extends boolean = false>(options: Options<TelemetryHistoryBucketedData, ThrowOnError>): RequestResult<TelemetryHistoryBucketedResponses, TelemetryHistoryBucketedErrors, ThrowOnError> => (options.client ?? client).get<TelemetryHistoryBucketedResponses, TelemetryHistoryBucketedErrors, ThrowOnError>({ url: '/api/devices/{device_id}/history/bucketed', ...options });
+export const telemetryHistoryBucketed = <ThrowOnError extends boolean = false>(options: Options<TelemetryHistoryBucketedData, ThrowOnError>): RequestResult<TelemetryHistoryBucketedResponses, TelemetryHistoryBucketedErrors, ThrowOnError> => (options.client ?? client).get<TelemetryHistoryBucketedResponses, TelemetryHistoryBucketedErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/history/bucketed', ...options });
 
 /**
  * Upload Image
  */
 export const uploadImage = <ThrowOnError extends boolean = false>(options: Options<UploadImageData, ThrowOnError>): RequestResult<UploadImageResponses, UploadImageErrors, ThrowOnError> => (options.client ?? client).post<UploadImageResponses, UploadImageErrors, ThrowOnError>({
     ...formDataBodySerializer,
-    url: '/api/devices/{device_id}/images',
+    url: '/api/v1/devices/{device_id}/images',
     ...options,
     headers: {
         'Content-Type': null,
@@ -110,18 +125,18 @@ export const uploadImage = <ThrowOnError extends boolean = false>(options: Optio
 /**
  * Latest Device State
  */
-export const latestDeviceState = <ThrowOnError extends boolean = false>(options: Options<LatestDeviceStateData, ThrowOnError>): RequestResult<LatestDeviceStateResponses, LatestDeviceStateErrors, ThrowOnError> => (options.client ?? client).get<LatestDeviceStateResponses, LatestDeviceStateErrors, ThrowOnError>({ url: '/api/devices/{device_id}/latest', ...options });
+export const latestDeviceState = <ThrowOnError extends boolean = false>(options: Options<LatestDeviceStateData, ThrowOnError>): RequestResult<LatestDeviceStateResponses, LatestDeviceStateErrors, ThrowOnError> => (options.client ?? client).get<LatestDeviceStateResponses, LatestDeviceStateErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/latest', ...options });
 
 /**
  * Device Notifications
  */
-export const deviceNotifications = <ThrowOnError extends boolean = false>(options: Options<DeviceNotificationsData, ThrowOnError>): RequestResult<DeviceNotificationsResponses, DeviceNotificationsErrors, ThrowOnError> => (options.client ?? client).get<DeviceNotificationsResponses, DeviceNotificationsErrors, ThrowOnError>({ url: '/api/devices/{device_id}/notifications', ...options });
+export const deviceNotifications = <ThrowOnError extends boolean = false>(options: Options<DeviceNotificationsData, ThrowOnError>): RequestResult<DeviceNotificationsResponses, DeviceNotificationsErrors, ThrowOnError> => (options.client ?? client).get<DeviceNotificationsResponses, DeviceNotificationsErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/notifications', ...options });
 
 /**
  * Send Notification
  */
 export const sendNotification = <ThrowOnError extends boolean = false>(options: Options<SendNotificationData, ThrowOnError>): RequestResult<SendNotificationResponses, SendNotificationErrors, ThrowOnError> => (options.client ?? client).post<SendNotificationResponses, SendNotificationErrors, ThrowOnError>({
-    url: '/api/devices/{device_id}/notifications',
+    url: '/api/v1/devices/{device_id}/notifications',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -132,9 +147,24 @@ export const sendNotification = <ThrowOnError extends boolean = false>(options: 
 /**
  * Analyze Latest Pose
  */
-export const analyzeLatestPose = <ThrowOnError extends boolean = false>(options: Options<AnalyzeLatestPoseData, ThrowOnError>): RequestResult<AnalyzeLatestPoseResponses, AnalyzeLatestPoseErrors, ThrowOnError> => (options.client ?? client).post<AnalyzeLatestPoseResponses, AnalyzeLatestPoseErrors, ThrowOnError>({ url: '/api/devices/{device_id}/pose/analyze', ...options });
+export const analyzeLatestPose = <ThrowOnError extends boolean = false>(options: Options<AnalyzeLatestPoseData, ThrowOnError>): RequestResult<AnalyzeLatestPoseResponses, AnalyzeLatestPoseErrors, ThrowOnError> => (options.client ?? client).post<AnalyzeLatestPoseResponses, AnalyzeLatestPoseErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/pose/analyze', ...options });
+
+/**
+ * Get Trace Timeline
+ */
+export const getTraceTimeline = <ThrowOnError extends boolean = false>(options: Options<GetTraceTimelineData, ThrowOnError>): RequestResult<GetTraceTimelineResponses, GetTraceTimelineErrors, ThrowOnError> => (options.client ?? client).get<GetTraceTimelineResponses, GetTraceTimelineErrors, ThrowOnError>({ url: '/api/v1/diagnostics/traces/{trace_id}', ...options });
 
 /**
  * Health
  */
 export const health = <ThrowOnError extends boolean = false>(options?: Options<HealthData, ThrowOnError>): RequestResult<HealthResponses, unknown, ThrowOnError> => (options?.client ?? client).get<HealthResponses, unknown, ThrowOnError>({ url: '/health', ...options });
+
+/**
+ * Health Live
+ */
+export const healthLive = <ThrowOnError extends boolean = false>(options?: Options<HealthLiveData, ThrowOnError>): RequestResult<HealthLiveResponses, unknown, ThrowOnError> => (options?.client ?? client).get<HealthLiveResponses, unknown, ThrowOnError>({ url: '/health/live', ...options });
+
+/**
+ * Health Ready
+ */
+export const healthReady = <ThrowOnError extends boolean = false>(options?: Options<HealthReadyData, ThrowOnError>): RequestResult<HealthReadyResponses, unknown, ThrowOnError> => (options?.client ?? client).get<HealthReadyResponses, unknown, ThrowOnError>({ url: '/health/ready', ...options });

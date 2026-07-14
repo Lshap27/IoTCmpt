@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "fusion": {
+    "temperature_c": { "watch_above": 28.0, "alert_above": 32.0 },
+    "humidity_percent": { "watch_below": 30.0, "watch_above": 75.0 },
+    "tvoc_ppb": { "watch_above": 300, "alert_above": 600 },
+    "hcho_ug_m3": { "watch_above": 60, "alert_above": 100 },
+    "eco2_ppm": { "watch_above": 1000, "alert_above": 1500 }
+  },
+  "command_queue_length": 4,
+  "terminal_ack_cache_size": 16,
+  "smoke_silence_seconds": { "minimum": 10, "maximum": 600 },
+  "command_execution_period_ms": 500
+}

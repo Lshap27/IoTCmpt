@@ -5,28 +5,109 @@ export type ClientOptions = {
 };
 
 /**
- * AiAnalyzingEnvelope
+ * AiRunCreate
  */
-export type AiAnalyzingEnvelope = {
+export type AiRunCreate = {
+    /**
+     * Goal
+     */
+    goal?: string;
+    /**
+     * Image Id
+     */
+    image_id?: number | null;
+    /**
+     * Kind
+     */
+    kind: 'decision' | 'report' | 'vision' | 'patrol';
+    /**
+     * Period
+     */
+    period?: 'hour' | 'day' | 'week' | null;
+    /**
+     * Trigger
+     */
+    trigger?: 'manual' | 'event' | 'schedule' | 'patrol';
+};
+
+/**
+ * AiRunOut
+ */
+export type AiRunOut = {
+    /**
+     * Attempt Count
+     */
+    attempt_count?: number;
+    /**
+     * Cancel Requested At
+     */
+    cancel_requested_at?: string | null;
+    /**
+     * Completed At
+     */
+    completed_at?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
     /**
      * Device Id
      */
     device_id: string;
     /**
-     * Occurred At
+     * Error Code
      */
-    occurred_at: string;
-    payload: AiAnalyzingPayload;
+    error_code?: string | null;
     /**
-     * Type
+     * Error Message
      */
-    type: 'ai_analyzing';
-};
-
-/**
- * AiAnalyzingPayload
- */
-export type AiAnalyzingPayload = {
+    error_message?: string | null;
+    /**
+     * Input
+     */
+    input: {
+        [key: string]: unknown;
+    };
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Max Attempts
+     */
+    max_attempts?: number;
+    /**
+     * Model
+     */
+    model: string;
+    /**
+     * Output
+     */
+    output?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Started At
+     */
+    started_at?: string | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Tool Calls
+     */
+    tool_calls?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Trace Id
+     */
+    trace_id: string;
     /**
      * Trigger
      */
@@ -34,246 +115,150 @@ export type AiAnalyzingPayload = {
 };
 
 /**
- * AiDecisionOut
+ * AiRunStatusChangedEnvelope
  */
-export type AiDecisionOut = {
-    command: CommandOut;
-    /**
-     * Confidence
-     */
-    confidence: number;
-    /**
-     * Model
-     */
-    model: string;
-    /**
-     * Published
-     */
-    published: boolean;
-    /**
-     * Reason
-     */
-    reason: string;
-    /**
-     * Risk Level
-     */
-    risk_level: 'low' | 'medium' | 'high' | 'unknown';
-    /**
-     * Scene Summary
-     */
-    scene_summary?: string;
-    /**
-     * Speech
-     */
-    speech?: string;
-    /**
-     * Trigger
-     */
-    trigger: string;
-};
-
-/**
- * AiHealthReport
- */
-export type AiHealthReport = {
-    /**
-     * Anomalies
-     */
-    anomalies?: Array<string>;
-    coverage: ReportCoverage;
+export type AiRunStatusChangedEnvelope = {
     /**
      * Device Id
      */
     device_id: string;
     /**
-     * Generated At
+     * Event Id
      */
-    generated_at: string;
-    /**
-     * Headline
-     */
-    headline: string;
-    metrics: ReportMetrics;
-    /**
-     * Model
-     */
-    model: string;
-    /**
-     * Next Checks
-     */
-    next_checks?: Array<string>;
-    /**
-     * Period
-     */
-    period: 'hour' | 'day' | 'week';
-    /**
-     * Recommendations
-     */
-    recommendations?: Array<string>;
-    /**
-     * Risk Level
-     */
-    risk_level: 'low' | 'medium' | 'high' | 'unknown';
-    /**
-     * Risk Score
-     */
-    risk_score: number;
-    /**
-     * Summary
-     */
-    summary: string;
-};
-
-/**
- * AiReportIn
- */
-export type AiReportIn = {
-    /**
-     * Period
-     */
-    period?: 'hour' | 'day' | 'week';
-};
-
-/**
- * AiResultEnvelope
- */
-export type AiResultEnvelope = {
-    /**
-     * Device Id
-     */
-    device_id: string;
+    event_id: string;
     /**
      * Occurred At
      */
     occurred_at: string;
-    payload: AiDecisionOut;
+    payload: AiRunStatusPayload;
+    /**
+     * Schema Version
+     */
+    schema_version?: '2.0';
+    /**
+     * Trace Id
+     */
+    trace_id?: string | null;
     /**
      * Type
      */
-    type: 'ai_result';
+    type: 'ai.run.status_changed';
 };
 
 /**
- * AiResultInfo
+ * AiRunStatusPayload
  */
-export type AiResultInfo = {
+export type AiRunStatusPayload = {
     /**
-     * Command Id
+     * Error
      */
-    command_id: string;
+    error?: string | null;
     /**
-     * Confidence
+     * Kind
      */
-    confidence: number;
+    kind: string;
     /**
-     * Model
+     * Output
      */
-    model: string;
+    output?: {
+        [key: string]: unknown;
+    } | null;
     /**
-     * Reason
+     * Run Id
      */
-    reason: string;
+    run_id: string;
     /**
-     * Risk Level
+     * Status
      */
-    risk_level: string;
-    /**
-     * Scene Summary
-     */
-    scene_summary?: string;
-    /**
-     * Speech
-     */
-    speech?: string;
-    /**
-     * Summary
-     */
-    summary: string;
+    status: string;
 };
 
 /**
- * AutopilotEnabled
+ * AutomationPolicyChangedEnvelope
  */
-export type AutopilotEnabled = {
-    /**
-     * Enabled
-     */
-    enabled: boolean;
-    /**
-     * Sedentary Threshold Seconds
-     */
-    sedentary_threshold_seconds?: number;
-    /**
-     * Smoke Silence Seconds
-     */
-    smoke_silence_seconds?: number;
-    /**
-     * Vision Capability
-     */
-    vision_capability?: 'unknown' | 'supported' | 'unsupported';
-    /**
-     * Vision Interval Enabled
-     */
-    vision_interval_enabled?: boolean;
-    /**
-     * Vision Interval Seconds
-     */
-    vision_interval_seconds?: number;
-};
-
-/**
- * AutopilotEnvelope
- */
-export type AutopilotEnvelope = {
+export type AutomationPolicyChangedEnvelope = {
     /**
      * Device Id
      */
     device_id: string;
     /**
+     * Event Id
+     */
+    event_id: string;
+    /**
      * Occurred At
      */
     occurred_at: string;
-    payload: AutopilotState;
+    /**
+     * Payload
+     */
+    payload: {
+        [key: string]: unknown;
+    };
+    /**
+     * Schema Version
+     */
+    schema_version?: '2.0';
+    /**
+     * Trace Id
+     */
+    trace_id?: string | null;
     /**
      * Type
      */
-    type: 'autopilot';
+    type: 'automation.policy.changed';
 };
 
 /**
- * AutopilotIn
+ * AutomationPolicyIn
  */
-export type AutopilotIn = {
+export type AutomationPolicyIn = {
     /**
      * Enabled
      */
     enabled?: boolean | null;
     /**
+     * Event Trigger Enabled
+     */
+    event_trigger_enabled?: boolean | null;
+    /**
+     * Execution Mode
+     */
+    execution_mode?: 'automatic' | null;
+    /**
+     * Patrol Enabled
+     */
+    patrol_enabled?: boolean | null;
+    /**
+     * Patrol Force Interval Seconds
+     */
+    patrol_force_interval_seconds?: number | null;
+    /**
+     * Patrol Interval Seconds
+     */
+    patrol_interval_seconds?: number | null;
+    /**
      * Sedentary Threshold Seconds
      */
     sedentary_threshold_seconds?: number | null;
     /**
-     * Smoke Silence Seconds
+     * Sedentary Trigger Enabled
      */
-    smoke_silence_seconds?: number | null;
-    /**
-     * Vision Interval Enabled
-     */
-    vision_interval_enabled?: boolean | null;
+    sedentary_trigger_enabled?: boolean | null;
     /**
      * Vision Interval Seconds
      */
     vision_interval_seconds?: number | null;
+    /**
+     * Vision Schedule Enabled
+     */
+    vision_schedule_enabled?: boolean | null;
 };
 
 /**
- * AutopilotState
+ * AutomationPolicyOut
  */
-export type AutopilotState = {
-    /**
-     * Cooldown Seconds
-     */
-    cooldown_seconds: number;
+export type AutomationPolicyOut = {
     /**
      * Device Id
      */
@@ -283,41 +268,55 @@ export type AutopilotState = {
      */
     enabled: boolean;
     /**
-     * Min Confidence
+     * Event Trigger Enabled
      */
-    min_confidence: number;
+    event_trigger_enabled: boolean;
+    /**
+     * Execution Mode
+     */
+    execution_mode: 'automatic';
+    /**
+     * Last Checked At
+     */
+    last_checked_at?: string | null;
+    /**
+     * Last Model Run At
+     */
+    last_model_run_at?: string | null;
+    /**
+     * Patrol Enabled
+     */
+    patrol_enabled: boolean;
+    /**
+     * Patrol Force Interval Seconds
+     */
+    patrol_force_interval_seconds: number;
+    /**
+     * Patrol Interval Seconds
+     */
+    patrol_interval_seconds: number;
     /**
      * Sedentary Threshold Seconds
      */
     sedentary_threshold_seconds: number;
     /**
-     * Smoke Silence Seconds
+     * Sedentary Trigger Enabled
      */
-    smoke_silence_seconds: number;
+    sedentary_trigger_enabled: boolean;
     /**
-     * Trigger Levels
-     *
-     * Deprecated: 空气质量与烟雾自动规则已移至固件；保留此字段仅用于兼容旧客户端。
-     *
-     * @deprecated
+     * Thresholds
      */
-    trigger_levels: Array<string>;
-    /**
-     * Vision Capability
-     */
-    vision_capability: 'unknown' | 'supported' | 'unsupported';
-    /**
-     * Vision Interval Effective
-     */
-    vision_interval_effective: boolean;
-    /**
-     * Vision Interval Enabled
-     */
-    vision_interval_enabled: boolean;
+    thresholds: {
+        [key: string]: number;
+    };
     /**
      * Vision Interval Seconds
      */
     vision_interval_seconds: number;
+    /**
+     * Vision Schedule Enabled
+     */
+    vision_schedule_enabled: boolean;
 };
 
 /**
@@ -331,74 +330,41 @@ export type BodyUploadImage = {
 };
 
 /**
- * CommandAckEnvelope
+ * CapabilityCommandOut
  */
-export type CommandAckEnvelope = {
+export type CapabilityCommandOut = {
     /**
-     * Device Id
+     * Ai Allowed
      */
-    device_id: string;
+    ai_allowed?: boolean;
     /**
-     * Occurred At
+     * Name
      */
-    occurred_at: string;
-    payload: CommandAckPayload;
+    name: string;
     /**
-     * Type
+     * Parameter Schema
      */
-    type: 'command_ack';
+    parameter_schema: {
+        [key: string]: unknown;
+    };
+    /**
+     * Safety Class
+     */
+    safety_class: 'normal' | 'safety' | 'administrative';
 };
 
 /**
- * CommandAckPayload
+ * CommandCreateV1
  */
-export type CommandAckPayload = {
+export type CommandCreateV1 = {
     /**
-     * Command Id
+     * Expires At
      */
-    command_id: string;
+    expires_at?: string | null;
     /**
-     * Executed At
+     * Idempotency Key
      */
-    executed_at?: string | null;
-    /**
-     * Known Command
-     */
-    known_command?: boolean;
-    /**
-     * Message
-     */
-    message?: string;
-    /**
-     * Status
-     */
-    status: string;
-    [key: string]: unknown;
-};
-
-/**
- * CommandEnvelope
- */
-export type CommandEnvelope = {
-    /**
-     * Device Id
-     */
-    device_id: string;
-    /**
-     * Occurred At
-     */
-    occurred_at: string;
-    payload: CommandOut;
-    /**
-     * Type
-     */
-    type: 'command';
-};
-
-/**
- * CommandIn
- */
-export type CommandIn = {
+    idempotency_key?: string | null;
     /**
      * Parameter
      */
@@ -412,7 +378,7 @@ export type CommandIn = {
     /**
      * Type
      */
-    type: 'none' | 'window.open' | 'window.close' | 'alarm.on' | 'alarm.off' | 'led.on' | 'led.off' | 'control.set_priority' | 'control.resume_auto' | 'alarm.silence' | 'voice.speak' | 'display.message';
+    type: string;
 };
 
 /**
@@ -464,6 +430,208 @@ export type CommandOut = {
 };
 
 /**
+ * CommandStatusChangedEnvelope
+ */
+export type CommandStatusChangedEnvelope = {
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Occurred At
+     */
+    occurred_at: string;
+    payload: CommandStatusPayload;
+    /**
+     * Schema Version
+     */
+    schema_version?: '2.0';
+    /**
+     * Trace Id
+     */
+    trace_id?: string | null;
+    /**
+     * Type
+     */
+    type: 'command.status_changed';
+};
+
+/**
+ * CommandStatusPayload
+ */
+export type CommandStatusPayload = {
+    /**
+     * Command Id
+     */
+    command_id: string;
+    /**
+     * Completed At
+     */
+    completed_at?: string | null;
+    /**
+     * Error Code
+     */
+    error_code?: string | null;
+    /**
+     * Executed At
+     */
+    executed_at?: string | null;
+    /**
+     * Message
+     */
+    message?: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Type
+     */
+    type?: string | null;
+    [key: string]: unknown;
+};
+
+/**
+ * CommandV1Out
+ */
+export type CommandV1Out = {
+    /**
+     * Accepted At
+     */
+    accepted_at?: string | null;
+    /**
+     * Capability
+     */
+    capability?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Command Id
+     */
+    command_id: string;
+    /**
+     * Completed At
+     */
+    completed_at?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Error Code
+     */
+    error_code?: string | null;
+    /**
+     * Expires At
+     */
+    expires_at?: string | null;
+    /**
+     * Parameter
+     */
+    parameter: {
+        [key: string]: unknown;
+    };
+    /**
+     * Published At
+     */
+    published_at?: string | null;
+    /**
+     * Reason
+     */
+    reason: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Trace Id
+     */
+    trace_id: string;
+    /**
+     * Type
+     */
+    type: string;
+};
+
+/**
+ * DeviceCapabilitiesChangedEnvelope
+ */
+export type DeviceCapabilitiesChangedEnvelope = {
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Occurred At
+     */
+    occurred_at: string;
+    /**
+     * Payload
+     */
+    payload: {
+        [key: string]: unknown;
+    };
+    /**
+     * Schema Version
+     */
+    schema_version?: '2.0';
+    /**
+     * Trace Id
+     */
+    trace_id?: string | null;
+    /**
+     * Type
+     */
+    type: 'device.capabilities_changed';
+};
+
+/**
+ * DeviceCapabilitiesOut
+ */
+export type DeviceCapabilitiesOut = {
+    /**
+     * Commands
+     */
+    commands: Array<CapabilityCommandOut>;
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Firmware Version
+     */
+    firmware_version: string;
+    /**
+     * Hardware Model
+     */
+    hardware_model: string;
+    /**
+     * Protocol Version
+     */
+    protocol_version: string;
+    /**
+     * Seen At
+     */
+    seen_at?: string | null;
+};
+
+/**
  * DeviceStatePayload
  */
 export type DeviceStatePayload = {
@@ -502,6 +670,37 @@ export type DeviceStatePayload = {
 };
 
 /**
+ * DeviceStatusChangedEnvelope
+ */
+export type DeviceStatusChangedEnvelope = {
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Occurred At
+     */
+    occurred_at: string;
+    payload: StatusPayload;
+    /**
+     * Schema Version
+     */
+    schema_version?: '2.0';
+    /**
+     * Trace Id
+     */
+    trace_id?: string | null;
+    /**
+     * Type
+     */
+    type: 'device.status_changed';
+};
+
+/**
  * DeviceSummary
  */
 export type DeviceSummary = {
@@ -524,32 +723,17 @@ export type DeviceSummary = {
 };
 
 /**
- * ErrorEnvelope
- */
-export type ErrorEnvelope = {
-    /**
-     * Device Id
-     */
-    device_id: string;
-    /**
-     * Occurred At
-     */
-    occurred_at: string;
-    payload: ErrorPayload;
-    /**
-     * Type
-     */
-    type: 'error';
-};
-
-/**
  * ErrorPayload
  */
 export type ErrorPayload = {
     /**
-     * Error
+     * Code
      */
-    error: string;
+    code?: string;
+    /**
+     * Message
+     */
+    message: string;
     /**
      * Payload
      */
@@ -559,26 +743,7 @@ export type ErrorPayload = {
     /**
      * Topic
      */
-    topic: string;
-};
-
-/**
- * EventEnvelope
- */
-export type EventEnvelope = {
-    /**
-     * Device Id
-     */
-    device_id: string;
-    /**
-     * Occurred At
-     */
-    occurred_at: string;
-    payload: EventPayload;
-    /**
-     * Type
-     */
-    type: 'event';
+    topic?: string | null;
 };
 
 /**
@@ -613,33 +778,6 @@ export type EventOut = {
      * Type
      */
     type: string;
-};
-
-/**
- * EventPayload
- */
-export type EventPayload = {
-    /**
-     * Acknowledged At
-     */
-    acknowledged_at?: string | null;
-    /**
-     * Id
-     */
-    id?: number | null;
-    /**
-     * Message
-     */
-    message?: string | null;
-    /**
-     * Severity
-     */
-    severity?: string | null;
-    /**
-     * Type
-     */
-    type?: string | null;
-    [key: string]: unknown;
 };
 
 /**
@@ -711,25 +849,6 @@ export type ImageAssetOut = {
 };
 
 /**
- * ImageEnvelope
- */
-export type ImageEnvelope = {
-    /**
-     * Device Id
-     */
-    device_id: string;
-    /**
-     * Occurred At
-     */
-    occurred_at: string;
-    payload: ImageSnapshot;
-    /**
-     * Type
-     */
-    type: 'image';
-};
-
-/**
  * ImageSnapshot
  */
 export type ImageSnapshot = {
@@ -751,8 +870,6 @@ export type ImageSnapshot = {
  * LatestState
  */
 export type LatestState = {
-    ai_result?: AiResultInfo | null;
-    autopilot?: AutopilotEnabled | null;
     command?: CommandOut | null;
     device: DeviceSummary;
     image?: ImageSnapshot | null;
@@ -761,46 +878,34 @@ export type LatestState = {
 };
 
 /**
- * LogEnvelope
+ * NotificationCreatedEnvelope
  */
-export type LogEnvelope = {
+export type NotificationCreatedEnvelope = {
     /**
      * Device Id
      */
     device_id: string;
     /**
-     * Occurred At
+     * Event Id
      */
-    occurred_at: string;
-    /**
-     * Payload
-     */
-    payload?: {
-        [key: string]: unknown;
-    };
-    /**
-     * Type
-     */
-    type: 'log';
-};
-
-/**
- * NotificationEnvelope
- */
-export type NotificationEnvelope = {
-    /**
-     * Device Id
-     */
-    device_id: string;
+    event_id: string;
     /**
      * Occurred At
      */
     occurred_at: string;
     payload: NotificationOut;
     /**
+     * Schema Version
+     */
+    schema_version?: '2.0';
+    /**
+     * Trace Id
+     */
+    trace_id?: string | null;
+    /**
      * Type
      */
-    type: 'notification';
+    type: 'notification.created';
 };
 
 /**
@@ -852,6 +957,48 @@ export type NotificationOut = {
 };
 
 /**
+ * PerceptionPayload
+ */
+export type PerceptionPayload = {
+    /**
+     * Kind
+     */
+    kind: 'image' | 'pose' | 'event' | 'log';
+    [key: string]: unknown;
+};
+
+/**
+ * PerceptionUpdatedEnvelope
+ */
+export type PerceptionUpdatedEnvelope = {
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Occurred At
+     */
+    occurred_at: string;
+    payload: PerceptionPayload;
+    /**
+     * Schema Version
+     */
+    schema_version?: '2.0';
+    /**
+     * Trace Id
+     */
+    trace_id?: string | null;
+    /**
+     * Type
+     */
+    type: 'perception.updated';
+};
+
+/**
  * PoseAnalyzeAccepted
  */
 export type PoseAnalyzeAccepted = {
@@ -863,95 +1010,6 @@ export type PoseAnalyzeAccepted = {
      * Source Image Id
      */
     source_image_id: number;
-};
-
-/**
- * PoseEnvelope
- */
-export type PoseEnvelope = {
-    /**
-     * Device Id
-     */
-    device_id: string;
-    /**
-     * Occurred At
-     */
-    occurred_at: string;
-    payload: PoseResultOut;
-    /**
-     * Type
-     */
-    type: 'pose_result';
-};
-
-/**
- * PoseResultOut
- */
-export type PoseResultOut = {
-    /**
-     * Annotated Image Url
-     */
-    annotated_image_url?: string | null;
-    /**
-     * Body Coverage
-     */
-    body_coverage: 'upper_body' | 'full_body' | 'insufficient';
-    /**
-     * Confidence
-     */
-    confidence: number;
-    /**
-     * Created At
-     */
-    created_at: string;
-    /**
-     * Device Id
-     */
-    device_id: string;
-    /**
-     * Human Present
-     */
-    human_present: boolean;
-    /**
-     * Id
-     */
-    id: number;
-    /**
-     * Label
-     */
-    label: string;
-    /**
-     * Posture Code
-     */
-    posture_code: 'upright' | 'forward_lean' | 'hunched' | 'head_down' | 'not_seated' | 'unknown';
-    /**
-     * Posture Confidence
-     */
-    posture_confidence: number;
-    /**
-     * Posture Fresh
-     */
-    posture_fresh: boolean;
-    /**
-     * Posture Issues
-     */
-    posture_issues: Array<'forward_lean' | 'hunched' | 'head_down'>;
-    /**
-     * Presence Confidence
-     */
-    presence_confidence: number;
-    /**
-     * Presence Source
-     */
-    presence_source: 'object_detector' | 'pose_fallback' | 'none' | 'error';
-    /**
-     * Seated State
-     */
-    seated_state: 'seated' | 'not_seated' | 'unknown';
-    /**
-     * Source Image Url
-     */
-    source_image_url: string;
 };
 
 /**
@@ -1021,82 +1079,6 @@ export type PoseSnapshot = {
 };
 
 /**
- * ReportCoverage
- */
-export type ReportCoverage = {
-    /**
-     * Bucket Count
-     */
-    bucket_count: number;
-    /**
-     * Completeness Percent
-     */
-    completeness_percent: number;
-    /**
-     * End
-     */
-    end: string;
-    /**
-     * Expected Bucket Count
-     */
-    expected_bucket_count: number;
-    /**
-     * Sample Count
-     */
-    sample_count: number;
-    /**
-     * Start
-     */
-    start: string;
-};
-
-/**
- * ReportMetrics
- */
-export type ReportMetrics = {
-    /**
-     * Alert Bucket Count
-     */
-    alert_bucket_count?: number;
-    /**
-     * Eco2 Avg Ppm
-     */
-    eco2_avg_ppm?: number | null;
-    /**
-     * Eco2 Max Ppm
-     */
-    eco2_max_ppm?: number | null;
-    /**
-     * Hcho Avg Ug M3
-     */
-    hcho_avg_ug_m3?: number | null;
-    /**
-     * Humidity Avg Percent
-     */
-    humidity_avg_percent?: number | null;
-    /**
-     * Smoke Event Count
-     */
-    smoke_event_count?: number;
-    /**
-     * Temperature Avg C
-     */
-    temperature_avg_c?: number | null;
-    /**
-     * Temperature Max C
-     */
-    temperature_max_c?: number | null;
-    /**
-     * Temperature Min C
-     */
-    temperature_min_c?: number | null;
-    /**
-     * Tvoc Avg Ppb
-     */
-    tvoc_avg_ppb?: number | null;
-};
-
-/**
  * SensorPayload
  */
 export type SensorPayload = {
@@ -1131,25 +1113,6 @@ export type SensorPayload = {
 };
 
 /**
- * StatusEnvelope
- */
-export type StatusEnvelope = {
-    /**
-     * Device Id
-     */
-    device_id: string;
-    /**
-     * Occurred At
-     */
-    occurred_at: string;
-    payload: StatusPayload;
-    /**
-     * Type
-     */
-    type: 'status';
-};
-
-/**
  * StatusPayload
  */
 export type StatusPayload = {
@@ -1165,6 +1128,37 @@ export type StatusPayload = {
      * Status
      */
     status: string;
+};
+
+/**
+ * SystemErrorEnvelope
+ */
+export type SystemErrorEnvelope = {
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Occurred At
+     */
+    occurred_at: string;
+    payload: ErrorPayload;
+    /**
+     * Schema Version
+     */
+    schema_version?: '2.0';
+    /**
+     * Trace Id
+     */
+    trace_id?: string | null;
+    /**
+     * Type
+     */
+    type: 'system.error';
 };
 
 /**
@@ -1248,25 +1242,6 @@ export type TelemetryBucketPoint = {
 };
 
 /**
- * TelemetryEnvelope
- */
-export type TelemetryEnvelope = {
-    /**
-     * Device Id
-     */
-    device_id: string;
-    /**
-     * Occurred At
-     */
-    occurred_at: string;
-    payload: TelemetryPoint;
-    /**
-     * Type
-     */
-    type: 'telemetry';
-};
-
-/**
  * TelemetryPoint
  */
 export type TelemetryPoint = {
@@ -1281,6 +1256,87 @@ export type TelemetryPoint = {
     sampled_at: string;
     sensors: SensorPayload;
     state: DeviceStatePayload;
+};
+
+/**
+ * TelemetryReceivedEnvelope
+ */
+export type TelemetryReceivedEnvelope = {
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Occurred At
+     */
+    occurred_at: string;
+    payload: TelemetryPoint;
+    /**
+     * Schema Version
+     */
+    schema_version?: '2.0';
+    /**
+     * Trace Id
+     */
+    trace_id?: string | null;
+    /**
+     * Type
+     */
+    type: 'telemetry.received';
+};
+
+/**
+ * TraceEventOut
+ */
+export type TraceEventOut = {
+    /**
+     * Component
+     */
+    component: string;
+    /**
+     * Detail
+     */
+    detail: {
+        [key: string]: unknown;
+    };
+    /**
+     * Device Id
+     */
+    device_id?: string | null;
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Event Type
+     */
+    event_type: string;
+    /**
+     * Occurred At
+     */
+    occurred_at: string;
+    /**
+     * Status
+     */
+    status?: string | null;
+};
+
+/**
+ * TraceTimelineOut
+ */
+export type TraceTimelineOut = {
+    /**
+     * Events
+     */
+    events?: Array<TraceEventOut>;
+    /**
+     * Trace Id
+     */
+    trace_id: string;
 };
 
 /**
@@ -1312,38 +1368,30 @@ export type ValidationError = {
 };
 
 export type WsMessage = ({
-    type: 'telemetry';
-} & TelemetryEnvelope) | ({
-    type: 'status';
-} & StatusEnvelope) | ({
-    type: 'image';
-} & ImageEnvelope) | ({
-    type: 'pose_result';
-} & PoseEnvelope) | ({
-    type: 'command';
-} & CommandEnvelope) | ({
-    type: 'notification';
-} & NotificationEnvelope) | ({
-    type: 'command_ack';
-} & CommandAckEnvelope) | ({
-    type: 'event';
-} & EventEnvelope) | ({
-    type: 'log';
-} & LogEnvelope) | ({
-    type: 'error';
-} & ErrorEnvelope) | ({
-    type: 'ai_analyzing';
-} & AiAnalyzingEnvelope) | ({
-    type: 'ai_result';
-} & AiResultEnvelope) | ({
-    type: 'autopilot';
-} & AutopilotEnvelope);
+    type: 'telemetry.received';
+} & TelemetryReceivedEnvelope) | ({
+    type: 'device.status_changed';
+} & DeviceStatusChangedEnvelope) | ({
+    type: 'perception.updated';
+} & PerceptionUpdatedEnvelope) | ({
+    type: 'command.status_changed';
+} & CommandStatusChangedEnvelope) | ({
+    type: 'ai.run.status_changed';
+} & AiRunStatusChangedEnvelope) | ({
+    type: 'notification.created';
+} & NotificationCreatedEnvelope) | ({
+    type: 'device.capabilities_changed';
+} & DeviceCapabilitiesChangedEnvelope) | ({
+    type: 'automation.policy.changed';
+} & AutomationPolicyChangedEnvelope) | ({
+    type: 'system.error';
+} & SystemErrorEnvelope);
 
 export type ListDevicesData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/devices';
+    url: '/api/v1/devices';
 };
 
 export type ListDevicesResponses = {
@@ -1357,7 +1405,150 @@ export type ListDevicesResponses = {
 
 export type ListDevicesResponse = ListDevicesResponses[keyof ListDevicesResponses];
 
-export type AnalyzeDeviceData = {
+export type ListAiRunsData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+    };
+    query?: {
+        /**
+         * Kind
+         */
+        kind?: string | null;
+        /**
+         * Status
+         */
+        status?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/devices/{device_id}/ai/runs';
+};
+
+export type ListAiRunsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListAiRunsError = ListAiRunsErrors[keyof ListAiRunsErrors];
+
+export type ListAiRunsResponses = {
+    /**
+     * Response List Ai Runs
+     *
+     * Successful Response
+     */
+    200: Array<AiRunOut>;
+};
+
+export type ListAiRunsResponse = ListAiRunsResponses[keyof ListAiRunsResponses];
+
+export type CreateAiRunData = {
+    body: AiRunCreate;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/ai/runs';
+};
+
+export type CreateAiRunErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateAiRunError = CreateAiRunErrors[keyof CreateAiRunErrors];
+
+export type CreateAiRunResponses = {
+    /**
+     * Successful Response
+     */
+    202: AiRunOut;
+};
+
+export type CreateAiRunResponse = CreateAiRunResponses[keyof CreateAiRunResponses];
+
+export type GetAiRunData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/ai/runs/{run_id}';
+};
+
+export type GetAiRunErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAiRunError = GetAiRunErrors[keyof GetAiRunErrors];
+
+export type GetAiRunResponses = {
+    /**
+     * Successful Response
+     */
+    200: AiRunOut;
+};
+
+export type GetAiRunResponse = GetAiRunResponses[keyof GetAiRunResponses];
+
+export type CancelAiRunData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/ai/runs/{run_id}/cancel';
+};
+
+export type CancelAiRunErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CancelAiRunError = CancelAiRunErrors[keyof CancelAiRunErrors];
+
+export type CancelAiRunResponses = {
+    /**
+     * Successful Response
+     */
+    200: AiRunOut;
+};
+
+export type CancelAiRunResponse = CancelAiRunResponses[keyof CancelAiRunResponses];
+
+export type GetAutomationPolicyData = {
     body?: never;
     path: {
         /**
@@ -1366,28 +1557,58 @@ export type AnalyzeDeviceData = {
         device_id: string;
     };
     query?: never;
-    url: '/api/devices/{device_id}/ai/analyze';
+    url: '/api/v1/devices/{device_id}/automation-policy';
 };
 
-export type AnalyzeDeviceErrors = {
+export type GetAutomationPolicyErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type AnalyzeDeviceError = AnalyzeDeviceErrors[keyof AnalyzeDeviceErrors];
+export type GetAutomationPolicyError = GetAutomationPolicyErrors[keyof GetAutomationPolicyErrors];
 
-export type AnalyzeDeviceResponses = {
+export type GetAutomationPolicyResponses = {
     /**
      * Successful Response
      */
-    200: AiDecisionOut;
+    200: AutomationPolicyOut;
 };
 
-export type AnalyzeDeviceResponse = AnalyzeDeviceResponses[keyof AnalyzeDeviceResponses];
+export type GetAutomationPolicyResponse = GetAutomationPolicyResponses[keyof GetAutomationPolicyResponses];
 
-export type AnalyzeDeviceImageData = {
+export type UpdateAutomationPolicyData = {
+    body: AutomationPolicyIn;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/automation-policy';
+};
+
+export type UpdateAutomationPolicyErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateAutomationPolicyError = UpdateAutomationPolicyErrors[keyof UpdateAutomationPolicyErrors];
+
+export type UpdateAutomationPolicyResponses = {
+    /**
+     * Successful Response
+     */
+    200: AutomationPolicyOut;
+};
+
+export type UpdateAutomationPolicyResponse = UpdateAutomationPolicyResponses[keyof UpdateAutomationPolicyResponses];
+
+export type GetDeviceCapabilitiesData = {
     body?: never;
     path: {
         /**
@@ -1396,119 +1617,29 @@ export type AnalyzeDeviceImageData = {
         device_id: string;
     };
     query?: never;
-    url: '/api/devices/{device_id}/ai/analyze-image';
+    url: '/api/v1/devices/{device_id}/capabilities';
 };
 
-export type AnalyzeDeviceImageErrors = {
+export type GetDeviceCapabilitiesErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type AnalyzeDeviceImageError = AnalyzeDeviceImageErrors[keyof AnalyzeDeviceImageErrors];
+export type GetDeviceCapabilitiesError = GetDeviceCapabilitiesErrors[keyof GetDeviceCapabilitiesErrors];
 
-export type AnalyzeDeviceImageResponses = {
+export type GetDeviceCapabilitiesResponses = {
     /**
      * Successful Response
      */
-    200: AiDecisionOut;
+    200: DeviceCapabilitiesOut;
 };
 
-export type AnalyzeDeviceImageResponse = AnalyzeDeviceImageResponses[keyof AnalyzeDeviceImageResponses];
-
-export type CreateAiHealthReportData = {
-    body: AiReportIn;
-    path: {
-        /**
-         * Device Id
-         */
-        device_id: string;
-    };
-    query?: never;
-    url: '/api/devices/{device_id}/ai/report';
-};
-
-export type CreateAiHealthReportErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type CreateAiHealthReportError = CreateAiHealthReportErrors[keyof CreateAiHealthReportErrors];
-
-export type CreateAiHealthReportResponses = {
-    /**
-     * Successful Response
-     */
-    200: AiHealthReport;
-};
-
-export type CreateAiHealthReportResponse = CreateAiHealthReportResponses[keyof CreateAiHealthReportResponses];
-
-export type GetAutopilotStateData = {
-    body?: never;
-    path: {
-        /**
-         * Device Id
-         */
-        device_id: string;
-    };
-    query?: never;
-    url: '/api/devices/{device_id}/autopilot';
-};
-
-export type GetAutopilotStateErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetAutopilotStateError = GetAutopilotStateErrors[keyof GetAutopilotStateErrors];
-
-export type GetAutopilotStateResponses = {
-    /**
-     * Successful Response
-     */
-    200: AutopilotState;
-};
-
-export type GetAutopilotStateResponse = GetAutopilotStateResponses[keyof GetAutopilotStateResponses];
-
-export type UpdateAutopilotStateData = {
-    body: AutopilotIn;
-    path: {
-        /**
-         * Device Id
-         */
-        device_id: string;
-    };
-    query?: never;
-    url: '/api/devices/{device_id}/autopilot';
-};
-
-export type UpdateAutopilotStateErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type UpdateAutopilotStateError = UpdateAutopilotStateErrors[keyof UpdateAutopilotStateErrors];
-
-export type UpdateAutopilotStateResponses = {
-    /**
-     * Successful Response
-     */
-    200: AutopilotState;
-};
-
-export type UpdateAutopilotStateResponse = UpdateAutopilotStateResponses[keyof UpdateAutopilotStateResponses];
+export type GetDeviceCapabilitiesResponse = GetDeviceCapabilitiesResponses[keyof GetDeviceCapabilitiesResponses];
 
 export type SendCommandData = {
-    body: CommandIn;
+    body: CommandCreateV1;
     path: {
         /**
          * Device Id
@@ -1516,7 +1647,7 @@ export type SendCommandData = {
         device_id: string;
     };
     query?: never;
-    url: '/api/devices/{device_id}/commands';
+    url: '/api/v1/devices/{device_id}/commands';
 };
 
 export type SendCommandErrors = {
@@ -1532,10 +1663,44 @@ export type SendCommandResponses = {
     /**
      * Successful Response
      */
-    200: CommandOut;
+    202: CommandV1Out;
 };
 
 export type SendCommandResponse = SendCommandResponses[keyof SendCommandResponses];
+
+export type GetCommandV1Data = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+        /**
+         * Command Id
+         */
+        command_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/commands/{command_id}';
+};
+
+export type GetCommandV1Errors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetCommandV1Error = GetCommandV1Errors[keyof GetCommandV1Errors];
+
+export type GetCommandV1Responses = {
+    /**
+     * Successful Response
+     */
+    200: CommandV1Out;
+};
+
+export type GetCommandV1Response = GetCommandV1Responses[keyof GetCommandV1Responses];
 
 export type DeviceEventsData = {
     body?: never;
@@ -1547,15 +1712,11 @@ export type DeviceEventsData = {
     };
     query?: {
         /**
-         * Type
-         */
-        type?: string | null;
-        /**
          * Limit
          */
         limit?: number;
     };
-    url: '/api/devices/{device_id}/events';
+    url: '/api/v1/devices/{device_id}/events';
 };
 
 export type DeviceEventsErrors = {
@@ -1591,7 +1752,7 @@ export type AckDeviceEventData = {
         event_id: number;
     };
     query?: never;
-    url: '/api/devices/{device_id}/events/{event_id}/ack';
+    url: '/api/v1/devices/{device_id}/events/{event_id}/ack';
 };
 
 export type AckDeviceEventErrors = {
@@ -1626,7 +1787,7 @@ export type TelemetryHistoryData = {
          */
         limit?: number;
     };
-    url: '/api/devices/{device_id}/history';
+    url: '/api/v1/devices/{device_id}/history';
 };
 
 export type TelemetryHistoryErrors = {
@@ -1669,7 +1830,7 @@ export type TelemetryHistoryBucketedData = {
          */
         limit?: number;
     };
-    url: '/api/devices/{device_id}/history/bucketed';
+    url: '/api/v1/devices/{device_id}/history/bucketed';
 };
 
 export type TelemetryHistoryBucketedErrors = {
@@ -1701,7 +1862,7 @@ export type UploadImageData = {
         device_id: string;
     };
     query?: never;
-    url: '/api/devices/{device_id}/images';
+    url: '/api/v1/devices/{device_id}/images';
 };
 
 export type UploadImageErrors = {
@@ -1731,7 +1892,7 @@ export type LatestDeviceStateData = {
         device_id: string;
     };
     query?: never;
-    url: '/api/devices/{device_id}/latest';
+    url: '/api/v1/devices/{device_id}/latest';
 };
 
 export type LatestDeviceStateErrors = {
@@ -1766,7 +1927,7 @@ export type DeviceNotificationsData = {
          */
         limit?: number;
     };
-    url: '/api/devices/{device_id}/notifications';
+    url: '/api/v1/devices/{device_id}/notifications';
 };
 
 export type DeviceNotificationsErrors = {
@@ -1798,7 +1959,7 @@ export type SendNotificationData = {
         device_id: string;
     };
     query?: never;
-    url: '/api/devices/{device_id}/notifications';
+    url: '/api/v1/devices/{device_id}/notifications';
 };
 
 export type SendNotificationErrors = {
@@ -1828,7 +1989,7 @@ export type AnalyzeLatestPoseData = {
         device_id: string;
     };
     query?: never;
-    url: '/api/devices/{device_id}/pose/analyze';
+    url: '/api/v1/devices/{device_id}/pose/analyze';
 };
 
 export type AnalyzeLatestPoseErrors = {
@@ -1849,6 +2010,36 @@ export type AnalyzeLatestPoseResponses = {
 
 export type AnalyzeLatestPoseResponse = AnalyzeLatestPoseResponses[keyof AnalyzeLatestPoseResponses];
 
+export type GetTraceTimelineData = {
+    body?: never;
+    path: {
+        /**
+         * Trace Id
+         */
+        trace_id: string;
+    };
+    query?: never;
+    url: '/api/v1/diagnostics/traces/{trace_id}';
+};
+
+export type GetTraceTimelineErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetTraceTimelineError = GetTraceTimelineErrors[keyof GetTraceTimelineErrors];
+
+export type GetTraceTimelineResponses = {
+    /**
+     * Successful Response
+     */
+    200: TraceTimelineOut;
+};
+
+export type GetTraceTimelineResponse = GetTraceTimelineResponses[keyof GetTraceTimelineResponses];
+
 export type HealthData = {
     body?: never;
     path?: never;
@@ -1864,3 +2055,33 @@ export type HealthResponses = {
 };
 
 export type HealthResponse = HealthResponses[keyof HealthResponses];
+
+export type HealthLiveData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/health/live';
+};
+
+export type HealthLiveResponses = {
+    /**
+     * Successful Response
+     */
+    200: HealthOut;
+};
+
+export type HealthLiveResponse = HealthLiveResponses[keyof HealthLiveResponses];
+
+export type HealthReadyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/health/ready';
+};
+
+export type HealthReadyResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};

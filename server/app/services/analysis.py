@@ -1,24 +1,17 @@
 from __future__ import annotations
 
-import asyncio
-import base64
-import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings
 from app.core.timeutil import iso_utc
 from app.db import models
-from app.schemas import WebSocketEnvelope
-from app.services.commands import create_command, mark_published, serialize_command
-from app.services.llm import LLMService
-from app.services.mqtt import MqttGateway
+from app.services.commands import serialize_command
 from app.services.pose import latest_pose_result, serialize_pose_result
 from app.services.telemetry import serialize_telemetry
-from app.services.websocket import manager
 
 
 def latest_image_asset(db: Session, device_id: str) -> models.ImageAsset | None:
@@ -66,12 +59,6 @@ def collect_device_snapshot(db: Session, device_id: str, *, include_trend: bool 
         .order_by(models.Command.created_at.desc())
         .first()
     )
-    ai_result = (
-        db.query(models.AiResult)
-        .filter(models.AiResult.device_id == device_id)
-        .order_by(models.AiResult.created_at.desc())
-        .first()
-    )
     pose = latest_pose_result(db, device_id)
 
     snapshot: dict[str, Any] = {
@@ -85,18 +72,6 @@ def collect_device_snapshot(db: Session, device_id: str, *, include_trend: bool 
         "image": {"id": image.id, "url": image.url, "created_at": iso_utc(image.created_at)} if image else None,
         "pose": serialize_pose_result(db, pose) if pose else None,
         "command": serialize_command(command) if command else None,
-        "ai_result": {
-            "command_id": ai_result.command_id,
-            "risk_level": ai_result.risk_level,
-            "confidence": ai_result.confidence,
-            "reason": ai_result.reason,
-            "summary": ai_result.summary,
-            "model": ai_result.model,
-            "speech": ai_result.speech,
-            "scene_summary": ai_result.scene_summary,
-        }
-        if ai_result
-        else None,
     }
 
     if include_trend:
@@ -140,157 +115,3 @@ def collect_device_snapshot(db: Session, device_id: str, *, include_trend: bool 
         snapshot["actions_already_taken"] = ["窗户已经打开"] if state.get("window_open") else []
 
     return snapshot
-
-
-async def run_ai_analysis(
-    db: Session,
-    device_id: str,
-    llm: LLMService,
-    mqtt_service: MqttGateway | None,
-    *,
-    trigger: str = "manual",
-    image_path: Path | None = None,
-    analysis_intent: str = "general",
-) -> dict[str, Any]:
-    """完整分析管线：广播分析中 -> LLM 决策 -> 落库 -> 置信度门槛决定是否下发 -> 广播结果。
-
-    DB 查询/提交都是同步阻塞调用，必须借 asyncio.to_thread 移出事件循环，
-    否则 Postgres 卡顿时整个网关（WS/HTTP/MQTT）都会跟着冻结。
-    已广播 ai_analyzing 后无论成败都必须再广播一个终态（ai_result / ai_error），
-    否则前端的"分析中"状态会永远悬着。
-    """
-    settings = get_settings()
-    await manager.broadcast(
-        device_id,
-        WebSocketEnvelope(type="ai_analyzing", device_id=device_id, payload={"trigger": trigger}).model_dump(
-            mode="json"
-        ),
-    )
-
-    try:
-
-        def _collect() -> dict[str, Any]:
-            snapshot = collect_device_snapshot(db, device_id, include_trend=True)
-            snapshot["analysis_intent"] = analysis_intent
-            return snapshot
-
-        snapshot = await asyncio.to_thread(_collect)
-        decision = await llm.analyze(snapshot, image_path=image_path)
-        message = decision.command
-        state = (snapshot.get("telemetry") or {}).get("state") or {}
-        if state.get("window_open") and message.type == "window.open":
-            message.type = "none"
-            message.reason = "窗户已经打开，空气仍未改善，应检查污染源和通风路径"
-        if snapshot.get("air_trend") == "worsening" and message.type == "window.close":
-            message.type = "none"
-            message.reason = "空气质量仍在恶化，当前不应关闭窗户"
-        if analysis_intent == "lighting":
-            pose = snapshot.get("pose") or {}
-            sensors = (snapshot.get("telemetry") or {}).get("sensors") or {}
-            expected_on = bool(pose.get("human_present") and sensors.get("light_is_dark"))
-            allowed = {"led.on", "none"} if expected_on else {"led.off", "none"}
-            if message.type not in allowed:
-                message.type = "none"
-                message.reason = "自动照明决策已按有人状态和环境亮度约束"
-        forbidden_open_advice = state.get("window_open") and re.search(
-            r"(?:建议|请|应当|应该).{0,4}(?:开窗|打开窗户)", f"{message.reason} {decision.speech}"
-        )
-        if forbidden_open_advice:
-            message.type = "none"
-            message.reason = "AI 建议与当前已开窗状态冲突，已阻止执行"
-            decision.speech = ""
-
-        def _persist() -> tuple[models.Command, models.AiResult]:
-            command = create_command(
-                db,
-                device_id,
-                message.type,
-                parameter=message.parameter,
-                source="llm",
-                confidence=message.confidence,
-                reason=message.reason,
-                raw_payload={"trigger": trigger, "decision": decision.model_dump(mode="json")},
-            )
-            ai_result = models.AiResult(
-                device_id=device_id,
-                command_id=command.command_id,
-                summary=decision.summary or message.reason,
-                risk_level=decision.risk_level,
-                model=decision.model or settings.llm_model,
-                confidence=message.confidence,
-                reason=message.reason,
-                speech=decision.speech,
-                scene_summary=decision.scene_summary,
-                raw_payload={
-                    "trigger": trigger,
-                    "decision": decision.model_dump(mode="json"),
-                    "vision_analysis": image_path is not None,
-                },
-            )
-            db.add(ai_result)
-            db.commit()
-            return command, ai_result
-
-        command, ai_result = await asyncio.to_thread(_persist)
-
-        published = False
-        if (
-            message.type != "none"
-            and message.confidence >= settings.autopilot_min_confidence
-            and mqtt_service is not None
-        ):
-            published = await mqtt_service.publish_json(
-                f"devices/{device_id}/command", serialize_command(command), qos=1
-            )
-            if published:
-                await asyncio.to_thread(mark_published, db, command)
-
-        if decision.speech and mqtt_service is not None:
-            encoded = base64.b64encode(decision.speech.encode("gb2312", errors="replace")).decode("ascii")
-
-            def _create_voice() -> models.Command:
-                return create_command(
-                    db,
-                    device_id,
-                    "voice.speak",
-                    parameter={"gb2312_base64": encoded},
-                    source="llm",
-                    confidence=message.confidence,
-                    reason=decision.speech,
-                    raw_payload={"trigger": trigger, "speech": decision.speech},
-                )
-
-            voice_command = await asyncio.to_thread(_create_voice)
-            voice_published = await mqtt_service.publish_json(
-                f"devices/{device_id}/command", serialize_command(voice_command), qos=1
-            )
-            if voice_published:
-                await asyncio.to_thread(mark_published, db, voice_command)
-
-        payload = {
-            "command": serialize_command(command),
-            "risk_level": decision.risk_level,
-            "confidence": message.confidence,
-            "reason": message.reason,
-            "model": ai_result.model,
-            "trigger": trigger,
-            "published": published,
-            "speech": decision.speech,
-            "scene_summary": decision.scene_summary,
-        }
-    except Exception:
-        await manager.broadcast(
-            device_id,
-            WebSocketEnvelope(
-                type="ai_error",
-                device_id=device_id,
-                payload={"trigger": trigger, "message": "AI 分析失败，请稍后重试"},
-            ).model_dump(mode="json"),
-        )
-        raise
-
-    await manager.broadcast(
-        device_id,
-        WebSocketEnvelope(type="ai_result", device_id=device_id, payload=payload).model_dump(mode="json"),
-    )
-    return payload

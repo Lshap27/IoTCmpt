@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiot.local/contracts/mqtt-envelope-v2.json",
+  "title": "IoTCmpt MQTT v2 envelope",
+  "type": "object",
+  "required": ["schema_version", "message_id", "device_id", "occurred_at", "payload"],
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "message_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "trace_id": {"type": ["string", "null"], "maxLength": 64},
+    "device_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "occurred_at": {"type": ["string", "null"], "format": "date-time"},
+    "boot_id": {"type": ["string", "null"], "maxLength": 64},
+    "sequence": {"type": ["integer", "null"], "minimum": 0},
+    "payload": {"type": "object"}
+  },
+  "additionalProperties": false
+}

@@ -7,7 +7,6 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 CommandType = Literal[
-    "none",
     "window.open",
     "window.close",
     "alarm.on",
@@ -20,7 +19,7 @@ CommandType = Literal[
     "voice.speak",
     "display.message",
 ]
-CommandSource = Literal["frontend", "llm", "rule"]
+CommandSource = Literal["frontend", "ai", "external_mcp", "rule"]
 PresenceSource = Literal["object_detector", "pose_fallback", "none", "error"]
 BodyCoverage = Literal["upper_body", "full_body", "insufficient"]
 SeatedState = Literal["seated", "not_seated", "unknown"]
@@ -107,33 +106,24 @@ class CommandMessage(BaseModel):
 class CommandAckIn(BaseModel):
     device_id: str
     command_id: str
-    status: Literal["executed", "rejected", "failed"]
+    status: Literal["accepted", "executed", "rejected", "failed", "expired"]
     message: str = ""
+    error_code: str | None = None
+    trace_id: str | None = None
+    reported_state: dict[str, Any] = Field(default_factory=dict)
     executed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-
-class AiAnalyzeResponse(CommandMessage):
-    pass
 
 
 RiskLevel = Literal["low", "medium", "high", "unknown"]
 
 
 class AiDecision(BaseModel):
-    command: CommandMessage
+    command: CommandMessage | None = None
     risk_level: RiskLevel = "unknown"
     summary: str = ""
     model: str = ""
     speech: str = ""
     scene_summary: str = ""
-
-
-class AutopilotIn(BaseModel):
-    enabled: bool | None = None
-    vision_interval_enabled: bool | None = None
-    vision_interval_seconds: float | None = Field(default=None, ge=30, le=3600)
-    sedentary_threshold_seconds: float | None = Field(default=None, ge=5, le=28800)
-    smoke_silence_seconds: int | None = Field(default=None, ge=10, le=600)
 
 
 class ImageAssetOut(BaseModel):
@@ -180,6 +170,9 @@ class PoseAnalyzeAccepted(BaseModel):
 class WebSocketEnvelope(BaseModel):
     type: str
     device_id: str
+    schema_version: str = "2.0"
+    event_id: str = Field(default_factory=lambda: f"evt-{uuid4().hex[:16]}")
+    trace_id: str | None = None
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -329,8 +322,6 @@ class LatestState(BaseModel):
     image: ImageSnapshot | None = None
     pose: PoseSnapshot | None = None
     command: CommandOut | None = None
-    ai_result: AiResultInfo | None = None
-    autopilot: AutopilotEnabled | None = None
 
 
 class AiDecisionOut(BaseModel):
@@ -390,18 +381,22 @@ class AiHealthReport(BaseModel):
     metrics: ReportMetrics
 
 
-# ---- WebSocket envelope 判别联合 ----
-# 仅用于协议契约（导出到 openapi.json 供前端 codegen），运行时广播仍走
-# WebSocketEnvelope；type 字段是判别键，前端 switch 后 payload 自动窄化。
+# ---- WebSocket v2 envelope discriminated union ----
+# Runtime broadcasts use the same event names. Payloads that aggregate multiple
+# perception sources intentionally allow extra fields while keeping a stable
+# discriminant at the envelope level.
 
 
 class _EnvelopeBase(BaseModel):
+    schema_version: Literal["2.0"] = "2.0"
+    event_id: str
+    trace_id: str | None = None
     device_id: str
     occurred_at: datetime
 
 
-class TelemetryEnvelope(_EnvelopeBase):
-    type: Literal["telemetry"]
+class TelemetryReceivedEnvelope(_EnvelopeBase):
+    type: Literal["telemetry.received"]
     payload: TelemetryPoint
 
 
@@ -411,44 +406,37 @@ class StatusPayload(BaseModel):
     last_seen_at: str | None = None
 
 
-class StatusEnvelope(_EnvelopeBase):
-    type: Literal["status"]
+class DeviceStatusChangedEnvelope(_EnvelopeBase):
+    type: Literal["device.status_changed"]
     payload: StatusPayload
 
 
-class ImageEnvelope(_EnvelopeBase):
-    type: Literal["image"]
-    payload: ImageSnapshot
+class PerceptionPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    kind: Literal["image", "pose", "event", "log"]
 
 
-class PoseEnvelope(_EnvelopeBase):
-    type: Literal["pose_result"]
-    payload: PoseResultOut
+class PerceptionUpdatedEnvelope(_EnvelopeBase):
+    type: Literal["perception.updated"]
+    payload: PerceptionPayload
 
 
-class CommandEnvelope(_EnvelopeBase):
-    type: Literal["command"]
-    payload: CommandOut
-
-
-class NotificationEnvelope(_EnvelopeBase):
-    type: Literal["notification"]
-    payload: NotificationOut
-
-
-class CommandAckPayload(BaseModel):
+class CommandStatusPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     command_id: str
     status: str
+    type: str | None = None
     message: str = ""
     executed_at: str | None = None
-    known_command: bool = False
+    completed_at: str | None = None
+    error_code: str | None = None
 
 
-class CommandAckEnvelope(_EnvelopeBase):
-    type: Literal["command_ack"]
-    payload: CommandAckPayload
+class CommandStatusChangedEnvelope(_EnvelopeBase):
+    type: Literal["command.status_changed"]
+    payload: CommandStatusPayload
 
 
 class EventPayload(BaseModel):
@@ -461,59 +449,55 @@ class EventPayload(BaseModel):
     acknowledged_at: str | None = None
 
 
-class EventEnvelope(_EnvelopeBase):
-    type: Literal["event"]
-    payload: EventPayload
-
-
-class LogEnvelope(_EnvelopeBase):
-    type: Literal["log"]
-    payload: dict[str, Any] = Field(default_factory=dict)
-
-
 class ErrorPayload(BaseModel):
-    topic: str
-    error: str
+    code: str = "system_error"
+    message: str
+    topic: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
-class ErrorEnvelope(_EnvelopeBase):
-    type: Literal["error"]
+class SystemErrorEnvelope(_EnvelopeBase):
+    type: Literal["system.error"]
     payload: ErrorPayload
 
 
-class AiAnalyzingPayload(BaseModel):
-    trigger: str
+class AiRunStatusPayload(BaseModel):
+    run_id: str
+    kind: str
+    status: str
+    output: dict[str, Any] | None = None
+    error: str | None = None
 
 
-class AiAnalyzingEnvelope(_EnvelopeBase):
-    type: Literal["ai_analyzing"]
-    payload: AiAnalyzingPayload
+class AiRunStatusChangedEnvelope(_EnvelopeBase):
+    type: Literal["ai.run.status_changed"]
+    payload: AiRunStatusPayload
 
 
-class AiResultEnvelope(_EnvelopeBase):
-    type: Literal["ai_result"]
-    payload: AiDecisionOut
+class NotificationCreatedEnvelope(_EnvelopeBase):
+    type: Literal["notification.created"]
+    payload: NotificationOut
 
 
-class AutopilotEnvelope(_EnvelopeBase):
-    type: Literal["autopilot"]
-    payload: AutopilotState
+class DeviceCapabilitiesChangedEnvelope(_EnvelopeBase):
+    type: Literal["device.capabilities_changed"]
+    payload: dict[str, Any]
+
+
+class AutomationPolicyChangedEnvelope(_EnvelopeBase):
+    type: Literal["automation.policy.changed"]
+    payload: dict[str, Any]
 
 
 WsMessage = Annotated[
-    TelemetryEnvelope
-    | StatusEnvelope
-    | ImageEnvelope
-    | PoseEnvelope
-    | CommandEnvelope
-    | NotificationEnvelope
-    | CommandAckEnvelope
-    | EventEnvelope
-    | LogEnvelope
-    | ErrorEnvelope
-    | AiAnalyzingEnvelope
-    | AiResultEnvelope
-    | AutopilotEnvelope,
+    TelemetryReceivedEnvelope
+    | DeviceStatusChangedEnvelope
+    | PerceptionUpdatedEnvelope
+    | CommandStatusChangedEnvelope
+    | AiRunStatusChangedEnvelope
+    | NotificationCreatedEnvelope
+    | DeviceCapabilitiesChangedEnvelope
+    | AutomationPolicyChangedEnvelope
+    | SystemErrorEnvelope,
     Field(discriminator="type"),
 ]

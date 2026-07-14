@@ -17,7 +17,6 @@ LOGGER = logging.getLogger(__name__)
 
 # 固件实际可执行的命令集合（display.message 会被固件 ack rejected，不向模型宣传）。
 EXECUTABLE_COMMANDS: list[str] = [
-    "none",
     "window.open",
     "window.close",
     "led.on",
@@ -31,7 +30,12 @@ DECISION_JSON_SCHEMA: dict[str, Any] = {
     "schema": {
         "type": "object",
         "properties": {
-            "type": {"type": "string", "enum": EXECUTABLE_COMMANDS},
+            "type": {
+                "anyOf": [
+                    {"type": "string", "enum": EXECUTABLE_COMMANDS},
+                    {"type": "null"},
+                ]
+            },
             "parameter": {"type": "object", "additionalProperties": True},
             "confidence": {"type": "number", "minimum": 0, "maximum": 1},
             "risk_level": {"type": "string", "enum": sorted(RISK_LEVELS)},
@@ -60,7 +64,7 @@ SYSTEM_PROMPT = (
     "决策原则：必须先检查 state.window_open、air_trend 和 actions_already_taken。空气质量变差且窗户未开时才可"
     "window.open；窗户已经打开时禁止再次建议开窗，应建议检查污染源、通风路径或远离风险区域。"
     "air_trend=worsening 时禁止 window.close。光照不足且有人时可以 led.on，无人或明亮时可以 led.off；"
-    "自动决策不得控制蜂鸣器，无需动作时返回 none。"
+    "自动决策不得控制蜂鸣器，无需动作时将 type 设为 null。"
     "烟雾报警由设备本地独立执行，云端不得用 window.open 替代报警。若照片与遥测矛盾，以更保守（更安全）的动作为准。\n"
     "只返回一个 JSON 对象，不要包含任何其他文字，字段为："
     '{"type": string, "parameter": object, "confidence": number(0-1), '
@@ -116,7 +120,7 @@ class LLMService:
             return self._mock_decision(device_state)
 
         if not self.settings.llm_endpoint or not self.settings.llm_api_key:
-            return self._none_decision("LLM 未配置")
+            return self._no_action_decision("LLM 未配置")
 
         try:
             parsed = await self._call_openai_compatible(device_state, image_path=image_path)
@@ -124,7 +128,7 @@ class LLMService:
             raise
         except Exception as exc:
             LOGGER.warning("LLM call failed: %s", exc)
-            return self._none_decision(f"LLM 调用失败: {exc}")
+            return self._no_action_decision(f"LLM 调用失败: {exc}")
 
         return self._decision_from_payload(parsed)
 
@@ -143,9 +147,44 @@ class LLMService:
         ]
         return await self._call_json(messages)
 
-    def _none_decision(self, reason: str, *, risk_level: RiskLevel = "unknown") -> AiDecision:
+    async def complete_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Return one OpenAI-compatible assistant message, including tool_calls."""
+        if self.settings.llm_endpoint == "mock":
+            raise RuntimeError("mock tool decisions are handled by the deterministic AI worker")
+        if not self.settings.llm_endpoint or not self.settings.llm_api_key:
+            raise RuntimeError("LLM 未配置")
+        payload: dict[str, Any] = {
+            "model": self.settings.llm_model,
+            "messages": messages,
+            "tools": tools,
+            "tool_choice": "auto",
+            "temperature": 0.1,
+        }
+        if self.settings.llm_thinking_enabled:
+            payload.pop("temperature", None)
+            payload["thinking"] = {"type": "enabled"}
+            payload["reasoning_effort"] = self.settings.llm_reasoning_effort
+        headers = {"Authorization": f"Bearer {self.settings.llm_api_key}"}
+        async with httpx.AsyncClient(timeout=self.settings.llm_timeout_seconds) as client:
+            response = await client.post(
+                resolve_chat_completions_url(self.settings.llm_endpoint),
+                json=payload,
+                headers=headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+        message = data["choices"][0]["message"]
+        if not isinstance(message, dict):
+            raise ValueError("LLM assistant message is not an object")
+        return message
+
+    def _no_action_decision(self, reason: str, *, risk_level: RiskLevel = "unknown") -> AiDecision:
         return AiDecision(
-            command=CommandMessage(type="none", source="llm", reason=reason),
+            command=None,
             risk_level=risk_level,
             summary=reason,
             model=self.settings.llm_model,
@@ -154,9 +193,18 @@ class LLMService:
         )
 
     def _decision_from_payload(self, parsed: dict[str, Any]) -> AiDecision:
-        raw_type = str(parsed.get("type") or parsed.get("command") or "none")
+        raw_value = parsed.get("type") if "type" in parsed else parsed.get("command")
+        if raw_value is None:
+            no_action_risk = str(parsed.get("risk_level") or "unknown").lower()
+            if no_action_risk not in RISK_LEVELS:
+                no_action_risk = "unknown"
+            return self._no_action_decision(
+                str(parsed.get("reason") or parsed.get("summary") or "无需动作"),
+                risk_level=cast(RiskLevel, no_action_risk),
+            )
+        raw_type = str(raw_value)
         if raw_type not in EXECUTABLE_COMMANDS:
-            return self._none_decision(f"LLM 返回了不可执行的指令: {raw_type}")
+            return self._no_action_decision(f"LLM 返回了不可执行的指令: {raw_type}")
 
         confidence = parsed.get("confidence", 0.0)
         try:
@@ -177,7 +225,7 @@ class LLMService:
             command=CommandMessage(
                 type=cast(CommandType, raw_type),
                 parameter=parameter,
-                source="llm",
+                source="ai",
                 confidence=confidence,
                 reason=reason,
             ),
@@ -199,7 +247,7 @@ class LLMService:
 
         if sensors.get("smoke_detected"):
             command_type, confidence, risk, reason = (
-                ("none", 0.99, "high", "MQ-2 烟雾报警已由设备本地持续执行")
+                (None, 0.99, "high", "MQ-2 烟雾报警已由设备本地持续执行")
                 if state.get("alarm_on")
                 else ("alarm.on", 0.99, "high", "MQ-2 检测到烟雾，保持本地紧急报警")
             )
@@ -212,7 +260,7 @@ class LLMService:
             )
         elif air_quality == "alert" and state.get("window_open"):
             command_type, confidence, risk, reason = (
-                "none",
+                None,
                 0.9,
                 "high" if device_state.get("air_trend") == "worsening" else "medium",
                 "窗户已经打开，空气仍未改善，应检查室内污染源和通风路径",
@@ -222,7 +270,7 @@ class LLMService:
         elif state.get("led_on") and (not pose.get("human_present") or not sensors.get("light_is_dark")):
             command_type, confidence, risk, reason = ("led.off", 0.9, "low", "当前无人或环境明亮，关闭照明")
         else:
-            command_type, confidence, risk, reason = ("none", 0.95, "low", "环境正常，无需动作")
+            command_type, confidence, risk, reason = (None, 0.95, "low", "环境正常，无需动作")
 
         intent = str(device_state.get("analysis_intent") or "")
         speech = ""
@@ -232,13 +280,18 @@ class LLMService:
             speech = "空气质量正在变差，请检查污染源并保持有效通风。"
         elif intent == "sedentary":
             speech = "您已久坐较长时间，请起身活动并放松肩颈。"
-        return AiDecision(
-            command=CommandMessage(
+        command = (
+            CommandMessage(
                 type=cast(CommandType, command_type),
-                source="llm",
+                source="ai",
                 confidence=confidence,
                 reason=reason,
-            ),
+            )
+            if command_type is not None
+            else None
+        )
+        return AiDecision(
+            command=command,
             risk_level=cast(RiskLevel, risk),
             summary=reason,
             model="mock",

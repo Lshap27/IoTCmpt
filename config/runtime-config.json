@@ -1,0 +1,157 @@
+{
+  "version": 1,
+  "fields": {
+    "AIOT_DEMO_DEVICE_ID": {
+      "owner": "compose",
+      "default": "esp32s3-001",
+      "secret": false,
+      "restart": ["simulator"]
+    },
+    "AIOT_DEMO_DEVICE_MODE": {
+      "owner": "compose",
+      "default": "Simulator",
+      "secret": false,
+      "restart": ["simulator"]
+    },
+    "AIOT_DEMO_AI_MODE": {
+      "owner": "compose",
+      "default": "Mock",
+      "secret": false,
+      "restart": ["worker"]
+    },
+    "AIOT_DEMO_SCENARIO": {
+      "owner": "compose",
+      "default": "normal",
+      "secret": false,
+      "restart": ["simulator"],
+      "choices": ["normal", "air-watch", "air-alert", "smoke"]
+    },
+    "AIOT_SIMULATOR_TELEMETRY_INTERVAL_SECONDS": {
+      "owner": "compose",
+      "default": "2",
+      "secret": false,
+      "restart": ["simulator"],
+      "type": "number",
+      "minimum": 1,
+      "maximum": 60
+    },
+    "AIOT_SIMULATOR_IMAGE_ENABLED": {
+      "owner": "compose",
+      "default": "true",
+      "secret": false,
+      "restart": ["simulator"],
+      "type": "boolean"
+    },
+    "AIOT_SIMULATOR_IMAGE_INTERVAL_SECONDS": {
+      "owner": "compose",
+      "default": "30",
+      "secret": false,
+      "restart": ["simulator"],
+      "type": "number",
+      "minimum": 10,
+      "maximum": 3600
+    },
+    "NEXT_PUBLIC_API_BASE_URL": {
+      "owner": "web",
+      "default": "http://localhost:8000",
+      "secret": false,
+      "restart": ["web"]
+    },
+    "AIOT_BASE_URL": {
+      "owner": "gateway",
+      "default": "http://127.0.0.1:8000",
+      "secret": false,
+      "restart": ["gateway"]
+    },
+    "AIOT_MCP_INTERNAL_TOKEN": {
+      "owner": "shared",
+      "default": "generated",
+      "secret": true,
+      "restart": ["gateway", "worker"]
+    },
+    "AIOT_MCP_ENABLED": {
+      "owner": "gateway",
+      "default": "false",
+      "secret": false,
+      "restart": ["gateway"]
+    },
+    "AIOT_MCP_READ_TOKEN": {
+      "owner": "gateway",
+      "default": "",
+      "secret": true,
+      "restart": ["gateway"]
+    },
+    "AIOT_MCP_CONTROL_TOKEN": {
+      "owner": "gateway",
+      "default": "",
+      "secret": true,
+      "restart": ["gateway"]
+    },
+    "AIOT_GATEWAY_INTERNAL_URL": {
+      "owner": "worker",
+      "default": "http://127.0.0.1:8000",
+      "secret": false,
+      "restart": ["worker"]
+    },
+    "AIOT_AI_WORKER_LEASE_SECONDS": {
+      "owner": "worker",
+      "default": "90",
+      "secret": false,
+      "restart": ["worker"]
+    },
+    "AIOT_AI_WORKER_HEARTBEAT_SECONDS": {
+      "owner": "worker",
+      "default": "15",
+      "secret": false,
+      "restart": ["worker"]
+    },
+    "AIOT_AI_WORKER_MAX_ATTEMPTS": {
+      "owner": "worker",
+      "default": "3",
+      "secret": false,
+      "restart": ["worker"]
+    },
+    "AIOT_AI_TOOL_MAX_ROUNDS": {
+      "owner": "worker",
+      "default": "4",
+      "secret": false,
+      "restart": ["worker"]
+    },
+    "AIOT_AI_TOOL_MAX_CALLS": {
+      "owner": "worker",
+      "default": "8",
+      "secret": false,
+      "restart": ["worker"]
+    },
+    "AIOT_COMMAND_ACK_TIMEOUT_SECONDS": {
+      "owner": "shared",
+      "default": "60",
+      "secret": false,
+      "restart": ["gateway", "worker"]
+    },
+    "AIOT_LLM_ENDPOINT": {
+      "owner": "worker",
+      "default": "mock",
+      "secret": false,
+      "restart": ["worker"]
+    },
+    "AIOT_LLM_API_KEY": {
+      "owner": "worker",
+      "default": "",
+      "secret": true,
+      "restart": ["worker"]
+    },
+    "AIOT_LLM_MODEL": {
+      "owner": "worker",
+      "default": "demo-model",
+      "secret": false,
+      "restart": ["worker"]
+    },
+    "AIOT_LLM_TIMEOUT_SECONDS": {
+      "owner": "worker",
+      "default": "60",
+      "secret": false,
+      "restart": ["worker"]
+    }
+  }
+}

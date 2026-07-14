@@ -1,0 +1,14 @@
+{
+  "schema_version": "2.0",
+  "events": [
+    "device.status_changed",
+    "telemetry.received",
+    "perception.updated",
+    "command.status_changed",
+    "ai.run.status_changed",
+    "automation.policy.changed",
+    "notification.created",
+    "device.capabilities_changed",
+    "system.error"
+  ]
+}

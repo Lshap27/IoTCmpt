@@ -5,6 +5,8 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+
 
 def load_simulator() -> ModuleType:
     path = Path(__file__).parents[2] / "tools" / "simulate-device.py"
@@ -56,3 +58,13 @@ def test_simulator_smoke_silence_updates_authoritative_state():
     state = device.telemetry()["state"]
     assert state["smoke_silenced"] is True
     assert state["alarm_on"] is False
+
+
+def test_simulator_cli_enforces_runtime_interval_ranges():
+    module = load_simulator()
+    with pytest.raises(SystemExit):
+        module.parse_args(["--interval", "0.5"])
+    with pytest.raises(SystemExit):
+        module.parse_args(["--image-interval", "5"])
+    args = module.parse_args(["--scenario", "air-watch", "--interval", "60", "--image-interval", "3600"])
+    assert args.scenario == "air-watch"

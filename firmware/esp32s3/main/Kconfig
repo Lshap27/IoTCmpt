@@ -43,7 +43,7 @@ menu "AIoT MQTT 固件主线"
             default ""
             help
                 新架构默认格式为：
-                http://<server-host>:8000/api/devices/esp32s3-001/images
+                http://<server-host>:8000/api/v1/devices/esp32s3-001/images
     endmenu
 
     menu "功能模块"

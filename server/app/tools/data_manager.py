@@ -55,13 +55,13 @@ def preview_data(db: Session, device_id: Any, start_at: Any, end_at: Any) -> dic
     device = _validate_device_id(device_id)
     start, end = parse_time_range(start_at, end_at)
     command_count = _count_range(db, models.Command, models.Command.created_at, device, start, end)
-    ai_result_count = _count_range(db, models.AiResult, models.AiResult.created_at, device, start, end)
+    ai_run_count = _count_range(db, models.AiRun, models.AiRun.created_at, device, start, end)
     counts = {
         "telemetry": _count_range(db, models.Telemetry, models.Telemetry.sampled_at, device, start, end),
         "events": _count_range(db, models.DeviceEvent, models.DeviceEvent.created_at, device, start, end),
-        "ai": command_count + ai_result_count,
+        "ai": command_count + ai_run_count,
         "commands": command_count,
-        "aiResults": ai_result_count,
+        "aiRuns": ai_run_count,
         "notifications": _count_range(db, models.Notification, models.Notification.created_at, device, start, end),
     }
     return {
@@ -88,7 +88,7 @@ def cleanup_data(
     if unknown:
         raise DataToolError(f"不支持的数据类别：{sorted(unknown)}")
 
-    deleted = {"telemetry": 0, "events": 0, "ai": 0, "commands": 0, "aiResults": 0, "notifications": 0}
+    deleted = {"telemetry": 0, "events": 0, "ai": 0, "commands": 0, "aiRuns": 0, "notifications": 0}
     try:
         if "telemetry" in selected:
             deleted["telemetry"] = (
@@ -111,15 +111,41 @@ def cleanup_data(
                 .delete(synchronize_session=False)
             )
         if "ai" in selected:
-            deleted["aiResults"] = (
-                db.query(models.AiResult)
+            run_ids = [
+                row[0]
+                for row in db.query(models.AiRun.run_id)
                 .filter(
-                    models.AiResult.device_id == device,
-                    models.AiResult.created_at >= start,
-                    models.AiResult.created_at < end,
+                    models.AiRun.device_id == device,
+                    models.AiRun.created_at >= start,
+                    models.AiRun.created_at < end,
                 )
-                .delete(synchronize_session=False)
-            )
+                .all()
+            ]
+            if run_ids:
+                db.query(models.AiToolCall).filter(models.AiToolCall.run_id.in_(run_ids)).delete(
+                    synchronize_session=False
+                )
+                db.query(models.AiReport).filter(models.AiReport.run_id.in_(run_ids)).delete(synchronize_session=False)
+                deleted["aiRuns"] = (
+                    db.query(models.AiRun).filter(models.AiRun.run_id.in_(run_ids)).delete(synchronize_session=False)
+                )
+            command_ids = [
+                row[0]
+                for row in db.query(models.Command.command_id)
+                .filter(
+                    models.Command.device_id == device,
+                    models.Command.created_at >= start,
+                    models.Command.created_at < end,
+                )
+                .all()
+            ]
+            if command_ids:
+                db.query(models.OutboxMessage).filter(models.OutboxMessage.command_id.in_(command_ids)).delete(
+                    synchronize_session=False
+                )
+                db.query(models.CommandEvent).filter(models.CommandEvent.command_id.in_(command_ids)).delete(
+                    synchronize_session=False
+                )
             deleted["commands"] = (
                 db.query(models.Command)
                 .filter(
@@ -129,7 +155,7 @@ def cleanup_data(
                 )
                 .delete(synchronize_session=False)
             )
-            deleted["ai"] = deleted["aiResults"] + deleted["commands"]
+            deleted["ai"] = deleted["aiRuns"] + deleted["commands"]
         if "notifications" in selected:
             deleted["notifications"] = (
                 db.query(models.Notification)

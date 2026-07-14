@@ -3,13 +3,11 @@
 import {
   Activity,
   AlertTriangle,
-  Bot,
   BrainCircuit,
   Camera,
   CheckCircle2,
   Radio,
   Send,
-  Sparkles,
   Terminal,
   Wifi,
   WifiOff,
@@ -18,7 +16,7 @@ import {
 } from "lucide-react";
 import { Panel } from "@/components/panel";
 import type { UiEvent } from "@/hooks/use-device-live";
-import { cn, commandLabel, describeTrigger, formatClock } from "@/lib/utils";
+import { cn, commandLabel, formatClock } from "@/lib/utils";
 
 type EventView = {
   Icon: LucideIcon;
@@ -49,6 +47,7 @@ function readableAckMessage(message: string, status: string): string {
 function describeEvent(event: UiEvent): EventView {
   const payload = event.payload ?? {};
   switch (event.type) {
+    case "telemetry.received":
     case "telemetry": {
       const sensors = (payload.sensors ?? {}) as Record<string, unknown>;
       const fusion = (payload.fusion ?? {}) as Record<string, unknown>;
@@ -77,6 +76,7 @@ function describeEvent(event: UiEvent): EventView {
         detail: parts.join(" · ") || str(fusion.reason),
       };
     }
+    case "device.status_changed":
     case "status": {
       const online = str(payload.status) === "online";
       return {
@@ -87,6 +87,44 @@ function describeEvent(event: UiEvent): EventView {
         detail: online ? "设备已连接 MQTT，开始接收实时数据" : "实时数据已中断，页面保留最后一次状态",
       };
     }
+    case "perception.updated":
+      if (str(payload.kind) === "image") {
+        return {
+          Icon: Camera,
+          color: "var(--m-hum)",
+          category: "视觉",
+          title: "摄像头上传了新画面",
+          detail: "画面已保存，可进行姿态识别或 AI 精准分析",
+        };
+      }
+      if (str(payload.kind) === "pose") {
+        return {
+          Icon: Camera,
+          color: "var(--m-hum)",
+          category: "视觉",
+          title: payload.human_present
+            ? `检测到人体：${str(payload.label) || "姿态未知"}`
+            : "画面中未检测到人体",
+          detail: `识别置信度 ${Math.round((num(payload.confidence) ?? 0) * 100)}%`,
+        };
+      }
+      if (str(payload.kind) === "event") {
+        const detected = str(payload.type) === "smoke.detected";
+        return {
+          Icon: detected ? AlertTriangle : Radio,
+          color: detected ? "var(--alert)" : "var(--warn)",
+          category: detected ? "安全" : "设备",
+          title: detected ? "检测到烟雾" : "设备报告了新事件",
+          detail: str(payload.message),
+        };
+      }
+      return {
+        Icon: Terminal,
+        color: "var(--ink-3)",
+        category: "日志",
+        title: "设备运行日志",
+        detail: str(payload.message ?? payload.raw),
+      };
     case "image":
       return {
         Icon: Camera,
@@ -105,60 +143,41 @@ function describeEvent(event: UiEvent): EventView {
           : "画面中未检测到人体",
         detail: `识别置信度 ${Math.round((num(payload.confidence) ?? 0) * 100)}%`,
       };
-    case "ai_analyzing":
+    case "ai.run.status_changed":
       return {
         Icon: BrainCircuit,
-        color: "var(--m-eco2)",
+        color: str(payload.status) === "failed" ? "var(--alert)" : "var(--m-eco2)",
         category: "AI",
-        title: "AI 开始分析",
-        detail: describeTrigger(str(payload.trigger)),
+        title: `AI 任务${str(payload.status) === "succeeded" ? "已完成" : str(payload.status) === "failed" ? "失败" : "状态更新"}`,
+        detail: `${str(payload.kind)} · ${str(payload.status)}`,
       };
-    case "ai_result": {
-      const command = (payload.command ?? {}) as Record<string, unknown>;
-      const confidence = num(payload.confidence) ?? 0;
-      return {
-        Icon: Sparkles,
-        color: "var(--m-eco2)",
-        category: "AI",
-        title: `AI 建议：${commandLabel(str(command.type) || "none")}`,
-        detail: `置信度 ${Math.round(confidence * 100)}% · ${payload.published ? "指令已下发" : "仅生成建议"}${str(payload.reason) ? ` · ${str(payload.reason)}` : ""}`,
-      };
-    }
-    case "command": {
-      const source = str(payload.source);
-      const sourceLabel = source === "llm" ? "AI" : source === "rule" ? "规则" : "手动";
-      return {
-        Icon: Send,
-        color: "var(--accent)",
-        category: "控制",
-        title: `准备执行：${commandLabel(str(payload.type))}`,
-        detail: `${sourceLabel}指令已发送，正在等待设备确认`,
-      };
-    }
-    case "command_ack": {
+    case "command.status_changed": {
       const status = str(payload.status);
-      const action = commandLabel(str(payload.command_type));
+      const action = commandLabel(str(payload.type ?? payload.command_type));
       const suffix = action === "--" ? "指令" : action;
+      const source = str(payload.source);
+      const sourceLabel =
+        source === "ai"
+          ? "AI/MCP"
+          : source === "external_mcp"
+            ? "外部 MCP"
+            : source === "rule"
+              ? "固件规则"
+              : "人工";
       const view =
         status === "executed"
           ? { Icon: CheckCircle2, color: "var(--good)", title: `已执行：${suffix}` }
           : status === "rejected"
             ? { Icon: XCircle, color: "var(--warn)", title: `设备拒绝：${suffix}` }
-            : { Icon: XCircle, color: "var(--alert)", title: `执行失败：${suffix}` };
+            : ["created", "queued", "published", "accepted"].includes(status)
+              ? { Icon: Send, color: "var(--accent)", title: `${suffix}：${status}` }
+              : { Icon: XCircle, color: "var(--alert)", title: `执行失败：${suffix}` };
       return {
         ...view,
         category: "控制",
-        detail: readableAckMessage(str(payload.message), status),
+        detail: `${sourceLabel} · ${readableAckMessage(str(payload.message ?? payload.error_code), status)}`,
       };
     }
-    case "autopilot":
-      return {
-        Icon: Bot,
-        color: payload.enabled ? "var(--good)" : "var(--warn)",
-        category: "自动控制",
-        title: `自动决策已${payload.enabled ? "开启" : "暂停"}`,
-        detail: payload.enabled ? "环境变化将自动触发 AI 分析和设备控制" : "仅保留手动分析与手动控制",
-      };
     case "event":
       if (str(payload.type) === "smoke.detected" || str(payload.type) === "smoke.cleared") {
         const detected = str(payload.type) === "smoke.detected";
@@ -171,10 +190,10 @@ function describeEvent(event: UiEvent): EventView {
         };
       }
       return {
-        Icon: str(payload.type) === "autopilot" ? Bot : Radio,
+        Icon: Radio,
         color: "var(--warn)",
-        category: str(payload.type) === "autopilot" ? "自动控制" : "设备",
-        title: str(payload.type) === "autopilot" ? "自动决策被触发" : "设备报告了新事件",
+        category: "设备",
+        title: "设备报告了新事件",
         detail: str(payload.message),
       };
     case "log":
@@ -185,13 +204,14 @@ function describeEvent(event: UiEvent): EventView {
         title: "设备运行日志",
         detail: str(payload.message ?? payload.raw),
       };
+    case "system.error":
     case "error":
       return {
         Icon: AlertTriangle,
         color: "var(--alert)",
         category: "系统",
         title: "处理事件时发生异常",
-        detail: str(payload.error ?? payload.reason ?? payload.topic),
+        detail: str(payload.message ?? payload.error ?? payload.reason ?? payload.topic),
       };
     default:
       return {
@@ -249,20 +269,28 @@ const GROUPS: Array<{
 ];
 
 function eventGroup(event: UiEvent): EventGroup {
-  if (event.type === "telemetry" || event.type === "status") return "environment";
-  if (event.type === "command" || event.type === "command_ack" || event.type === "autopilot") {
+  if (
+    event.type === "telemetry" ||
+    event.type === "telemetry.received" ||
+    event.type === "status" ||
+    event.type === "device.status_changed"
+  )
+    return "environment";
+  if (event.type === "command.status_changed") {
     return "control";
   }
   if (
-    event.type === "ai_analyzing" ||
-    event.type === "ai_result" ||
+    event.type === "ai.run.status_changed" ||
     event.type === "image" ||
-    event.type === "pose_result"
+    event.type === "pose_result" ||
+    (event.type === "perception.updated" && ["image", "pose"].includes(str(event.payload.kind)))
   ) {
     return "intelligence";
   }
-  if (event.type === "event" && str(event.payload.type) === "autopilot") return "control";
   if (event.type === "event" && !str(event.payload.type).startsWith("smoke.")) return "environment";
+  if (event.type === "perception.updated" && str(event.payload.kind) === "event") {
+    return str(event.payload.type).startsWith("smoke.") ? "safety" : "environment";
+  }
   return "safety";
 }
 

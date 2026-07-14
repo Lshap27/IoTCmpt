@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { Panel } from "@/components/panel";
 import { Switch } from "@/components/ui/switch";
-import type { LatestState } from "@/lib/api";
+import type { AutomationPolicyIn, AutomationPolicyOut, LatestState } from "@/lib/api";
 import { formatRelative } from "@/lib/utils";
 
 export function CameraPanel({
@@ -22,8 +22,7 @@ export function CameraPanel({
   onAnalyze,
   onAiAnalyze,
   aiAnalyzing,
-  visionCapability,
-  autopilot,
+  policy,
   onUpdateAutomation,
   className,
 }: {
@@ -32,13 +31,8 @@ export function CameraPanel({
   onAnalyze: () => void;
   onAiAnalyze: () => void;
   aiAnalyzing: boolean;
-  visionCapability: "unknown" | "supported" | "unsupported";
-  autopilot: LatestState["autopilot"];
-  onUpdateAutomation: (values: {
-    vision_interval_enabled?: boolean;
-    vision_interval_seconds?: number;
-    sedentary_threshold_seconds?: number;
-  }) => void;
+  policy: AutomationPolicyOut | null;
+  onUpdateAutomation: (values: AutomationPolicyIn) => void;
   className?: string;
 }) {
   const [showAnnotated, setShowAnnotated] = useState(true);
@@ -77,8 +71,7 @@ export function CameraPanel({
           <button
             type="button"
             onClick={onAiAnalyze}
-            disabled={aiAnalyzing || visionCapability === "unsupported"}
-            aria-describedby={visionCapability === "unsupported" ? "vision-unsupported" : undefined}
+            disabled={aiAnalyzing}
             className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/5 px-3 text-sm text-accent transition-colors hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {aiAnalyzing ? <Loader2 size={13} className="animate-spin" /> : <BrainCircuit size={13} />}
@@ -169,24 +162,15 @@ export function CameraPanel({
           </div>
         ) : null}
       </div>
-      {visionCapability === "unsupported" ? (
-        <p
-          id="vision-unsupported"
-          tabIndex={0}
-          className="mt-3 rounded-lg bg-alert/10 px-3 py-2 text-xs text-alert"
-        >
-          当前模型不支持图片分析，请更换视觉模型。
-        </p>
-      ) : null}
       <div className="mt-3 rounded-xl border border-line bg-raised p-3">
         <div className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-2 text-sm font-medium text-ink2">
             <TimerReset size={14} className="text-accent" /> 定时视觉分析
           </span>
           <Switch
-            checked={autopilot?.vision_interval_enabled ?? false}
-            disabled={visionCapability === "unsupported"}
-            onCheckedChange={(value) => onUpdateAutomation({ vision_interval_enabled: value })}
+            checked={policy?.vision_schedule_enabled ?? false}
+            disabled={!policy}
+            onCheckedChange={(value) => onUpdateAutomation({ vision_schedule_enabled: value })}
             aria-label="定时视觉分析开关"
           />
         </div>
@@ -194,11 +178,11 @@ export function CameraPanel({
           自动分析间隔
           <span className="flex items-center gap-2">
             <input
-              key={`vision-${autopilot?.vision_interval_seconds}`}
+              key={`vision-${policy?.vision_interval_seconds}`}
               type="number"
-              min={30}
-              max={3600}
-              defaultValue={autopilot?.vision_interval_seconds ?? 300}
+              min={60}
+              max={86400}
+              defaultValue={policy?.vision_interval_seconds ?? 300}
               onBlur={(event) =>
                 onUpdateAutomation({ vision_interval_seconds: Number(event.currentTarget.value) })
               }
@@ -214,11 +198,11 @@ export function CameraPanel({
           </span>
           <span className="flex items-center gap-2">
             <input
-              key={`sit-${autopilot?.sedentary_threshold_seconds}`}
+              key={`sit-${policy?.sedentary_threshold_seconds}`}
               type="number"
-              min={5}
-              max={28800}
-              defaultValue={autopilot?.sedentary_threshold_seconds ?? 7200}
+              min={300}
+              max={86400}
+              defaultValue={policy?.sedentary_threshold_seconds ?? 7200}
               onBlur={(event) =>
                 onUpdateAutomation({ sedentary_threshold_seconds: Number(event.currentTarget.value) })
               }

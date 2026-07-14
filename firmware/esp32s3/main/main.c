@@ -22,6 +22,7 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+#include "firmware_behavior.generated.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -46,8 +47,7 @@ static SemaphoreHandle_t s_latest_mutex;
 static QueueHandle_t s_command_queue;
 static EventGroupHandle_t s_wifi_events;
 
-/* 命令队列深度：执行器 500ms 轮询一次，蜂鸣器循环最长约 3s，4 个积压足够 */
-#define COMMAND_QUEUE_LENGTH 4
+/* 队列深度和执行周期来自共享固件行为契约。 */
 
 static app_status_link_t link_status_from_result(esp_err_t result) {
     return result == ESP_OK ? APP_STATUS_LINK_READY : APP_STATUS_LINK_DEGRADED;
@@ -130,7 +130,9 @@ static void on_command(const mqtt_app_command_t *command) {
         /* 队列满：拒绝而不是覆盖，让云端立刻知道命令被丢弃 */
         ESP_LOGW(TAG, "command queue full, rejecting id=%s", command->command_id);
         mqtt_app_publish_command_ack(command, "rejected", "command queue full");
+        return;
     }
+    mqtt_app_publish_command_ack(command, "accepted", "queued");
 }
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -278,7 +280,7 @@ static void actuator_task(void *arg) {
             if (has_command) {
                 mqtt_app_publish_command_ack(&envelope, "rejected", "actuator disabled");
             }
-            vTaskDelay(pdMS_TO_TICKS(500));
+            vTaskDelay(pdMS_TO_TICKS(AIOT_COMMAND_EXECUTION_PERIOD_MS));
             continue;
         }
 
@@ -304,7 +306,7 @@ static void actuator_task(void *arg) {
             mqtt_app_publish_command_ack(&envelope, ack_status, esp_err_to_name(command_result));
         }
 
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(AIOT_COMMAND_EXECUTION_PERIOD_MS));
     }
 }
 
@@ -390,7 +392,7 @@ void app_main(void) {
     ESP_ERROR_CHECK(control_state_init());
 
     s_latest_mutex = xSemaphoreCreateMutex();
-    s_command_queue = xQueueCreate(COMMAND_QUEUE_LENGTH, sizeof(mqtt_app_command_t));
+    s_command_queue = xQueueCreate(AIOT_COMMAND_QUEUE_LENGTH, sizeof(mqtt_app_command_t));
     if (!s_latest_mutex || !s_command_queue) {
         ESP_LOGE(TAG, "failed to create application mutex/queue");
         return;

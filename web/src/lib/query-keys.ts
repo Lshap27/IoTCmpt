@@ -7,7 +7,11 @@ export const deviceKeys = {
   ledger: (deviceId: string) => ["device", deviceId, "ledger"] as const,
   notifications: (deviceId: string) => ["device", deviceId, "notifications"] as const,
   ai: (deviceId: string) => ["device", deviceId, "ai"] as const,
+  aiRun: (deviceId: string, runId: string) => ["device", deviceId, "ai-runs", runId] as const,
+  automationPolicy: (deviceId: string) => ["device", deviceId, "automation-policy"] as const,
+  capabilities: (deviceId: string) => ["device", deviceId, "capabilities"] as const,
   pendingCommands: (deviceId: string) => ["device", deviceId, "pending-commands"] as const,
+  commandStatuses: (deviceId: string) => ["device", deviceId, "command-statuses"] as const,
 };
 
 export const devicesKey = ["devices"] as const;

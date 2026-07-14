@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiot.local/contracts/device-capabilities-v2.json",
+  "title": "IoTCmpt device capabilities",
+  "type": "object",
+  "required": ["protocol_version", "firmware_version", "commands"],
+  "properties": {
+    "protocol_version": {"const": "2.0"},
+    "firmware_version": {"type": "string", "minLength": 1, "maxLength": 64},
+    "hardware_model": {"type": "string", "maxLength": 64},
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "parameter_schema", "safety_class"],
+        "properties": {
+          "name": {"type": "string"},
+          "parameter_schema": {"type": "object"},
+          "safety_class": {"enum": ["normal", "safety", "administrative"]}
+          ,"ai_allowed": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

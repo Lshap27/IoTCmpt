@@ -31,5 +31,7 @@ jobs:
         run: pnpm format:check
       - name: Typecheck
         run: pnpm typecheck
+      - name: WebSocket reducer tests
+        run: pnpm exec playwright test e2e/ws-dispatcher.spec.ts
       - name: Build
         run: pnpm build

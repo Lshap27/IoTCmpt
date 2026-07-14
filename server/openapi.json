@@ -1,87 +1,187 @@
 {
   "components": {
     "schemas": {
-      "AiAnalyzingEnvelope": {
+      "AiRunCreate": {
         "properties": {
-          "device_id": {
-            "title": "Device Id",
+          "goal": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Goal",
             "type": "string"
           },
-          "occurred_at": {
-            "format": "date-time",
-            "title": "Occurred At",
+          "image_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Id"
+          },
+          "kind": {
+            "enum": [
+              "decision",
+              "report",
+              "vision",
+              "patrol"
+            ],
+            "title": "Kind",
             "type": "string"
           },
-          "payload": {
-            "$ref": "#/components/schemas/AiAnalyzingPayload"
+          "period": {
+            "anyOf": [
+              {
+                "enum": [
+                  "hour",
+                  "day",
+                  "week"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period"
           },
-          "type": {
-            "const": "ai_analyzing",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "device_id",
-          "occurred_at",
-          "type",
-          "payload"
-        ],
-        "title": "AiAnalyzingEnvelope",
-        "type": "object"
-      },
-      "AiAnalyzingPayload": {
-        "properties": {
           "trigger": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "event",
+              "schedule",
+              "patrol"
+            ],
             "title": "Trigger",
             "type": "string"
           }
         },
         "required": [
-          "trigger"
+          "kind"
         ],
-        "title": "AiAnalyzingPayload",
+        "title": "AiRunCreate",
         "type": "object"
       },
-      "AiDecisionOut": {
+      "AiRunOut": {
         "properties": {
-          "command": {
-            "$ref": "#/components/schemas/CommandOut"
+          "attempt_count": {
+            "default": 0,
+            "title": "Attempt Count",
+            "type": "integer"
           },
-          "confidence": {
-            "title": "Confidence",
-            "type": "number"
+          "cancel_requested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel Requested At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "max_attempts": {
+            "default": 3,
+            "title": "Max Attempts",
+            "type": "integer"
           },
           "model": {
             "title": "Model",
             "type": "string"
           },
-          "published": {
-            "title": "Published",
-            "type": "boolean"
-          },
-          "reason": {
-            "title": "Reason",
-            "type": "string"
-          },
-          "risk_level": {
-            "enum": [
-              "low",
-              "medium",
-              "high",
-              "unknown"
+          "output": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Risk Level",
+            "title": "Output"
+          },
+          "run_id": {
+            "title": "Run Id",
             "type": "string"
           },
-          "scene_summary": {
-            "default": "",
-            "title": "Scene Summary",
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
             "type": "string"
           },
-          "speech": {
-            "default": "",
-            "title": "Speech",
+          "tool_calls": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Tool Calls",
+            "type": "array"
+          },
+          "trace_id": {
+            "title": "Trace Id",
             "type": "string"
           },
           "trigger": {
@@ -90,127 +190,27 @@
           }
         },
         "required": [
-          "command",
-          "risk_level",
-          "confidence",
-          "reason",
-          "model",
+          "run_id",
+          "trace_id",
+          "device_id",
+          "kind",
           "trigger",
-          "published"
-        ],
-        "title": "AiDecisionOut",
-        "type": "object"
-      },
-      "AiHealthReport": {
-        "properties": {
-          "anomalies": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Anomalies",
-            "type": "array"
-          },
-          "coverage": {
-            "$ref": "#/components/schemas/ReportCoverage"
-          },
-          "device_id": {
-            "title": "Device Id",
-            "type": "string"
-          },
-          "generated_at": {
-            "title": "Generated At",
-            "type": "string"
-          },
-          "headline": {
-            "title": "Headline",
-            "type": "string"
-          },
-          "metrics": {
-            "$ref": "#/components/schemas/ReportMetrics"
-          },
-          "model": {
-            "title": "Model",
-            "type": "string"
-          },
-          "next_checks": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Next Checks",
-            "type": "array"
-          },
-          "period": {
-            "enum": [
-              "hour",
-              "day",
-              "week"
-            ],
-            "title": "Period",
-            "type": "string"
-          },
-          "recommendations": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Recommendations",
-            "type": "array"
-          },
-          "risk_level": {
-            "enum": [
-              "low",
-              "medium",
-              "high",
-              "unknown"
-            ],
-            "title": "Risk Level",
-            "type": "string"
-          },
-          "risk_score": {
-            "maximum": 100.0,
-            "minimum": 0.0,
-            "title": "Risk Score",
-            "type": "integer"
-          },
-          "summary": {
-            "title": "Summary",
-            "type": "string"
-          }
-        },
-        "required": [
-          "device_id",
-          "period",
-          "generated_at",
+          "status",
+          "input",
           "model",
-          "risk_level",
-          "risk_score",
-          "headline",
-          "summary",
-          "coverage",
-          "metrics"
+          "created_at"
         ],
-        "title": "AiHealthReport",
+        "title": "AiRunOut",
         "type": "object"
       },
-      "AiReportIn": {
-        "properties": {
-          "period": {
-            "default": "day",
-            "enum": [
-              "hour",
-              "day",
-              "week"
-            ],
-            "title": "Period",
-            "type": "string"
-          }
-        },
-        "title": "AiReportIn",
-        "type": "object"
-      },
-      "AiResultEnvelope": {
+      "AiRunStatusChangedEnvelope": {
         "properties": {
           "device_id": {
             "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
             "type": "string"
           },
           "occurred_at": {
@@ -219,118 +219,98 @@
             "type": "string"
           },
           "payload": {
-            "$ref": "#/components/schemas/AiDecisionOut"
+            "$ref": "#/components/schemas/AiRunStatusPayload"
+          },
+          "schema_version": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trace Id"
           },
           "type": {
-            "const": "ai_result",
+            "const": "ai.run.status_changed",
             "title": "Type",
             "type": "string"
           }
         },
         "required": [
+          "event_id",
           "device_id",
           "occurred_at",
           "type",
           "payload"
         ],
-        "title": "AiResultEnvelope",
+        "title": "AiRunStatusChangedEnvelope",
         "type": "object"
       },
-      "AiResultInfo": {
+      "AiRunStatusPayload": {
         "properties": {
-          "command_id": {
-            "title": "Command Id",
-            "type": "string"
-          },
-          "confidence": {
-            "title": "Confidence",
-            "type": "number"
-          },
-          "model": {
-            "title": "Model",
-            "type": "string"
-          },
-          "reason": {
-            "title": "Reason",
-            "type": "string"
-          },
-          "risk_level": {
-            "title": "Risk Level",
-            "type": "string"
-          },
-          "scene_summary": {
-            "default": "",
-            "title": "Scene Summary",
-            "type": "string"
-          },
-          "speech": {
-            "default": "",
-            "title": "Speech",
-            "type": "string"
-          },
-          "summary": {
-            "title": "Summary",
-            "type": "string"
-          }
-        },
-        "required": [
-          "command_id",
-          "risk_level",
-          "confidence",
-          "reason",
-          "summary",
-          "model"
-        ],
-        "title": "AiResultInfo",
-        "type": "object"
-      },
-      "AutopilotEnabled": {
-        "properties": {
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "sedentary_threshold_seconds": {
-            "default": 7200,
-            "title": "Sedentary Threshold Seconds",
-            "type": "number"
-          },
-          "smoke_silence_seconds": {
-            "default": 60,
-            "title": "Smoke Silence Seconds",
-            "type": "integer"
-          },
-          "vision_capability": {
-            "default": "unknown",
-            "enum": [
-              "unknown",
-              "supported",
-              "unsupported"
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Vision Capability",
+            "default": null,
+            "title": "Error"
+          },
+          "kind": {
+            "title": "Kind",
             "type": "string"
           },
-          "vision_interval_enabled": {
-            "default": false,
-            "title": "Vision Interval Enabled",
-            "type": "boolean"
+          "output": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Output"
           },
-          "vision_interval_seconds": {
-            "default": 300,
-            "title": "Vision Interval Seconds",
-            "type": "number"
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
           }
         },
         "required": [
-          "enabled"
+          "run_id",
+          "kind",
+          "status"
         ],
-        "title": "AutopilotEnabled",
+        "title": "AiRunStatusPayload",
         "type": "object"
       },
-      "AutopilotEnvelope": {
+      "AutomationPolicyChangedEnvelope": {
         "properties": {
           "device_id": {
             "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
             "type": "string"
           },
           "occurred_at": {
@@ -339,24 +319,45 @@
             "type": "string"
           },
           "payload": {
-            "$ref": "#/components/schemas/AutopilotState"
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "schema_version": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trace Id"
           },
           "type": {
-            "const": "autopilot",
+            "const": "automation.policy.changed",
             "title": "Type",
             "type": "string"
           }
         },
         "required": [
+          "event_id",
           "device_id",
           "occurred_at",
           "type",
           "payload"
         ],
-        "title": "AutopilotEnvelope",
+        "title": "AutomationPolicyChangedEnvelope",
         "type": "object"
       },
-      "AutopilotIn": {
+      "AutomationPolicyIn": {
         "properties": {
           "enabled": {
             "anyOf": [
@@ -369,33 +370,7 @@
             ],
             "title": "Enabled"
           },
-          "sedentary_threshold_seconds": {
-            "anyOf": [
-              {
-                "maximum": 28800.0,
-                "minimum": 5.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sedentary Threshold Seconds"
-          },
-          "smoke_silence_seconds": {
-            "anyOf": [
-              {
-                "maximum": 600.0,
-                "minimum": 10.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Smoke Silence Seconds"
-          },
-          "vision_interval_enabled": {
+          "event_trigger_enabled": {
             "anyOf": [
               {
                 "type": "boolean"
@@ -404,31 +379,111 @@
                 "type": "null"
               }
             ],
-            "title": "Vision Interval Enabled"
+            "title": "Event Trigger Enabled"
+          },
+          "execution_mode": {
+            "anyOf": [
+              {
+                "const": "automatic",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Mode"
+          },
+          "patrol_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patrol Enabled"
+          },
+          "patrol_force_interval_seconds": {
+            "anyOf": [
+              {
+                "maximum": 604800.0,
+                "minimum": 300.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patrol Force Interval Seconds"
+          },
+          "patrol_interval_seconds": {
+            "anyOf": [
+              {
+                "maximum": 86400.0,
+                "minimum": 60.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patrol Interval Seconds"
+          },
+          "sedentary_threshold_seconds": {
+            "anyOf": [
+              {
+                "maximum": 86400.0,
+                "minimum": 300.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sedentary Threshold Seconds"
+          },
+          "sedentary_trigger_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sedentary Trigger Enabled"
           },
           "vision_interval_seconds": {
             "anyOf": [
               {
-                "maximum": 3600.0,
-                "minimum": 30.0,
-                "type": "number"
+                "maximum": 86400.0,
+                "minimum": 60.0,
+                "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
             "title": "Vision Interval Seconds"
+          },
+          "vision_schedule_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Schedule Enabled"
           }
         },
-        "title": "AutopilotIn",
+        "title": "AutomationPolicyIn",
         "type": "object"
       },
-      "AutopilotState": {
+      "AutomationPolicyOut": {
         "properties": {
-          "cooldown_seconds": {
-            "title": "Cooldown Seconds",
-            "type": "number"
-          },
           "device_id": {
             "title": "Device Id",
             "type": "string"
@@ -437,63 +492,88 @@
             "title": "Enabled",
             "type": "boolean"
           },
-          "min_confidence": {
-            "title": "Min Confidence",
-            "type": "number"
+          "event_trigger_enabled": {
+            "title": "Event Trigger Enabled",
+            "type": "boolean"
+          },
+          "execution_mode": {
+            "const": "automatic",
+            "title": "Execution Mode",
+            "type": "string"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "last_model_run_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Model Run At"
+          },
+          "patrol_enabled": {
+            "title": "Patrol Enabled",
+            "type": "boolean"
+          },
+          "patrol_force_interval_seconds": {
+            "title": "Patrol Force Interval Seconds",
+            "type": "integer"
+          },
+          "patrol_interval_seconds": {
+            "title": "Patrol Interval Seconds",
+            "type": "integer"
           },
           "sedentary_threshold_seconds": {
             "title": "Sedentary Threshold Seconds",
-            "type": "number"
-          },
-          "smoke_silence_seconds": {
-            "title": "Smoke Silence Seconds",
             "type": "integer"
           },
-          "trigger_levels": {
-            "deprecated": true,
-            "description": "Deprecated: 空气质量与烟雾自动规则已移至固件；保留此字段仅用于兼容旧客户端。",
-            "items": {
-              "type": "string"
+          "sedentary_trigger_enabled": {
+            "title": "Sedentary Trigger Enabled",
+            "type": "boolean"
+          },
+          "thresholds": {
+            "additionalProperties": {
+              "type": "number"
             },
-            "title": "Trigger Levels",
-            "type": "array"
-          },
-          "vision_capability": {
-            "enum": [
-              "unknown",
-              "supported",
-              "unsupported"
-            ],
-            "title": "Vision Capability",
-            "type": "string"
-          },
-          "vision_interval_effective": {
-            "title": "Vision Interval Effective",
-            "type": "boolean"
-          },
-          "vision_interval_enabled": {
-            "title": "Vision Interval Enabled",
-            "type": "boolean"
+            "title": "Thresholds",
+            "type": "object"
           },
           "vision_interval_seconds": {
             "title": "Vision Interval Seconds",
-            "type": "number"
+            "type": "integer"
+          },
+          "vision_schedule_enabled": {
+            "title": "Vision Schedule Enabled",
+            "type": "boolean"
           }
         },
         "required": [
           "device_id",
           "enabled",
-          "cooldown_seconds",
-          "min_confidence",
-          "trigger_levels",
-          "vision_capability",
-          "vision_interval_enabled",
-          "vision_interval_effective",
+          "event_trigger_enabled",
+          "patrol_enabled",
+          "patrol_interval_seconds",
+          "patrol_force_interval_seconds",
+          "vision_schedule_enabled",
           "vision_interval_seconds",
+          "sedentary_trigger_enabled",
           "sedentary_threshold_seconds",
-          "smoke_silence_seconds"
+          "execution_mode",
+          "thresholds"
         ],
-        "title": "AutopilotState",
+        "title": "AutomationPolicyOut",
         "type": "object"
       },
       "Body_upload_image": {
@@ -510,107 +590,67 @@
         "title": "Body_upload_image",
         "type": "object"
       },
-      "CommandAckEnvelope": {
+      "CapabilityCommandOut": {
         "properties": {
-          "device_id": {
-            "title": "Device Id",
+          "ai_allowed": {
+            "default": false,
+            "title": "Ai Allowed",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
             "type": "string"
           },
-          "occurred_at": {
-            "format": "date-time",
-            "title": "Occurred At",
-            "type": "string"
+          "parameter_schema": {
+            "additionalProperties": true,
+            "title": "Parameter Schema",
+            "type": "object"
           },
-          "payload": {
-            "$ref": "#/components/schemas/CommandAckPayload"
-          },
-          "type": {
-            "const": "command_ack",
-            "title": "Type",
+          "safety_class": {
+            "enum": [
+              "normal",
+              "safety",
+              "administrative"
+            ],
+            "title": "Safety Class",
             "type": "string"
           }
         },
         "required": [
-          "device_id",
-          "occurred_at",
-          "type",
-          "payload"
+          "name",
+          "parameter_schema",
+          "safety_class"
         ],
-        "title": "CommandAckEnvelope",
+        "title": "CapabilityCommandOut",
         "type": "object"
       },
-      "CommandAckPayload": {
-        "additionalProperties": true,
+      "CommandCreateV1": {
         "properties": {
-          "command_id": {
-            "title": "Command Id",
-            "type": "string"
-          },
-          "executed_at": {
+          "expires_at": {
             "anyOf": [
               {
+                "format": "date-time",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "default": null,
-            "title": "Executed At"
+            "title": "Expires At"
           },
-          "known_command": {
-            "default": false,
-            "title": "Known Command",
-            "type": "boolean"
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
           },
-          "message": {
-            "default": "",
-            "title": "Message",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "command_id",
-          "status"
-        ],
-        "title": "CommandAckPayload",
-        "type": "object"
-      },
-      "CommandEnvelope": {
-        "properties": {
-          "device_id": {
-            "title": "Device Id",
-            "type": "string"
-          },
-          "occurred_at": {
-            "format": "date-time",
-            "title": "Occurred At",
-            "type": "string"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/CommandOut"
-          },
-          "type": {
-            "const": "command",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "device_id",
-          "occurred_at",
-          "type",
-          "payload"
-        ],
-        "title": "CommandEnvelope",
-        "type": "object"
-      },
-      "CommandIn": {
-        "properties": {
           "parameter": {
             "additionalProperties": true,
             "title": "Parameter",
@@ -622,20 +662,6 @@
             "type": "string"
           },
           "type": {
-            "enum": [
-              "none",
-              "window.open",
-              "window.close",
-              "alarm.on",
-              "alarm.off",
-              "led.on",
-              "led.off",
-              "control.set_priority",
-              "control.resume_auto",
-              "alarm.silence",
-              "voice.speak",
-              "display.message"
-            ],
             "title": "Type",
             "type": "string"
           }
@@ -643,7 +669,7 @@
         "required": [
           "type"
         ],
-        "title": "CommandIn",
+        "title": "CommandCreateV1",
         "type": "object"
       },
       "CommandOut": {
@@ -669,7 +695,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Executed At"
           },
           "parameter": {
@@ -686,7 +711,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Published At"
           },
           "reason": {
@@ -716,6 +740,352 @@
           "created_at"
         ],
         "title": "CommandOut",
+        "type": "object"
+      },
+      "CommandStatusChangedEnvelope": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/CommandStatusPayload"
+          },
+          "schema_version": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trace Id"
+          },
+          "type": {
+            "const": "command.status_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "device_id",
+          "occurred_at",
+          "type",
+          "payload"
+        ],
+        "title": "CommandStatusChangedEnvelope",
+        "type": "object"
+      },
+      "CommandStatusPayload": {
+        "additionalProperties": true,
+        "properties": {
+          "command_id": {
+            "title": "Command Id",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Completed At"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Code"
+          },
+          "executed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Executed At"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Type"
+          }
+        },
+        "required": [
+          "command_id",
+          "status"
+        ],
+        "title": "CommandStatusPayload",
+        "type": "object"
+      },
+      "CommandV1Out": {
+        "properties": {
+          "accepted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          },
+          "capability": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability"
+          },
+          "command_id": {
+            "title": "Command Id",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "parameter": {
+            "additionalProperties": true,
+            "title": "Parameter",
+            "type": "object"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command_id",
+          "trace_id",
+          "device_id",
+          "type",
+          "parameter",
+          "source",
+          "reason",
+          "status",
+          "created_at"
+        ],
+        "title": "CommandV1Out",
+        "type": "object"
+      },
+      "DeviceCapabilitiesChangedEnvelope": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "schema_version": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trace Id"
+          },
+          "type": {
+            "const": "device.capabilities_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "device_id",
+          "occurred_at",
+          "type",
+          "payload"
+        ],
+        "title": "DeviceCapabilitiesChangedEnvelope",
+        "type": "object"
+      },
+      "DeviceCapabilitiesOut": {
+        "properties": {
+          "commands": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityCommandOut"
+            },
+            "title": "Commands",
+            "type": "array"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "firmware_version": {
+            "title": "Firmware Version",
+            "type": "string"
+          },
+          "hardware_model": {
+            "title": "Hardware Model",
+            "type": "string"
+          },
+          "protocol_version": {
+            "title": "Protocol Version",
+            "type": "string"
+          },
+          "seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seen At"
+          }
+        },
+        "required": [
+          "device_id",
+          "protocol_version",
+          "firmware_version",
+          "hardware_model",
+          "commands"
+        ],
+        "title": "DeviceCapabilitiesOut",
         "type": "object"
       },
       "DeviceStatePayload": {
@@ -824,6 +1194,58 @@
         "title": "DeviceStatePayload",
         "type": "object"
       },
+      "DeviceStatusChangedEnvelope": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/StatusPayload"
+          },
+          "schema_version": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trace Id"
+          },
+          "type": {
+            "const": "device.status_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "device_id",
+          "occurred_at",
+          "type",
+          "payload"
+        ],
+        "title": "DeviceStatusChangedEnvelope",
+        "type": "object"
+      },
       "DeviceSummary": {
         "properties": {
           "device_id": {
@@ -858,39 +1280,15 @@
         "title": "DeviceSummary",
         "type": "object"
       },
-      "ErrorEnvelope": {
-        "properties": {
-          "device_id": {
-            "title": "Device Id",
-            "type": "string"
-          },
-          "occurred_at": {
-            "format": "date-time",
-            "title": "Occurred At",
-            "type": "string"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/ErrorPayload"
-          },
-          "type": {
-            "const": "error",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "device_id",
-          "occurred_at",
-          "type",
-          "payload"
-        ],
-        "title": "ErrorEnvelope",
-        "type": "object"
-      },
       "ErrorPayload": {
         "properties": {
-          "error": {
-            "title": "Error",
+          "code": {
+            "default": "system_error",
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
             "type": "string"
           },
           "payload": {
@@ -899,44 +1297,22 @@
             "type": "object"
           },
           "topic": {
-            "title": "Topic",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Topic"
           }
         },
         "required": [
-          "topic",
-          "error"
+          "message"
         ],
         "title": "ErrorPayload",
-        "type": "object"
-      },
-      "EventEnvelope": {
-        "properties": {
-          "device_id": {
-            "title": "Device Id",
-            "type": "string"
-          },
-          "occurred_at": {
-            "format": "date-time",
-            "title": "Occurred At",
-            "type": "string"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/EventPayload"
-          },
-          "type": {
-            "const": "event",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "device_id",
-          "occurred_at",
-          "type",
-          "payload"
-        ],
-        "title": "EventEnvelope",
         "type": "object"
       },
       "EventOut": {
@@ -986,73 +1362,6 @@
           "created_at"
         ],
         "title": "EventOut",
-        "type": "object"
-      },
-      "EventPayload": {
-        "additionalProperties": true,
-        "properties": {
-          "acknowledged_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Acknowledged At"
-          },
-          "id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Id"
-          },
-          "message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Message"
-          },
-          "severity": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Severity"
-          },
-          "type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Type"
-          }
-        },
-        "title": "EventPayload",
         "type": "object"
       },
       "FusionSnapshot": {
@@ -1169,35 +1478,6 @@
         "title": "ImageAssetOut",
         "type": "object"
       },
-      "ImageEnvelope": {
-        "properties": {
-          "device_id": {
-            "title": "Device Id",
-            "type": "string"
-          },
-          "occurred_at": {
-            "format": "date-time",
-            "title": "Occurred At",
-            "type": "string"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/ImageSnapshot"
-          },
-          "type": {
-            "const": "image",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "device_id",
-          "occurred_at",
-          "type",
-          "payload"
-        ],
-        "title": "ImageEnvelope",
-        "type": "object"
-      },
       "ImageSnapshot": {
         "properties": {
           "created_at": {
@@ -1223,26 +1503,6 @@
       },
       "LatestState": {
         "properties": {
-          "ai_result": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AiResultInfo"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "autopilot": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AutopilotEnabled"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "command": {
             "anyOf": [
               {
@@ -1293,40 +1553,14 @@
         "title": "LatestState",
         "type": "object"
       },
-      "LogEnvelope": {
+      "NotificationCreatedEnvelope": {
         "properties": {
           "device_id": {
             "title": "Device Id",
             "type": "string"
           },
-          "occurred_at": {
-            "format": "date-time",
-            "title": "Occurred At",
-            "type": "string"
-          },
-          "payload": {
-            "additionalProperties": true,
-            "title": "Payload",
-            "type": "object"
-          },
-          "type": {
-            "const": "log",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "device_id",
-          "occurred_at",
-          "type"
-        ],
-        "title": "LogEnvelope",
-        "type": "object"
-      },
-      "NotificationEnvelope": {
-        "properties": {
-          "device_id": {
-            "title": "Device Id",
+          "event_id": {
+            "title": "Event Id",
             "type": "string"
           },
           "occurred_at": {
@@ -1337,19 +1571,38 @@
           "payload": {
             "$ref": "#/components/schemas/NotificationOut"
           },
+          "schema_version": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trace Id"
+          },
           "type": {
-            "const": "notification",
+            "const": "notification.created",
             "title": "Type",
             "type": "string"
           }
         },
         "required": [
+          "event_id",
           "device_id",
           "occurred_at",
           "type",
           "payload"
         ],
-        "title": "NotificationEnvelope",
+        "title": "NotificationCreatedEnvelope",
         "type": "object"
       },
       "NotificationIn": {
@@ -1430,6 +1683,78 @@
         "title": "NotificationOut",
         "type": "object"
       },
+      "PerceptionPayload": {
+        "additionalProperties": true,
+        "properties": {
+          "kind": {
+            "enum": [
+              "image",
+              "pose",
+              "event",
+              "log"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "PerceptionPayload",
+        "type": "object"
+      },
+      "PerceptionUpdatedEnvelope": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/PerceptionPayload"
+          },
+          "schema_version": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trace Id"
+          },
+          "type": {
+            "const": "perception.updated",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "device_id",
+          "occurred_at",
+          "type",
+          "payload"
+        ],
+        "title": "PerceptionUpdatedEnvelope",
+        "type": "object"
+      },
       "PoseAnalyzeAccepted": {
         "properties": {
           "queued": {
@@ -1446,162 +1771,6 @@
           "source_image_id"
         ],
         "title": "PoseAnalyzeAccepted",
-        "type": "object"
-      },
-      "PoseEnvelope": {
-        "properties": {
-          "device_id": {
-            "title": "Device Id",
-            "type": "string"
-          },
-          "occurred_at": {
-            "format": "date-time",
-            "title": "Occurred At",
-            "type": "string"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/PoseResultOut"
-          },
-          "type": {
-            "const": "pose_result",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "device_id",
-          "occurred_at",
-          "type",
-          "payload"
-        ],
-        "title": "PoseEnvelope",
-        "type": "object"
-      },
-      "PoseResultOut": {
-        "properties": {
-          "annotated_image_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Annotated Image Url"
-          },
-          "body_coverage": {
-            "enum": [
-              "upper_body",
-              "full_body",
-              "insufficient"
-            ],
-            "title": "Body Coverage",
-            "type": "string"
-          },
-          "confidence": {
-            "title": "Confidence",
-            "type": "number"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "device_id": {
-            "title": "Device Id",
-            "type": "string"
-          },
-          "human_present": {
-            "title": "Human Present",
-            "type": "boolean"
-          },
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "posture_code": {
-            "enum": [
-              "upright",
-              "forward_lean",
-              "hunched",
-              "head_down",
-              "not_seated",
-              "unknown"
-            ],
-            "title": "Posture Code",
-            "type": "string"
-          },
-          "posture_confidence": {
-            "title": "Posture Confidence",
-            "type": "number"
-          },
-          "posture_fresh": {
-            "title": "Posture Fresh",
-            "type": "boolean"
-          },
-          "posture_issues": {
-            "items": {
-              "enum": [
-                "forward_lean",
-                "hunched",
-                "head_down"
-              ],
-              "type": "string"
-            },
-            "title": "Posture Issues",
-            "type": "array"
-          },
-          "presence_confidence": {
-            "title": "Presence Confidence",
-            "type": "number"
-          },
-          "presence_source": {
-            "enum": [
-              "object_detector",
-              "pose_fallback",
-              "none",
-              "error"
-            ],
-            "title": "Presence Source",
-            "type": "string"
-          },
-          "seated_state": {
-            "enum": [
-              "seated",
-              "not_seated",
-              "unknown"
-            ],
-            "title": "Seated State",
-            "type": "string"
-          },
-          "source_image_url": {
-            "title": "Source Image Url",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "device_id",
-          "human_present",
-          "label",
-          "confidence",
-          "presence_confidence",
-          "presence_source",
-          "body_coverage",
-          "seated_state",
-          "posture_code",
-          "posture_issues",
-          "posture_confidence",
-          "posture_fresh",
-          "source_image_url",
-          "created_at"
-        ],
-        "title": "PoseResultOut",
         "type": "object"
       },
       "PoseSnapshot": {
@@ -1725,148 +1894,6 @@
         "title": "PoseSnapshot",
         "type": "object"
       },
-      "ReportCoverage": {
-        "properties": {
-          "bucket_count": {
-            "title": "Bucket Count",
-            "type": "integer"
-          },
-          "completeness_percent": {
-            "title": "Completeness Percent",
-            "type": "number"
-          },
-          "end": {
-            "title": "End",
-            "type": "string"
-          },
-          "expected_bucket_count": {
-            "title": "Expected Bucket Count",
-            "type": "integer"
-          },
-          "sample_count": {
-            "title": "Sample Count",
-            "type": "integer"
-          },
-          "start": {
-            "title": "Start",
-            "type": "string"
-          }
-        },
-        "required": [
-          "start",
-          "end",
-          "sample_count",
-          "bucket_count",
-          "expected_bucket_count",
-          "completeness_percent"
-        ],
-        "title": "ReportCoverage",
-        "type": "object"
-      },
-      "ReportMetrics": {
-        "properties": {
-          "alert_bucket_count": {
-            "default": 0,
-            "title": "Alert Bucket Count",
-            "type": "integer"
-          },
-          "eco2_avg_ppm": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Eco2 Avg Ppm"
-          },
-          "eco2_max_ppm": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Eco2 Max Ppm"
-          },
-          "hcho_avg_ug_m3": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hcho Avg Ug M3"
-          },
-          "humidity_avg_percent": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Humidity Avg Percent"
-          },
-          "smoke_event_count": {
-            "default": 0,
-            "title": "Smoke Event Count",
-            "type": "integer"
-          },
-          "temperature_avg_c": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Temperature Avg C"
-          },
-          "temperature_max_c": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Temperature Max C"
-          },
-          "temperature_min_c": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Temperature Min C"
-          },
-          "tvoc_avg_ppb": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tvoc Avg Ppb"
-          }
-        },
-        "title": "ReportMetrics",
-        "type": "object"
-      },
       "SensorPayload": {
         "properties": {
           "eco2_ppm": {
@@ -1957,35 +1984,6 @@
         "title": "SensorPayload",
         "type": "object"
       },
-      "StatusEnvelope": {
-        "properties": {
-          "device_id": {
-            "title": "Device Id",
-            "type": "string"
-          },
-          "occurred_at": {
-            "format": "date-time",
-            "title": "Occurred At",
-            "type": "string"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/StatusPayload"
-          },
-          "type": {
-            "const": "status",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "device_id",
-          "occurred_at",
-          "type",
-          "payload"
-        ],
-        "title": "StatusEnvelope",
-        "type": "object"
-      },
       "StatusPayload": {
         "properties": {
           "device_id": {
@@ -2014,6 +2012,58 @@
           "status"
         ],
         "title": "StatusPayload",
+        "type": "object"
+      },
+      "SystemErrorEnvelope": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ErrorPayload"
+          },
+          "schema_version": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trace Id"
+          },
+          "type": {
+            "const": "system.error",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "device_id",
+          "occurred_at",
+          "type",
+          "payload"
+        ],
+        "title": "SystemErrorEnvelope",
         "type": "object"
       },
       "TelemetryBucketPoint": {
@@ -2211,35 +2261,6 @@
         "title": "TelemetryBucketPoint",
         "type": "object"
       },
-      "TelemetryEnvelope": {
-        "properties": {
-          "device_id": {
-            "title": "Device Id",
-            "type": "string"
-          },
-          "occurred_at": {
-            "format": "date-time",
-            "title": "Occurred At",
-            "type": "string"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/TelemetryPoint"
-          },
-          "type": {
-            "const": "telemetry",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "device_id",
-          "occurred_at",
-          "type",
-          "payload"
-        ],
-        "title": "TelemetryEnvelope",
-        "type": "object"
-      },
       "TelemetryPoint": {
         "properties": {
           "device_id": {
@@ -2268,6 +2289,134 @@
           "fusion"
         ],
         "title": "TelemetryPoint",
+        "type": "object"
+      },
+      "TelemetryReceivedEnvelope": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TelemetryPoint"
+          },
+          "schema_version": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trace Id"
+          },
+          "type": {
+            "const": "telemetry.received",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "device_id",
+          "occurred_at",
+          "type",
+          "payload"
+        ],
+        "title": "TelemetryReceivedEnvelope",
+        "type": "object"
+      },
+      "TraceEventOut": {
+        "properties": {
+          "component": {
+            "title": "Component",
+            "type": "string"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Id"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "event_id",
+          "component",
+          "event_type",
+          "detail",
+          "occurred_at"
+        ],
+        "title": "TraceEventOut",
+        "type": "object"
+      },
+      "TraceTimelineOut": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/TraceEventOut"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trace_id"
+        ],
+        "title": "TraceTimelineOut",
         "type": "object"
       },
       "ValidationError": {
@@ -2313,61 +2462,45 @@
       "WsMessage": {
         "discriminator": {
           "mapping": {
-            "ai_analyzing": "#/components/schemas/AiAnalyzingEnvelope",
-            "ai_result": "#/components/schemas/AiResultEnvelope",
-            "autopilot": "#/components/schemas/AutopilotEnvelope",
-            "command": "#/components/schemas/CommandEnvelope",
-            "command_ack": "#/components/schemas/CommandAckEnvelope",
-            "error": "#/components/schemas/ErrorEnvelope",
-            "event": "#/components/schemas/EventEnvelope",
-            "image": "#/components/schemas/ImageEnvelope",
-            "log": "#/components/schemas/LogEnvelope",
-            "notification": "#/components/schemas/NotificationEnvelope",
-            "pose_result": "#/components/schemas/PoseEnvelope",
-            "status": "#/components/schemas/StatusEnvelope",
-            "telemetry": "#/components/schemas/TelemetryEnvelope"
+            "ai.run.status_changed": "#/components/schemas/AiRunStatusChangedEnvelope",
+            "automation.policy.changed": "#/components/schemas/AutomationPolicyChangedEnvelope",
+            "command.status_changed": "#/components/schemas/CommandStatusChangedEnvelope",
+            "device.capabilities_changed": "#/components/schemas/DeviceCapabilitiesChangedEnvelope",
+            "device.status_changed": "#/components/schemas/DeviceStatusChangedEnvelope",
+            "notification.created": "#/components/schemas/NotificationCreatedEnvelope",
+            "perception.updated": "#/components/schemas/PerceptionUpdatedEnvelope",
+            "system.error": "#/components/schemas/SystemErrorEnvelope",
+            "telemetry.received": "#/components/schemas/TelemetryReceivedEnvelope"
           },
           "propertyName": "type"
         },
         "oneOf": [
           {
-            "$ref": "#/components/schemas/TelemetryEnvelope"
+            "$ref": "#/components/schemas/TelemetryReceivedEnvelope"
           },
           {
-            "$ref": "#/components/schemas/StatusEnvelope"
+            "$ref": "#/components/schemas/DeviceStatusChangedEnvelope"
           },
           {
-            "$ref": "#/components/schemas/ImageEnvelope"
+            "$ref": "#/components/schemas/PerceptionUpdatedEnvelope"
           },
           {
-            "$ref": "#/components/schemas/PoseEnvelope"
+            "$ref": "#/components/schemas/CommandStatusChangedEnvelope"
           },
           {
-            "$ref": "#/components/schemas/CommandEnvelope"
+            "$ref": "#/components/schemas/AiRunStatusChangedEnvelope"
           },
           {
-            "$ref": "#/components/schemas/NotificationEnvelope"
+            "$ref": "#/components/schemas/NotificationCreatedEnvelope"
           },
           {
-            "$ref": "#/components/schemas/CommandAckEnvelope"
+            "$ref": "#/components/schemas/DeviceCapabilitiesChangedEnvelope"
           },
           {
-            "$ref": "#/components/schemas/EventEnvelope"
+            "$ref": "#/components/schemas/AutomationPolicyChangedEnvelope"
           },
           {
-            "$ref": "#/components/schemas/LogEnvelope"
-          },
-          {
-            "$ref": "#/components/schemas/ErrorEnvelope"
-          },
-          {
-            "$ref": "#/components/schemas/AiAnalyzingEnvelope"
-          },
-          {
-            "$ref": "#/components/schemas/AiResultEnvelope"
-          },
-          {
-            "$ref": "#/components/schemas/AutopilotEnvelope"
+            "$ref": "#/components/schemas/SystemErrorEnvelope"
           }
         ]
       }
@@ -2379,7 +2512,7 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/api/devices": {
+    "/api/v1/devices": {
       "get": {
         "operationId": "list_devices",
         "responses": {
@@ -2401,9 +2534,9 @@
         "summary": "List Devices"
       }
     },
-    "/api/devices/{device_id}/ai/analyze": {
-      "post": {
-        "operationId": "analyze_device",
+    "/api/v1/devices/{device_id}/ai/runs": {
+      "get": {
+        "operationId": "list_ai_runs",
         "parameters": [
           {
             "in": "path",
@@ -2413,6 +2546,50 @@
               "title": "Device Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -2420,7 +2597,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AiDecisionOut"
+                  "items": {
+                    "$ref": "#/components/schemas/AiRunOut"
+                  },
+                  "title": "Response List Ai Runs",
+                  "type": "array"
                 }
               }
             },
@@ -2437,51 +2618,10 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Analyze Device"
-      }
-    },
-    "/api/devices/{device_id}/ai/analyze-image": {
+        "summary": "List Ai Runs"
+      },
       "post": {
-        "operationId": "analyze_device_image",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "device_id",
-            "required": true,
-            "schema": {
-              "title": "Device Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AiDecisionOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Analyze Device Image"
-      }
-    },
-    "/api/devices/{device_id}/ai/report": {
-      "post": {
-        "operationId": "create_ai_health_report",
+        "operationId": "create_ai_run",
         "parameters": [
           {
             "in": "path",
@@ -2497,18 +2637,18 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AiReportIn"
+                "$ref": "#/components/schemas/AiRunCreate"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AiHealthReport"
+                  "$ref": "#/components/schemas/AiRunOut"
                 }
               }
             },
@@ -2525,12 +2665,108 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Create Ai Health Report"
+        "summary": "Create Ai Run"
       }
     },
-    "/api/devices/{device_id}/autopilot": {
+    "/api/v1/devices/{device_id}/ai/runs/{run_id}": {
       "get": {
-        "operationId": "get_autopilot_state",
+        "operationId": "get_ai_run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ai Run"
+      }
+    },
+    "/api/v1/devices/{device_id}/ai/runs/{run_id}/cancel": {
+      "post": {
+        "operationId": "cancel_ai_run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Ai Run"
+      }
+    },
+    "/api/v1/devices/{device_id}/automation-policy": {
+      "get": {
+        "operationId": "get_automation_policy",
         "parameters": [
           {
             "in": "path",
@@ -2547,7 +2783,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AutopilotState"
+                  "$ref": "#/components/schemas/AutomationPolicyOut"
                 }
               }
             },
@@ -2564,10 +2800,10 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Get Autopilot State"
+        "summary": "Get Automation Policy"
       },
       "put": {
-        "operationId": "update_autopilot_state",
+        "operationId": "update_automation_policy",
         "parameters": [
           {
             "in": "path",
@@ -2583,7 +2819,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AutopilotIn"
+                "$ref": "#/components/schemas/AutomationPolicyIn"
               }
             }
           },
@@ -2594,7 +2830,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AutopilotState"
+                  "$ref": "#/components/schemas/AutomationPolicyOut"
                 }
               }
             },
@@ -2611,10 +2847,49 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Update Autopilot State"
+        "summary": "Update Automation Policy"
       }
     },
-    "/api/devices/{device_id}/commands": {
+    "/api/v1/devices/{device_id}/capabilities": {
+      "get": {
+        "operationId": "get_device_capabilities",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceCapabilitiesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Device Capabilities"
+      }
+    },
+    "/api/v1/devices/{device_id}/commands": {
       "post": {
         "operationId": "send_command",
         "parameters": [
@@ -2632,18 +2907,18 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CommandIn"
+                "$ref": "#/components/schemas/CommandCreateV1"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CommandOut"
+                  "$ref": "#/components/schemas/CommandV1Out"
                 }
               }
             },
@@ -2663,9 +2938,9 @@
         "summary": "Send Command"
       }
     },
-    "/api/devices/{device_id}/events": {
+    "/api/v1/devices/{device_id}/commands/{command_id}": {
       "get": {
-        "operationId": "device_events",
+        "operationId": "get_command_v1",
         "parameters": [
           {
             "in": "path",
@@ -2677,19 +2952,51 @@
             }
           },
           {
-            "in": "query",
-            "name": "type",
-            "required": false,
+            "in": "path",
+            "name": "command_id",
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
+              "title": "Command Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandV1Out"
                 }
-              ],
-              "title": "Type"
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Command V1"
+      }
+    },
+    "/api/v1/devices/{device_id}/events": {
+      "get": {
+        "operationId": "device_events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
             }
           },
           {
@@ -2734,7 +3041,7 @@
         "summary": "Device Events"
       }
     },
-    "/api/devices/{device_id}/events/{event_id}/ack": {
+    "/api/v1/devices/{device_id}/events/{event_id}/ack": {
       "post": {
         "operationId": "ack_device_event",
         "parameters": [
@@ -2782,7 +3089,7 @@
         "summary": "Ack Device Event"
       }
     },
-    "/api/devices/{device_id}/history": {
+    "/api/v1/devices/{device_id}/history": {
       "get": {
         "operationId": "telemetry_history",
         "parameters": [
@@ -2837,7 +3144,7 @@
         "summary": "Telemetry History"
       }
     },
-    "/api/devices/{device_id}/history/bucketed": {
+    "/api/v1/devices/{device_id}/history/bucketed": {
       "get": {
         "operationId": "telemetry_history_bucketed",
         "parameters": [
@@ -2906,7 +3213,7 @@
         "summary": "Telemetry History Bucketed"
       }
     },
-    "/api/devices/{device_id}/images": {
+    "/api/v1/devices/{device_id}/images": {
       "post": {
         "operationId": "upload_image",
         "parameters": [
@@ -2955,7 +3262,7 @@
         "summary": "Upload Image"
       }
     },
-    "/api/devices/{device_id}/latest": {
+    "/api/v1/devices/{device_id}/latest": {
       "get": {
         "operationId": "latest_device_state",
         "parameters": [
@@ -2994,7 +3301,7 @@
         "summary": "Latest Device State"
       }
     },
-    "/api/devices/{device_id}/notifications": {
+    "/api/v1/devices/{device_id}/notifications": {
       "get": {
         "operationId": "device_notifications",
         "parameters": [
@@ -3096,7 +3403,7 @@
         "summary": "Send Notification"
       }
     },
-    "/api/devices/{device_id}/pose/analyze": {
+    "/api/v1/devices/{device_id}/pose/analyze": {
       "post": {
         "operationId": "analyze_latest_pose",
         "parameters": [
@@ -3135,6 +3442,45 @@
         "summary": "Analyze Latest Pose"
       }
     },
+    "/api/v1/diagnostics/traces/{trace_id}": {
+      "get": {
+        "operationId": "get_trace_timeline",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trace_id",
+            "required": true,
+            "schema": {
+              "title": "Trace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceTimelineOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Trace Timeline"
+      }
+    },
     "/health": {
       "get": {
         "operationId": "health",
@@ -3151,6 +3497,40 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "health_live",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Live"
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "health_ready",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Ready"
       }
     }
   }

@@ -4,12 +4,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
+#include "app_config_defaults.h"
 #include "cJSON.h"
+#include "command_catalog.generated.h"
 #include "control_state.h"
 #include "esp_check.h"
 #include "esp_log.h"
+#include "esp_random.h"
+#include "firmware_behavior.generated.h"
 #include "mqtt_client.h"
+#include "nvs.h"
 
 static const char *TAG = "MQTT_APP";
 
@@ -17,7 +23,98 @@ static app_config_t s_config;
 static esp_mqtt_client_handle_t s_client;
 static mqtt_app_command_handler_t s_command_handler;
 static char s_status_topic[96];
-static char s_status_offline_payload[128];
+static char s_status_offline_payload[320];
+static char s_boot_id[24];
+static uint32_t s_sequence;
+
+typedef struct {
+    char command_id[64];
+    char trace_id[64];
+    char status[16];
+    char message[64];
+} recent_ack_t;
+
+static recent_ack_t s_recent_acks[AIOT_TERMINAL_ACK_CACHE_SIZE];
+static uint8_t s_recent_ack_index;
+
+static cJSON *create_envelope(cJSON *payload, const char *trace_id, const char *message_id) {
+    if (!payload) {
+        return NULL;
+    }
+    cJSON *root = cJSON_CreateObject();
+    if (!root) {
+        cJSON_Delete(payload);
+        return NULL;
+    }
+    char generated_id[64];
+    snprintf(generated_id, sizeof(generated_id), "msg-%s-%lu", s_boot_id, (unsigned long)++s_sequence);
+    cJSON_AddStringToObject(root, "schema_version", AIOT_PROTOCOL_VERSION);
+    cJSON_AddStringToObject(root, "message_id", message_id && message_id[0] ? message_id : generated_id);
+    if (trace_id && trace_id[0]) {
+        cJSON_AddStringToObject(root, "trace_id", trace_id);
+    } else {
+        cJSON_AddNullToObject(root, "trace_id");
+    }
+    cJSON_AddStringToObject(root, "device_id", s_config.device_id);
+    cJSON_AddNullToObject(root, "occurred_at");
+    cJSON_AddStringToObject(root, "boot_id", s_boot_id);
+    cJSON_AddNumberToObject(root, "sequence", s_sequence);
+    cJSON_AddItemToObject(root, "payload", payload);
+    return root;
+}
+
+static void load_recent_acks(void) {
+    nvs_handle_t handle;
+    if (nvs_open("cmd_dedup", NVS_READONLY, &handle) != ESP_OK) {
+        return;
+    }
+    size_t size = sizeof(s_recent_acks);
+    if (nvs_get_blob(handle, "recent", s_recent_acks, &size) != ESP_OK || size != sizeof(s_recent_acks)) {
+        memset(s_recent_acks, 0, sizeof(s_recent_acks));
+    }
+    uint8_t index = 0;
+    if (nvs_get_u8(handle, "index", &index) == ESP_OK) {
+        s_recent_ack_index = index % AIOT_TERMINAL_ACK_CACHE_SIZE;
+    }
+    nvs_close(handle);
+}
+
+static void save_recent_acks(void) {
+    nvs_handle_t handle;
+    if (nvs_open("cmd_dedup", NVS_READWRITE, &handle) != ESP_OK) {
+        return;
+    }
+    nvs_set_blob(handle, "recent", s_recent_acks, sizeof(s_recent_acks));
+    nvs_set_u8(handle, "index", s_recent_ack_index);
+    nvs_commit(handle);
+    nvs_close(handle);
+}
+
+static const recent_ack_t *find_recent_ack(const char *command_id) {
+    if (!command_id || !command_id[0]) {
+        return NULL;
+    }
+    for (size_t i = 0; i < AIOT_TERMINAL_ACK_CACHE_SIZE; ++i) {
+        if (strcmp(s_recent_acks[i].command_id, command_id) == 0) {
+            return &s_recent_acks[i];
+        }
+    }
+    return NULL;
+}
+
+static void remember_terminal_ack(const mqtt_app_command_t *command, const char *status, const char *message) {
+    if (!command || !status || strcmp(status, "accepted") == 0) {
+        return;
+    }
+    recent_ack_t *entry = &s_recent_acks[s_recent_ack_index];
+    memset(entry, 0, sizeof(*entry));
+    strlcpy(entry->command_id, command->command_id, sizeof(entry->command_id));
+    strlcpy(entry->trace_id, command->trace_id, sizeof(entry->trace_id));
+    strlcpy(entry->status, status, sizeof(entry->status));
+    strlcpy(entry->message, message ? message : "", sizeof(entry->message));
+    s_recent_ack_index = (s_recent_ack_index + 1) % AIOT_TERMINAL_ACK_CACHE_SIZE;
+    save_recent_acks();
+}
 
 static esp_err_t make_topic(char *buffer, size_t buffer_size, const char *suffix) {
     if (!buffer || buffer_size == 0 || !suffix || s_config.device_id[0] == '\0') {
@@ -46,6 +143,53 @@ static void copy_json_string(char *dest, size_t dest_size, const cJSON *root, co
     }
 }
 
+static int64_t utc_days_from_civil(int year, unsigned month, unsigned day) {
+    year -= month <= 2;
+    const int era = (year >= 0 ? year : year - 399) / 400;
+    const unsigned year_of_era = (unsigned)(year - era * 400);
+    const unsigned adjusted_month = (unsigned)((int)month + (month > 2 ? -3 : 9));
+    const unsigned day_of_year = (153 * adjusted_month + 2) / 5 + day - 1;
+    const unsigned day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    return (int64_t)era * 146097 + (int64_t)day_of_era - 719468;
+}
+
+static bool valid_utc_date(int year, int month, int day) {
+    static const int days_per_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (year < 1970 || month < 1 || month > 12 || day < 1) {
+        return false;
+    }
+    int maximum = days_per_month[month - 1];
+    if (month == 2 && (year % 400 == 0 || (year % 4 == 0 && year % 100 != 0))) {
+        maximum = 29;
+    }
+    return day <= maximum;
+}
+
+static const char *validate_command_expiry(const cJSON *body) {
+    const cJSON *expires_at = cJSON_GetObjectItemCaseSensitive(body, "expires_at");
+    if (!expires_at || cJSON_IsNull(expires_at)) {
+        return NULL;
+    }
+    if (!cJSON_IsString(expires_at) || !expires_at->valuestring) {
+        return "invalid_parameter";
+    }
+
+    const time_t now = time(NULL);
+    if (now < 1704067200) { // 2024-01-01 UTC: system clock is not trustworthy yet.
+        return NULL;
+    }
+
+    int year, month, day, hour, minute, second;
+    if (sscanf(expires_at->valuestring, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &minute, &second) != 6 ||
+        !valid_utc_date(year, month, day) || hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 ||
+        second > 60) {
+        return "invalid_parameter";
+    }
+    const int64_t expiry =
+        utc_days_from_civil(year, (unsigned)month, (unsigned)day) * 86400 + hour * 3600 + minute * 60 + second;
+    return expiry <= (int64_t)now ? "expired" : NULL;
+}
+
 static void handle_command_payload(const char *payload) {
     if (!payload) {
         return;
@@ -57,33 +201,74 @@ static void handle_command_payload(const char *payload) {
         return;
     }
 
+    const cJSON *body = root;
+    const cJSON *schema_version = cJSON_GetObjectItemCaseSensitive(root, "schema_version");
+    const cJSON *nested_payload = cJSON_GetObjectItemCaseSensitive(root, "payload");
+    if (cJSON_IsString(schema_version) && strcmp(schema_version->valuestring, AIOT_PROTOCOL_VERSION) == 0 &&
+        cJSON_IsObject(nested_payload)) {
+        body = nested_payload;
+    }
+
     mqtt_app_command_t envelope = {0};
     command_clear(&envelope.command);
-    copy_json_string(envelope.command_id, sizeof(envelope.command_id), root, "command_id");
+    copy_json_string(envelope.command_id, sizeof(envelope.command_id), body, "command_id");
+    copy_json_string(envelope.trace_id, sizeof(envelope.trace_id), root, "trace_id");
+    if (envelope.command_id[0] == '\0') {
+        ESP_LOGW(TAG, "command_id is required");
+        cJSON_Delete(root);
+        return;
+    }
+
+    const recent_ack_t *recent = find_recent_ack(envelope.command_id);
+    if (recent) {
+        strlcpy(envelope.trace_id, recent->trace_id, sizeof(envelope.trace_id));
+        ESP_LOGW(TAG, "duplicate command id=%s, replaying terminal ack", envelope.command_id);
+        mqtt_app_publish_command_ack(&envelope, recent->status, recent->message);
+        cJSON_Delete(root);
+        return;
+    }
+
+    const char *expiry_error = validate_command_expiry(body);
+    if (expiry_error) {
+        ESP_LOGW(TAG, "rejecting command id=%s: %s", envelope.command_id, expiry_error);
+        mqtt_app_publish_command_ack(&envelope, "rejected", expiry_error);
+        cJSON_Delete(root);
+        return;
+    }
 
     char command_type[64] = {0};
-    copy_json_string(command_type, sizeof(command_type), root, "type");
+    copy_json_string(command_type, sizeof(command_type), body, "type");
     esp_err_t err = command_from_name(command_type, &envelope.command);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "unsupported command type=%s", command_type);
+        mqtt_app_publish_command_ack(&envelope, "rejected", "unsupported_command");
+        cJSON_Delete(root);
+        return;
     }
 
-    const cJSON *confidence = cJSON_GetObjectItemCaseSensitive(root, "confidence");
+    const cJSON *confidence = cJSON_GetObjectItemCaseSensitive(body, "confidence");
     if (cJSON_IsNumber(confidence)) {
         envelope.command.confidence = (float)confidence->valuedouble;
     }
 
     char source[24] = {0};
-    copy_json_string(source, sizeof(source), root, "source");
-    if (strcmp(source, "llm") == 0) {
-        envelope.command.source = CLOUD_COMMAND_SOURCE_LLM;
+    copy_json_string(source, sizeof(source), body, "source");
+    if (strcmp(source, "frontend") == 0) {
+        envelope.command.source = CLOUD_COMMAND_SOURCE_FRONTEND;
+    } else if (strcmp(source, "ai") == 0) {
+        envelope.command.source = CLOUD_COMMAND_SOURCE_AI;
+    } else if (strcmp(source, "external_mcp") == 0) {
+        envelope.command.source = CLOUD_COMMAND_SOURCE_EXTERNAL_MCP;
     } else if (strcmp(source, "rule") == 0) {
         envelope.command.source = CLOUD_COMMAND_SOURCE_RULE;
     } else {
-        envelope.command.source = CLOUD_COMMAND_SOURCE_FRONTEND;
+        envelope.command.source = CLOUD_COMMAND_SOURCE_UNKNOWN;
+        mqtt_app_publish_command_ack(&envelope, "rejected", "policy_denied");
+        cJSON_Delete(root);
+        return;
     }
 
-    const cJSON *parameter = cJSON_GetObjectItemCaseSensitive(root, "parameter");
+    const cJSON *parameter = cJSON_GetObjectItemCaseSensitive(body, "parameter");
     if (parameter) {
         char *parameter_json = cJSON_PrintUnformatted(parameter);
         if (parameter_json) {
@@ -114,6 +299,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_CONNECTED: {
         ESP_LOGI(TAG, "connected");
         mqtt_app_publish_status("online");
+        mqtt_app_publish_capabilities();
 
         char topic[96];
         if (make_topic(topic, sizeof(topic), "command") == ESP_OK) {
@@ -154,6 +340,8 @@ esp_err_t mqtt_app_init(const app_config_t *config) {
     }
 
     s_config = *config;
+    snprintf(s_boot_id, sizeof(s_boot_id), "%08lx", (unsigned long)esp_random());
+    load_recent_acks();
     if (!s_config.mqtt_enabled) {
         ESP_LOGW(TAG, "MQTT disabled");
         return ESP_OK;
@@ -164,7 +352,10 @@ esp_err_t mqtt_app_init(const app_config_t *config) {
     }
 
     ESP_RETURN_ON_ERROR(make_topic(s_status_topic, sizeof(s_status_topic), "status"), TAG, "status topic");
-    snprintf(s_status_offline_payload, sizeof(s_status_offline_payload), "{\"status\":\"offline\"}");
+    snprintf(s_status_offline_payload, sizeof(s_status_offline_payload),
+             "{\"schema_version\":\"%s\",\"message_id\":\"lwt-%s\",\"trace_id\":null,\"device_id\":\"%s\","
+             "\"occurred_at\":null,\"boot_id\":\"%s\",\"sequence\":0,\"payload\":{\"status\":\"offline\"}}",
+             AIOT_PROTOCOL_VERSION, s_boot_id, s_config.device_id, s_boot_id);
 
     esp_mqtt_client_config_t mqtt_config = {
         .broker.address.uri = s_config.mqtt_broker_uri,
@@ -198,10 +389,76 @@ esp_err_t mqtt_app_publish_status(const char *status) {
     }
 
     char topic[96];
-    char payload[128];
     ESP_RETURN_ON_ERROR(make_topic(topic, sizeof(topic), "status"), TAG, "status topic");
-    snprintf(payload, sizeof(payload), "{\"status\":\"%s\"}", status);
-    const int msg_id = esp_mqtt_client_publish(s_client, topic, payload, 0, 1, true);
+    cJSON *payload = cJSON_CreateObject();
+    if (!payload) {
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_AddStringToObject(payload, "status", status);
+    cJSON_AddStringToObject(payload, "protocol_version", AIOT_PROTOCOL_VERSION);
+    cJSON *root = create_envelope(payload, NULL, NULL);
+    char *json = root ? cJSON_PrintUnformatted(root) : NULL;
+    cJSON_Delete(root);
+    if (!json) {
+        return ESP_ERR_NO_MEM;
+    }
+    const int msg_id = esp_mqtt_client_publish(s_client, topic, json, 0, 1, true);
+    cJSON_free(json);
+    return msg_id < 0 ? ESP_FAIL : ESP_OK;
+}
+
+static bool capability_enabled(const char *name) {
+    if (strcmp(name, "display.message") == 0) {
+        return s_config.display_enabled;
+    }
+    if (strcmp(name, "voice.speak") == 0) {
+        return CONFIG_APP_VOICE_ENABLED;
+    }
+    return s_config.actuator_enabled;
+}
+
+esp_err_t mqtt_app_publish_capabilities(void) {
+    if (!s_client) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    char topic[96];
+    ESP_RETURN_ON_ERROR(make_topic(topic, sizeof(topic), "capabilities"), TAG, "capabilities topic");
+    cJSON *payload = cJSON_CreateObject();
+    cJSON *commands = cJSON_CreateArray();
+    if (!payload || !commands) {
+        cJSON_Delete(payload);
+        cJSON_Delete(commands);
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_AddStringToObject(payload, "protocol_version", AIOT_PROTOCOL_VERSION);
+    cJSON_AddStringToObject(payload, "firmware_version", "2.0.0");
+    cJSON_AddStringToObject(payload, "hardware_model", "ESP32-S3-DevKitC-1");
+
+#define ADD_CAPABILITY(command_enum, command_name, ai_allowed, safety_class, parameter_schema_json)                    \
+    do {                                                                                                               \
+        (void)(command_enum);                                                                                          \
+        if (capability_enabled(command_name)) {                                                                        \
+            cJSON *item = cJSON_CreateObject();                                                                        \
+            cJSON_AddStringToObject(item, "name", command_name);                                                       \
+            cJSON *schema = cJSON_Parse(parameter_schema_json);                                                        \
+            cJSON_AddItemToObject(item, "parameter_schema", schema ? schema : cJSON_CreateObject());                   \
+            cJSON_AddStringToObject(item, "safety_class", safety_class);                                               \
+            cJSON_AddBoolToObject(item, "ai_allowed", ai_allowed);                                                     \
+            cJSON_AddItemToArray(commands, item);                                                                      \
+        }                                                                                                              \
+    } while (0);
+    AIOT_COMMAND_CATALOG(ADD_CAPABILITY)
+#undef ADD_CAPABILITY
+
+    cJSON_AddItemToObject(payload, "commands", commands);
+    cJSON *root = create_envelope(payload, NULL, NULL);
+    char *json = root ? cJSON_PrintUnformatted(root) : NULL;
+    cJSON_Delete(root);
+    if (!json) {
+        return ESP_ERR_NO_MEM;
+    }
+    const int msg_id = esp_mqtt_client_publish(s_client, topic, json, 0, 1, true);
+    cJSON_free(json);
     return msg_id < 0 ? ESP_FAIL : ESP_OK;
 }
 
@@ -229,7 +486,6 @@ static char *build_telemetry_json(const sensor_sample_t *sample, const fusion_st
         return NULL;
     }
 
-    cJSON_AddStringToObject(root, "device_id", s_config.device_id);
     add_optional_number(sensors, "temperature_c", sample->climate_valid, sample->temperature_c);
     add_optional_number(sensors, "humidity_percent", sample->climate_valid, sample->humidity_percent);
     add_optional_number(sensors, "tvoc_ppb", sample->air_valid, sample->tvoc_ppb);
@@ -263,8 +519,9 @@ static char *build_telemetry_json(const sensor_sample_t *sample, const fusion_st
     cJSON_AddItemToObject(root, "sensors", sensors);
     cJSON_AddItemToObject(root, "state", state);
     cJSON_AddItemToObject(root, "fusion", fusion_json);
-    char *json = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
+    cJSON *envelope = create_envelope(root, NULL, NULL);
+    char *json = envelope ? cJSON_PrintUnformatted(envelope) : NULL;
+    cJSON_Delete(envelope);
     return json;
 }
 
@@ -274,24 +531,25 @@ esp_err_t mqtt_app_publish_event(const char *type, const char *severity, const c
     }
     char topic[96];
     ESP_RETURN_ON_ERROR(make_topic(topic, sizeof(topic), "event"), TAG, "event topic");
-    cJSON *root = cJSON_CreateObject();
-    if (!root) {
-        return ESP_ERR_NO_MEM;
-    }
-    cJSON_AddStringToObject(root, "type", type);
-    cJSON_AddStringToObject(root, "severity", severity);
-    cJSON_AddStringToObject(root, "message", message ? message : "");
-    char *payload = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
+    cJSON *payload = cJSON_CreateObject();
     if (!payload) {
         return ESP_ERR_NO_MEM;
     }
+    cJSON_AddStringToObject(payload, "type", type);
+    cJSON_AddStringToObject(payload, "severity", severity);
+    cJSON_AddStringToObject(payload, "message", message ? message : "");
+    cJSON *root = create_envelope(payload, NULL, NULL);
+    char *json = root ? cJSON_PrintUnformatted(root) : NULL;
+    cJSON_Delete(root);
+    if (!json) {
+        return ESP_ERR_NO_MEM;
+    }
     esp_err_t err = ESP_OK;
-    const int msg_id = esp_mqtt_client_publish(s_client, topic, payload, 0, 1, false);
+    const int msg_id = esp_mqtt_client_publish(s_client, topic, json, 0, 1, false);
     if (msg_id < 0) {
         err = ESP_FAIL;
     }
-    cJSON_free(payload);
+    cJSON_free(json);
     return err;
 }
 
@@ -321,22 +579,37 @@ esp_err_t mqtt_app_publish_command_ack(const mqtt_app_command_t *command, const 
     char topic[96];
     ESP_RETURN_ON_ERROR(make_topic(topic, sizeof(topic), "command_ack"), TAG, "ack topic");
 
-    cJSON *root = cJSON_CreateObject();
-    if (!root) {
-        return ESP_ERR_NO_MEM;
-    }
-    cJSON_AddStringToObject(root, "device_id", s_config.device_id);
-    cJSON_AddStringToObject(root, "command_id", command->command_id);
-    cJSON_AddStringToObject(root, "status", status);
-    cJSON_AddStringToObject(root, "message", message ? message : "");
-    char *payload = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
+    cJSON *payload = cJSON_CreateObject();
     if (!payload) {
         return ESP_ERR_NO_MEM;
     }
+    cJSON_AddStringToObject(payload, "command_id", command->command_id);
+    cJSON_AddStringToObject(payload, "status", status);
+    cJSON_AddStringToObject(payload, "message", message ? message : "");
+    if (strcmp(status, "rejected") == 0) {
+        const char *reason = message ? message : "";
+        const bool has_protocol_code = strcmp(reason, "unsupported_command") == 0 || strcmp(reason, "expired") == 0 ||
+                                       strcmp(reason, "invalid_parameter") == 0 ||
+                                       strcmp(reason, "policy_denied") == 0 || strcmp(reason, "safety_interlock") == 0;
+        cJSON_AddStringToObject(payload, "error_code", has_protocol_code ? reason : "device_rejected");
+    } else if (strcmp(status, "failed") == 0) {
+        cJSON_AddStringToObject(payload, "error_code", "device_failed");
+    } else {
+        cJSON_AddNullToObject(payload, "error_code");
+    }
+    cJSON_AddItemToObject(payload, "reported_state", cJSON_CreateObject());
+    cJSON *root = create_envelope(payload, command->trace_id, command->command_id);
+    char *json = root ? cJSON_PrintUnformatted(root) : NULL;
+    cJSON_Delete(root);
+    if (!json) {
+        return ESP_ERR_NO_MEM;
+    }
 
-    const int msg_id = esp_mqtt_client_publish(s_client, topic, payload, 0, 1, false);
-    cJSON_free(payload);
+    const int msg_id = esp_mqtt_client_publish(s_client, topic, json, 0, 1, false);
+    cJSON_free(json);
+    if (msg_id >= 0) {
+        remember_terminal_ack(command, status, message);
+    }
     return msg_id < 0 ? ESP_FAIL : ESP_OK;
 }
 

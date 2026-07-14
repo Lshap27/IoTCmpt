@@ -5,6 +5,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "firmware_behavior.generated.h"
 #include "nvs.h"
 
 static control_state_t s_state;
@@ -181,7 +182,7 @@ bool control_state_is_automatic_source_allowed(bool led) {
 }
 
 esp_err_t control_state_silence_smoke(uint32_t seconds) {
-    if (seconds < 10 || seconds > 600) {
+    if (seconds < AIOT_SMOKE_SILENCE_MIN_SECONDS || seconds > AIOT_SMOKE_SILENCE_MAX_SECONDS) {
         return ESP_ERR_INVALID_ARG;
     }
     if (s_mutex && xSemaphoreTake(s_mutex, portMAX_DELAY) == pdTRUE) {

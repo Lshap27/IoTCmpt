@@ -5,6 +5,7 @@
 #include "app_config_defaults.h"
 #include "cJSON.h"
 #include "control_state.h"
+#include "display.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "esp_log.h"
@@ -173,7 +174,7 @@ static esp_err_t apply_priority(const cloud_command_t *command) {
 
 static esp_err_t silence_smoke(const cloud_command_t *command) {
     cJSON *parameter = command_parameter(command);
-    const cJSON *value = parameter ? cJSON_GetObjectItemCaseSensitive(parameter, "seconds") : NULL;
+    const cJSON *value = parameter ? cJSON_GetObjectItemCaseSensitive(parameter, "duration_seconds") : NULL;
     const uint32_t seconds = cJSON_IsNumber(value) ? (uint32_t)value->valuedouble : 60;
     cJSON_Delete(parameter);
     return control_state_silence_smoke(seconds);
@@ -183,6 +184,14 @@ static esp_err_t speak_command(const cloud_command_t *command) {
     cJSON *parameter = command_parameter(command);
     const cJSON *value = parameter ? cJSON_GetObjectItemCaseSensitive(parameter, "gb2312_base64") : NULL;
     esp_err_t err = cJSON_IsString(value) ? voice_speak_base64(value->valuestring) : ESP_ERR_INVALID_ARG;
+    cJSON_Delete(parameter);
+    return err;
+}
+
+static esp_err_t show_display_message(const cloud_command_t *command) {
+    cJSON *parameter = command_parameter(command);
+    const cJSON *value = parameter ? cJSON_GetObjectItemCaseSensitive(parameter, "text") : NULL;
+    esp_err_t err = cJSON_IsString(value) ? display_show_message(value->valuestring, 10000) : ESP_ERR_INVALID_ARG;
     cJSON_Delete(parameter);
     return err;
 }
@@ -256,8 +265,10 @@ esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *s
             return silence_smoke(command);
         case CLOUD_COMMAND_VOICE_SPEAK:
             return speak_command(command);
-        case CLOUD_COMMAND_NONE:
-            break;
+        case CLOUD_COMMAND_DISPLAY_MESSAGE:
+            return show_display_message(command);
+        case CLOUD_COMMAND_UNSET:
+            return ESP_ERR_INVALID_STATE;
         case CLOUD_COMMAND_UNKNOWN:
         default:
             return ESP_ERR_NOT_SUPPORTED;

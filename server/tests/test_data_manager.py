@@ -77,7 +77,7 @@ def test_cleanup_only_deletes_selected_categories_in_range(db: Session):
     assert db.query(models.ImageAsset).count() == 1
 
 
-def test_ai_cleanup_removes_commands_and_results(db: Session):
+def test_ai_cleanup_removes_commands_and_runs(db: Session):
     add_device(db)
     start = datetime(2026, 7, 12)
     end = start + timedelta(hours=1)
@@ -89,9 +89,13 @@ def test_ai_cleanup_removes_commands_and_results(db: Session):
                 type="led.on",
                 created_at=start,
             ),
-            models.AiResult(
+            models.AiRun(
+                run_id="demo-run",
+                trace_id="demo-trace",
                 device_id="esp32s3-001",
-                command_id="demo-command",
+                kind="decision",
+                trigger="manual",
+                status="succeeded",
                 created_at=start,
             ),
         ]
@@ -102,7 +106,7 @@ def test_ai_cleanup_removes_commands_and_results(db: Session):
 
     assert result["deleted"]["ai"] == 2
     assert db.query(models.Command).count() == 0
-    assert db.query(models.AiResult).count() == 0
+    assert db.query(models.AiRun).count() == 0
 
 
 def test_demo_generation_covers_all_stages_and_is_repeatable(db: Session):

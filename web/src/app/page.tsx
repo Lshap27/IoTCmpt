@@ -14,7 +14,6 @@ import { SafetyPanel } from "@/components/safety-panel";
 import { StatCard } from "@/components/stat-card";
 import { METRICS, TelemetryChart } from "@/components/telemetry-chart";
 import { useDeviceLive } from "@/hooks/use-device-live";
-import type { AiDecisionPayload } from "@/lib/api";
 import { fetchDevices } from "@/lib/api";
 import { devicesKey } from "@/lib/query-keys";
 
@@ -22,29 +21,11 @@ const DEFAULT_DEVICE_ID = "esp32s3-001";
 
 export default function Dashboard() {
   const [deviceId, setDeviceId] = useState(DEFAULT_DEVICE_ID);
+  const [smokeSilenceSeconds, setSmokeSilenceSeconds] = useState(60);
   const live = useDeviceLive(deviceId);
   const { data: devices = [] } = useQuery({ queryKey: devicesKey, queryFn: fetchDevices });
 
   const telemetry = live.latest?.telemetry ?? null;
-
-  // WS 推送的最新决策优先；页面刚加载时从 /latest 的 ai_result + command 还原。
-  const decision: AiDecisionPayload | null = useMemo(() => {
-    if (live.decision) return live.decision;
-    const latest = live.latest;
-    if (!latest?.ai_result || !latest.command) return null;
-    if (latest.ai_result.command_id !== latest.command.command_id) return null;
-    return {
-      command: latest.command,
-      risk_level: latest.ai_result.risk_level as AiDecisionPayload["risk_level"],
-      confidence: latest.ai_result.confidence ?? latest.command.confidence,
-      reason: latest.ai_result.reason || latest.command.reason,
-      model: latest.ai_result.model ?? "",
-      trigger: "restored",
-      published: latest.command.status !== "pending",
-      speech: latest.ai_result.speech,
-      scene_summary: latest.ai_result.scene_summary,
-    };
-  }, [live.decision, live.latest]);
 
   const stats = useMemo(
     () =>
@@ -111,10 +92,13 @@ export default function Dashboard() {
         <TelemetryChart history={live.history} className="col-span-12 xl:col-span-8" />
         <AiPanel
           analyzing={live.analyzing}
-          decision={decision}
-          autopilot={live.latest?.autopilot}
+          run={live.decisionRun}
+          runs={live.aiRuns}
+          policy={live.automationPolicy}
           onToggleAutopilot={live.toggleAutopilot}
+          onUpdatePolicy={live.updatePolicy}
           onAnalyze={live.triggerAnalysis}
+          onCancelRun={live.cancelAiRun}
           className="col-span-12 xl:col-span-4"
         />
 
@@ -124,8 +108,7 @@ export default function Dashboard() {
           onAnalyze={live.requestPose}
           onAiAnalyze={live.triggerImageAnalysis}
           aiAnalyzing={live.imageAnalyzing}
-          visionCapability={live.latest?.autopilot?.vision_capability ?? "unknown"}
-          autopilot={live.latest?.autopilot}
+          policy={live.automationPolicy}
           onUpdateAutomation={live.updateAutomation}
           className="col-span-12 md:col-span-6 xl:col-span-4"
         />
@@ -138,6 +121,7 @@ export default function Dashboard() {
           controlPriority={telemetry?.state.control_priority}
           manualWindowOverride={telemetry?.state.manual_window_override}
           manualLedOverride={telemetry?.state.manual_led_override}
+          availableCommands={live.capabilities?.commands.map((command) => command.name)}
           className="col-span-12 md:col-span-6 xl:col-span-4"
         />
         <EventStream events={live.events} className="col-span-12 xl:col-span-4" />
@@ -148,12 +132,12 @@ export default function Dashboard() {
           onAcknowledge={live.acknowledgeEvent}
           onSilence={() =>
             live.dispatchCommand("alarm.silence", {
-              seconds: live.latest?.autopilot?.smoke_silence_seconds ?? 60,
+              duration_seconds: smokeSilenceSeconds,
             })
           }
-          silenceSeconds={live.latest?.autopilot?.smoke_silence_seconds ?? 60}
+          silenceSeconds={smokeSilenceSeconds}
           smokeSilenced={telemetry?.state.smoke_silenced}
-          onUpdateSilenceSeconds={(seconds) => live.updateAutomation({ smoke_silence_seconds: seconds })}
+          onUpdateSilenceSeconds={setSmokeSilenceSeconds}
           className="col-span-12"
         />
         <HealthReport

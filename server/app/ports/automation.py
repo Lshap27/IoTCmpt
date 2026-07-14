@@ -1,0 +1,19 @@
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+
+class AutomationRepository(Protocol):
+    def get_policy(self, device_id: str) -> dict[str, Any]: ...
+
+    def update_policy(self, device_id: str, changes: dict[str, Any]) -> dict[str, Any]: ...
+
+
+class AiRunRepository(Protocol):
+    def create(self, device_id: str, payload: dict[str, Any], trace_id: str) -> dict[str, Any]: ...
+
+    def get(self, device_id: str, run_id: str) -> dict[str, Any] | None: ...
+
+    def list(self, device_id: str, kind: str | None, status: str | None, limit: int) -> list[dict[str, Any]]: ...
+
+    def cancel(self, device_id: str, run_id: str) -> dict[str, Any] | None: ...

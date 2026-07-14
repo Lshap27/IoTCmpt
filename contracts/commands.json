@@ -1,0 +1,113 @@
+{
+  "schema_version": "2.0",
+  "defaults": {"default_ttl_seconds": 60, "ai_min_interval_seconds": 1},
+  "commands": [
+    {
+      "name": "window.open",
+      "c_enum": "CLOUD_COMMAND_WINDOW_OPEN",
+      "parameter_schema": {"type": "object", "additionalProperties": false},
+      "safety_class": "normal",
+      "allowed_sources": ["frontend", "ai", "external_mcp", "rule"],
+      "ai_allowed": true
+    },
+    {
+      "name": "window.close",
+      "c_enum": "CLOUD_COMMAND_WINDOW_CLOSE",
+      "parameter_schema": {"type": "object", "additionalProperties": false},
+      "safety_class": "normal",
+      "allowed_sources": ["frontend", "ai", "external_mcp", "rule"],
+      "ai_allowed": true
+    },
+    {
+      "name": "alarm.on",
+      "c_enum": "CLOUD_COMMAND_ALARM_ON",
+      "parameter_schema": {"type": "object", "additionalProperties": false},
+      "safety_class": "safety",
+      "allowed_sources": ["frontend", "external_mcp", "rule"],
+      "ai_allowed": false
+    },
+    {
+      "name": "alarm.off",
+      "c_enum": "CLOUD_COMMAND_ALARM_OFF",
+      "parameter_schema": {"type": "object", "additionalProperties": false},
+      "safety_class": "safety",
+      "allowed_sources": ["frontend", "external_mcp", "rule"],
+      "ai_allowed": false
+    },
+    {
+      "name": "led.on",
+      "c_enum": "CLOUD_COMMAND_LED_ON",
+      "parameter_schema": {"type": "object", "additionalProperties": false},
+      "safety_class": "normal",
+      "allowed_sources": ["frontend", "ai", "external_mcp", "rule"],
+      "ai_allowed": true
+    },
+    {
+      "name": "led.off",
+      "c_enum": "CLOUD_COMMAND_LED_OFF",
+      "parameter_schema": {"type": "object", "additionalProperties": false},
+      "safety_class": "normal",
+      "allowed_sources": ["frontend", "ai", "external_mcp", "rule"],
+      "ai_allowed": true
+    },
+    {
+      "name": "control.set_priority",
+      "c_enum": "CLOUD_COMMAND_CONTROL_SET_PRIORITY",
+      "parameter_schema": {
+        "type": "object",
+        "properties": {"priority": {"enum": ["manual_first", "auto_first"]}},
+        "required": ["priority"],
+        "additionalProperties": false
+      },
+      "safety_class": "administrative",
+      "allowed_sources": ["frontend", "external_mcp", "rule"],
+      "ai_allowed": false
+    },
+    {
+      "name": "control.resume_auto",
+      "c_enum": "CLOUD_COMMAND_CONTROL_RESUME_AUTO",
+      "parameter_schema": {"type": "object", "additionalProperties": false},
+      "safety_class": "administrative",
+      "allowed_sources": ["frontend", "external_mcp", "rule"],
+      "ai_allowed": false
+    },
+    {
+      "name": "alarm.silence",
+      "c_enum": "CLOUD_COMMAND_ALARM_SILENCE",
+      "parameter_schema": {
+        "type": "object",
+        "properties": {"duration_seconds": {"type": "integer", "minimum": 10, "maximum": 600}},
+        "additionalProperties": false
+      },
+      "safety_class": "safety",
+      "allowed_sources": ["frontend", "external_mcp", "rule"],
+      "ai_allowed": false
+    },
+    {
+      "name": "voice.speak",
+      "c_enum": "CLOUD_COMMAND_VOICE_SPEAK",
+      "parameter_schema": {
+        "type": "object",
+        "properties": {"gb2312_base64": {"type": "string", "minLength": 4, "maxLength": 320}},
+        "required": ["gb2312_base64"],
+        "additionalProperties": false
+      },
+      "safety_class": "normal",
+      "allowed_sources": ["frontend", "ai", "external_mcp", "rule"],
+      "ai_allowed": true
+    },
+    {
+      "name": "display.message",
+      "c_enum": "CLOUD_COMMAND_DISPLAY_MESSAGE",
+      "parameter_schema": {
+        "type": "object",
+        "properties": {"text": {"type": "string", "minLength": 1, "maxLength": 120}},
+        "required": ["text"],
+        "additionalProperties": false
+      },
+      "safety_class": "normal",
+      "allowed_sources": ["frontend", "ai", "external_mcp", "rule"],
+      "ai_allowed": true
+    }
+  ]
+}

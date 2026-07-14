@@ -1,27 +1,26 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+import base64
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    get_autopilot,
-    get_autopilot_or_none,
-    get_llm_service,
-    get_mqtt_gateway,
+    get_ai_run_application,
+    get_automation_application,
+    get_command_application,
+    get_device_queries,
     get_pose_service,
 )
+from app.application.automation import AiRunApplicationService, AutomationApplicationService
+from app.application.commands import CommandApplicationService
+from app.application.queries import DeviceQueryApplicationService
 from app.core.config import get_settings
 from app.core.timeutil import iso_utc
 from app.db import models
 from app.db.session import get_db
+from app.domain.commands import CommandRejected, CommandRequest
 from app.schemas import (
-    AiDecisionOut,
-    AiHealthReport,
-    AiReportIn,
-    AutopilotIn,
-    AutopilotState,
-    CommandIn,
-    CommandOut,
     DeviceSummary,
     EventOut,
     ImageAssetOut,
@@ -33,57 +32,45 @@ from app.schemas import (
     TelemetryPoint,
     WebSocketEnvelope,
 )
-from app.services.analysis import collect_device_snapshot, latest_image_asset, resolve_recent_image, run_ai_analysis
-from app.services.autopilot import AutoPilot
-from app.services.commands import create_command, mark_published, serialize_command
+from app.schemas_v1 import (
+    AiRunCreate,
+    AiRunOut,
+    AutomationPolicyIn,
+    AutomationPolicyOut,
+    CommandCreateV1,
+    CommandV1Out,
+    DeviceCapabilitiesOut,
+    TraceTimelineOut,
+)
 from app.services.events import acknowledge_event, serialize_event
 from app.services.images import save_image
-from app.services.llm import LLMService, VisionUnsupportedError
-from app.services.mqtt import MqttGateway
-from app.services.notifications import create_notification, list_notifications, serialize_notification
 from app.services.pose import PoseService
-from app.services.reports import generate_health_report
-from app.services.telemetry import fetch_history_bucketed, serialize_telemetry
+from app.services.telemetry import fetch_history_bucketed
 from app.services.websocket import manager
 
 router = APIRouter()
 
 
 @router.get("/devices", response_model=list[DeviceSummary])
-def list_devices(db: Session = Depends(get_db)):
-    devices = db.query(models.Device).order_by(models.Device.device_id.asc()).all()
-    return [
-        {
-            "device_id": device.device_id,
-            "display_name": device.display_name,
-            "status": device.status,
-            "last_seen_at": iso_utc(device.last_seen_at),
-        }
-        for device in devices
-    ]
+async def list_devices(queries: DeviceQueryApplicationService = Depends(get_device_queries)):
+    return await queries.list_devices()
 
 
 @router.get("/devices/{device_id}/latest", response_model=LatestState)
-def latest_device_state(
+async def latest_device_state(
     device_id: str,
-    db: Session = Depends(get_db),
-    autopilot: AutoPilot | None = Depends(get_autopilot_or_none),
+    queries: DeviceQueryApplicationService = Depends(get_device_queries),
 ):
-    snapshot = collect_device_snapshot(db, device_id)
-    snapshot["autopilot"] = autopilot.describe(device_id) if autopilot else None
-    return snapshot
+    return await queries.snapshot(device_id)
 
 
 @router.get("/devices/{device_id}/history", response_model=list[TelemetryPoint])
-def telemetry_history(device_id: str, limit: int = Query(default=100, ge=1, le=500), db: Session = Depends(get_db)):
-    rows = (
-        db.query(models.Telemetry)
-        .filter(models.Telemetry.device_id == device_id)
-        .order_by(models.Telemetry.sampled_at.desc())
-        .limit(limit)
-        .all()
-    )
-    return [serialize_telemetry(row) for row in rows]
+async def telemetry_history(
+    device_id: str,
+    limit: int = Query(default=100, ge=1, le=500),
+    queries: DeviceQueryApplicationService = Depends(get_device_queries),
+):
+    return await queries.history(device_id, limit=limit)
 
 
 @router.get("/devices/{device_id}/history/bucketed", response_model=list[TelemetryBucketPoint])
@@ -104,17 +91,20 @@ async def upload_image(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     pose: PoseService = Depends(get_pose_service),
-    autopilot: AutoPilot = Depends(get_autopilot),
 ):
     asset = save_image(db, get_settings(), device_id, file)
     envelope = WebSocketEnvelope(
-        type="image",
+        type="perception.updated",
         device_id=device_id,
-        payload={"id": asset.id, "url": asset.url, "created_at": iso_utc(asset.created_at)},
+        payload={
+            "kind": "image",
+            "id": asset.id,
+            "url": asset.url,
+            "created_at": iso_utc(asset.created_at),
+        },
     )
     await manager.broadcast(device_id, envelope.model_dump(mode="json"))
     await pose.enqueue(device_id, asset.id)
-    autopilot.maybe_trigger_vision(device_id, get_settings().uploads_dir / device_id / asset.filename)
     return {"id": asset.id, "device_id": asset.device_id, "url": asset.url, "created_at": iso_utc(asset.created_at)}
 
 
@@ -139,17 +129,12 @@ async def analyze_latest_pose(
 
 
 @router.get("/devices/{device_id}/events", response_model=list[EventOut])
-def device_events(
+async def device_events(
     device_id: str,
-    event_type: str | None = Query(default=None, alias="type"),
     limit: int = Query(default=200, ge=1, le=1000),
-    db: Session = Depends(get_db),
+    queries: DeviceQueryApplicationService = Depends(get_device_queries),
 ):
-    query = db.query(models.DeviceEvent).filter(models.DeviceEvent.device_id == device_id)
-    if event_type:
-        query = query.filter(models.DeviceEvent.type == event_type)
-    rows = query.order_by(models.DeviceEvent.created_at.desc()).limit(limit).all()
-    return [serialize_event(row) for row in rows]
+    return await queries.events(device_id, limit=min(limit, 500))
 
 
 @router.post("/devices/{device_id}/events/{event_id}/ack", response_model=EventOut)
@@ -160,127 +145,189 @@ def ack_device_event(device_id: str, event_id: int, db: Session = Depends(get_db
     return serialize_event(event)
 
 
-@router.post("/devices/{device_id}/commands", response_model=CommandOut)
+@router.post("/devices/{device_id}/commands", response_model=CommandV1Out, status_code=status.HTTP_202_ACCEPTED)
 async def send_command(
     device_id: str,
-    payload: CommandIn,
-    db: Session = Depends(get_db),
-    mqtt: MqttGateway | None = Depends(get_mqtt_gateway),
+    payload: CommandCreateV1,
+    request: Request,
+    commands: CommandApplicationService = Depends(get_command_application),
 ):
-    command = create_command(db, device_id, payload.type, parameter=payload.parameter, reason=payload.reason)
-    if mqtt is not None:
-        published = await mqtt.publish_json(f"devices/{device_id}/command", serialize_command(command), qos=1)
-        if published:
-            mark_published(db, command)
-    envelope = WebSocketEnvelope(type="command", device_id=device_id, payload=serialize_command(command))
-    await manager.broadcast(device_id, envelope.model_dump(mode="json"))
-    return serialize_command(command)
+    try:
+        return await commands.submit(
+            CommandRequest(
+                device_id=device_id,
+                type=payload.type,
+                parameter=payload.parameter,
+                source="frontend",
+                reason=payload.reason,
+                trace_id=request.state.trace_id,
+                idempotency_key=payload.idempotency_key,
+                expires_at=payload.expires_at.replace(tzinfo=None) if payload.expires_at else None,
+            )
+        )
+    except CommandRejected as exc:
+        raise HTTPException(status_code=422, detail={"code": exc.error_code, "message": str(exc)}) from exc
+
+
+@router.get("/devices/{device_id}/commands/{command_id}", response_model=CommandV1Out)
+async def get_command_v1(
+    device_id: str,
+    command_id: str,
+    commands: CommandApplicationService = Depends(get_command_application),
+):
+    command = await commands.get(device_id, command_id)
+    if command is None:
+        raise HTTPException(status_code=404, detail="Command not found")
+    return command
+
+
+@router.get("/devices/{device_id}/capabilities", response_model=DeviceCapabilitiesOut)
+async def get_device_capabilities(
+    device_id: str,
+    queries: DeviceQueryApplicationService = Depends(get_device_queries),
+):
+    capability = await queries.capabilities(device_id)
+    if capability is None:
+        raise HTTPException(status_code=404, detail="Device capabilities have not been advertised")
+    return capability
+
+
+@router.get("/devices/{device_id}/automation-policy", response_model=AutomationPolicyOut)
+async def get_automation_policy(
+    device_id: str,
+    automation: AutomationApplicationService = Depends(get_automation_application),
+):
+    return await automation.get_policy(device_id)
+
+
+@router.put("/devices/{device_id}/automation-policy", response_model=AutomationPolicyOut)
+async def update_automation_policy(
+    device_id: str,
+    payload: AutomationPolicyIn,
+    request: Request,
+    automation: AutomationApplicationService = Depends(get_automation_application),
+):
+    try:
+        updated = await automation.update_policy(device_id, payload.model_dump(exclude_none=True))
+        await manager.broadcast(
+            device_id,
+            WebSocketEnvelope(
+                type="automation.policy.changed",
+                device_id=device_id,
+                trace_id=request.state.trace_id,
+                payload=updated,
+            ).model_dump(mode="json"),
+        )
+        return updated
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/devices/{device_id}/ai/runs", response_model=AiRunOut, status_code=status.HTTP_202_ACCEPTED)
+async def create_ai_run(
+    device_id: str,
+    payload: AiRunCreate,
+    request: Request,
+    runs: AiRunApplicationService = Depends(get_ai_run_application),
+):
+    return await runs.create(device_id, payload.model_dump(mode="json"), request.state.trace_id)
+
+
+@router.get("/devices/{device_id}/ai/runs/{run_id}", response_model=AiRunOut)
+async def get_ai_run(
+    device_id: str,
+    run_id: str,
+    runs: AiRunApplicationService = Depends(get_ai_run_application),
+):
+    run = await runs.get(device_id, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="AI run not found")
+    return run
+
+
+@router.get("/devices/{device_id}/ai/runs", response_model=list[AiRunOut])
+async def list_ai_runs(
+    device_id: str,
+    kind: str | None = Query(default=None),
+    run_status: str | None = Query(default=None, alias="status"),
+    limit: int = Query(default=50, ge=1, le=200),
+    runs: AiRunApplicationService = Depends(get_ai_run_application),
+):
+    return await runs.list(device_id, kind=kind, status=run_status, limit=limit)
+
+
+@router.post("/devices/{device_id}/ai/runs/{run_id}/cancel", response_model=AiRunOut)
+async def cancel_ai_run(
+    device_id: str,
+    run_id: str,
+    runs: AiRunApplicationService = Depends(get_ai_run_application),
+):
+    run = await runs.cancel(device_id, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="AI run not found")
+    return run
+
+
+@router.get("/diagnostics/traces/{trace_id}", response_model=TraceTimelineOut)
+def get_trace_timeline(trace_id: str, db: Session = Depends(get_db)):
+    events = (
+        db.query(models.TraceEvent)
+        .filter(models.TraceEvent.trace_id == trace_id)
+        .order_by(
+            models.TraceEvent.occurred_at,
+            models.TraceEvent.id,
+        )
+    )
+    return {
+        "trace_id": trace_id,
+        "events": [
+            {
+                "event_id": event.event_id,
+                "trace_id": event.trace_id,
+                "device_id": event.device_id,
+                "component": event.component,
+                "event_type": event.event_type,
+                "status": event.status,
+                "detail": event.detail or {},
+                "occurred_at": iso_utc(event.occurred_at),
+            }
+            for event in events.all()
+        ],
+    }
 
 
 @router.get("/devices/{device_id}/notifications", response_model=list[NotificationOut])
-def device_notifications(
+async def device_notifications(
     device_id: str,
     limit: int = Query(default=50, ge=1, le=100),
-    db: Session = Depends(get_db),
+    queries: DeviceQueryApplicationService = Depends(get_device_queries),
 ):
-    return list_notifications(db, device_id, limit)
+    return await queries.notifications(device_id, limit=limit)
 
 
 @router.post("/devices/{device_id}/notifications", response_model=NotificationOut, status_code=201)
 async def send_notification(
     device_id: str,
     payload: NotificationIn,
-    db: Session = Depends(get_db),
-    mqtt: MqttGateway | None = Depends(get_mqtt_gateway),
+    request: Request,
+    queries: DeviceQueryApplicationService = Depends(get_device_queries),
+    commands: CommandApplicationService = Depends(get_command_application),
 ):
-    notification, voice_command = create_notification(db, device_id, payload)
-    if voice_command is not None and mqtt is not None:
-        published = await mqtt.publish_json(f"devices/{device_id}/command", serialize_command(voice_command), qos=1)
-        if published:
-            mark_published(db, voice_command)
-    response = serialize_notification(db, notification)
-    envelope = WebSocketEnvelope(type="notification", device_id=device_id, payload=response)
+    response = await queries.create_notification(device_id, payload.content)
+    if payload.voice_broadcast:
+        encoded = base64.b64encode(payload.content.encode("gb2312", errors="replace")).decode("ascii")
+        command = await commands.submit(
+            CommandRequest(
+                device_id=device_id,
+                type="voice.speak",
+                parameter={"gb2312_base64": encoded},
+                source="frontend",
+                reason=payload.content,
+                trace_id=request.state.trace_id,
+                idempotency_key=f"notification:{response['id']}",
+            )
+        )
+        response = await queries.link_notification_command(response["id"], command["command_id"])
+    envelope = WebSocketEnvelope(type="notification.created", device_id=device_id, payload=response)
     await manager.broadcast(device_id, envelope.model_dump(mode="json"))
     return response
-
-
-@router.post("/devices/{device_id}/ai/analyze", response_model=AiDecisionOut)
-async def analyze_device(
-    device_id: str,
-    db: Session = Depends(get_db),
-    llm: LLMService = Depends(get_llm_service),
-    mqtt: MqttGateway | None = Depends(get_mqtt_gateway),
-):
-    return await run_ai_analysis(db, device_id, llm, mqtt, trigger="manual", analysis_intent="general")
-
-
-@router.post("/devices/{device_id}/ai/analyze-image", response_model=AiDecisionOut)
-async def analyze_device_image(
-    device_id: str,
-    db: Session = Depends(get_db),
-    llm: LLMService = Depends(get_llm_service),
-    mqtt: MqttGateway | None = Depends(get_mqtt_gateway),
-    autopilot: AutoPilot = Depends(get_autopilot),
-):
-    settings = get_settings()
-    image_path = resolve_recent_image(
-        settings,
-        latest_image_asset(db, device_id),
-        max_age_seconds=settings.vision_image_max_age_seconds,
-    )
-    if image_path is None:
-        raise HTTPException(status_code=409, detail={"code": "image_unavailable", "message": "没有可用的最新画面"})
-    if autopilot.describe(device_id)["vision_capability"] == "unsupported":
-        raise HTTPException(
-            status_code=422,
-            detail={"code": "vision_unsupported", "message": "当前模型不支持图片分析，请更换视觉模型"},
-        )
-    try:
-        result = await run_ai_analysis(
-            db,
-            device_id,
-            llm,
-            mqtt,
-            trigger="manual:vision",
-            image_path=image_path,
-            analysis_intent="vision",
-        )
-    except VisionUnsupportedError as exc:
-        autopilot.set_vision_capability("unsupported")
-        raise HTTPException(
-            status_code=422,
-            detail={"code": "vision_unsupported", "message": str(exc)},
-        ) from exc
-    autopilot.set_vision_capability("supported")
-    return result
-
-
-@router.post("/devices/{device_id}/ai/report", response_model=AiHealthReport)
-async def create_ai_health_report(
-    device_id: str,
-    payload: AiReportIn,
-    db: Session = Depends(get_db),
-    llm: LLMService = Depends(get_llm_service),
-):
-    try:
-        return await generate_health_report(db, device_id, payload.period, llm)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@router.get("/devices/{device_id}/autopilot", response_model=AutopilotState)
-def get_autopilot_state(device_id: str, autopilot: AutoPilot = Depends(get_autopilot)):
-    return autopilot.describe(device_id)
-
-
-@router.put("/devices/{device_id}/autopilot", response_model=AutopilotState)
-async def update_autopilot_state(
-    device_id: str,
-    payload: AutopilotIn,
-    autopilot: AutoPilot = Depends(get_autopilot),
-):
-    autopilot.update(device_id, **payload.model_dump(exclude_none=True))
-    state = autopilot.describe(device_id)
-    envelope = WebSocketEnvelope(type="autopilot", device_id=device_id, payload=state)
-    await manager.broadcast(device_id, envelope.model_dump(mode="json"))
-    return state

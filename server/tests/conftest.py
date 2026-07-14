@@ -20,6 +20,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("AIOT_UPLOADS_DIR", str(uploads))
     monkeypatch.setenv("AIOT_BASE_URL", "http://testserver")
     monkeypatch.setenv("AIOT_MQTT_ENABLED", "false")
+    monkeypatch.setenv("AIOT_MCP_INTERNAL_TOKEN", "test-internal-token")
 
     from app.core import config
 

@@ -188,7 +188,11 @@ class PoseService:
                 payload = await asyncio.to_thread(self.process_now, device_id, source_image_id)
                 await manager.broadcast(
                     device_id,
-                    WebSocketEnvelope(type="pose_result", device_id=device_id, payload=payload).model_dump(mode="json"),
+                    WebSocketEnvelope(
+                        type="perception.updated",
+                        device_id=device_id,
+                        payload={"kind": "pose", **payload},
+                    ).model_dump(mode="json"),
                 )
                 if self.result_handler:
                     self.result_handler(device_id, payload)

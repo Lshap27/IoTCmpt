@@ -9,6 +9,8 @@
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "firmware_behavior.generated.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -53,6 +55,8 @@ static const char *TAG = "DISPLAY";
 /* ── 全局状态 ──────────────────────────────────────────────────────── */
 static spi_device_handle_t s_tft_spi;
 static uint16_t s_fb[TFT_H][TFT_W];
+static char s_message[121];
+static int64_t s_message_expires_us;
 
 /* ── 8x16 ASCII 字体（95 可打印字符，0x20-0x7E） ──────────────────── */
 static const uint8_t font_8x16[95][16] = {
@@ -356,6 +360,18 @@ esp_err_t display_init(void) {
     return ESP_OK;
 }
 
+esp_err_t display_show_message(const char *message, uint32_t duration_ms) {
+    if (!CONFIG_APP_DISPLAY_ENABLED) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (!message || message[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+    strlcpy(s_message, message, sizeof(s_message));
+    s_message_expires_us = esp_timer_get_time() + (int64_t)duration_ms * 1000;
+    return ESP_OK;
+}
+
 /* ── 渲染 ──────────────────────────────────────────────────────────── */
 
 esp_err_t display_render(const sensor_sample_t *sample, const fusion_state_t *state, const app_status_t *status) {
@@ -392,11 +408,14 @@ esp_err_t display_render(const sensor_sample_t *sample, const fusion_state_t *st
 
     /* ── 温湿度行 (y=18) ── */
     if (sample->climate_valid) {
-        uint16_t tc = (sample->temperature_c > 32.0f)   ? COLOR_RED
-                      : (sample->temperature_c > 28.0f) ? COLOR_YELLOW
+        uint16_t tc = (sample->temperature_c > AIOT_FUSION_TEMPERATURE_ALERT_C)   ? COLOR_RED
+                      : (sample->temperature_c > AIOT_FUSION_TEMPERATURE_WATCH_C) ? COLOR_YELLOW
                                                         : COLOR_GREEN;
         uint16_t hc =
-            (sample->humidity_percent > 75.0f || sample->humidity_percent < 30.0f) ? COLOR_YELLOW : COLOR_GREEN;
+            (sample->humidity_percent > AIOT_FUSION_HUMIDITY_HIGH_PERCENT ||
+             sample->humidity_percent < AIOT_FUSION_HUMIDITY_LOW_PERCENT)
+                ? COLOR_YELLOW
+                : COLOR_GREEN;
         int tx = 4;
         fb_draw_string(tx, 18, "T:", COLOR_GRAY, COLOR_DARK_BG);
         tx += 16;
@@ -413,8 +432,12 @@ esp_err_t display_render(const sensor_sample_t *sample, const fusion_state_t *st
 
     /* ── TVOC / eCO2 行 (y=34) ── */
     if (sample->air_valid) {
-        uint16_t vc = (sample->tvoc_ppb > 600) ? COLOR_RED : (sample->tvoc_ppb > 300) ? COLOR_YELLOW : COLOR_GREEN;
-        uint16_t cc = (sample->eco2_ppm > 1500) ? COLOR_RED : (sample->eco2_ppm > 1000) ? COLOR_YELLOW : COLOR_GREEN;
+        uint16_t vc = (sample->tvoc_ppb > AIOT_FUSION_TVOC_ALERT_PPB)
+                          ? COLOR_RED
+                          : (sample->tvoc_ppb > AIOT_FUSION_TVOC_WATCH_PPB) ? COLOR_YELLOW : COLOR_GREEN;
+        uint16_t cc = (sample->eco2_ppm > AIOT_FUSION_ECO2_ALERT_PPM)
+                          ? COLOR_RED
+                          : (sample->eco2_ppm > AIOT_FUSION_ECO2_WATCH_PPM) ? COLOR_YELLOW : COLOR_GREEN;
         int tx = 4;
         fb_draw_string(tx, 34, "V:", COLOR_GRAY, COLOR_DARK_BG);
         tx += 16;
@@ -435,7 +458,9 @@ esp_err_t display_render(const sensor_sample_t *sample, const fusion_state_t *st
         snprintf(buf, sizeof(buf), "---");
         if (sample->air_valid) {
             snprintf(buf, sizeof(buf), "%u", sample->hcho_ug_m3);
-            fc = (sample->hcho_ug_m3 > 100) ? COLOR_RED : (sample->hcho_ug_m3 > 60) ? COLOR_YELLOW : COLOR_GREEN;
+            fc = (sample->hcho_ug_m3 > AIOT_FUSION_HCHO_ALERT_UG_M3)
+                     ? COLOR_RED
+                     : (sample->hcho_ug_m3 > AIOT_FUSION_HCHO_WATCH_UG_M3) ? COLOR_YELLOW : COLOR_GREEN;
         }
         int tx = 4;
         fb_draw_string(tx, 50, "F:", COLOR_GRAY, COLOR_DARK_BG);
@@ -493,6 +518,22 @@ esp_err_t display_render(const sensor_sample_t *sample, const fusion_state_t *st
     /* ── MQTT 状态 (y=123) ── */
     fb_draw_string_center(123, status->cloud == APP_STATUS_LINK_READY ? "MQTT: ONLINE" : "MQTT: --",
                           status->cloud == APP_STATUS_LINK_READY ? COLOR_BLUE : COLOR_GRAY, COLOR_DARK_BG);
+
+    if (s_message[0] != '\0' && esp_timer_get_time() < s_message_expires_us) {
+        char first[16] = {0};
+        char second[16] = {0};
+        strlcpy(first, s_message, sizeof(first));
+        if (strlen(s_message) > 15) {
+            strlcpy(second, s_message + 15, sizeof(second));
+        }
+        fb_rect(0, 84, TFT_W, 38, COLOR_TITLE_BG);
+        fb_draw_string_center(86, first, COLOR_WHITE, COLOR_TITLE_BG);
+        if (second[0] != '\0') {
+            fb_draw_string_center(103, second, COLOR_CYAN, COLOR_TITLE_BG);
+        }
+    } else if (s_message[0] != '\0') {
+        s_message[0] = '\0';
+    }
 
     tft_flush();
     return ESP_OK;

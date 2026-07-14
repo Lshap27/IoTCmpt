@@ -3,9 +3,9 @@ name: firmware
 on:
   push:
     branches: [main]
-    paths: ["firmware/**", ".github/workflows/firmware.yml"]
+    paths: ["firmware/**", "contracts/**", "tools/generate-contracts.py", ".github/workflows/firmware.yml"]
   pull_request:
-    paths: ["firmware/**", ".github/workflows/firmware.yml"]
+    paths: ["firmware/**", "contracts/**", "tools/generate-contracts.py", ".github/workflows/firmware.yml"]
 
 jobs:
   build:

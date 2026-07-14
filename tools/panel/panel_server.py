@@ -9,10 +9,13 @@
 from __future__ import annotations
 
 import argparse
+from datetime import UTC, datetime
 import json
 import re
+import secrets
 import socket
 import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,14 +24,19 @@ from urllib.error import URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from runtime_config import apply_config  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[2]
 TOOLS = REPO / "tools"
 STATIC = Path(__file__).resolve().parent / "static"
 FIRMWARE = REPO / "firmware" / "esp32s3"
 SDKCONFIG = FIRMWARE / "sdkconfig"
 SDKCONFIG_DEFAULTS = FIRMWARE / "sdkconfig.defaults"
+SIMULATOR_STATE_ROOT = REPO / ".runtime" / "firmware-simulator"
 
 CREATE_NEW_CONSOLE = 0x00000010
+PANEL_TOKEN = secrets.token_urlsafe(32)
 
 
 class ApiError(Exception):
@@ -65,7 +73,7 @@ class Job:
 
     def start(self, cmd, cwd, on_success=None):
         if self.proc and self.proc.poll() is None:
-            raise ApiError(409, "任务 {} 正在运行中".format(self.name))
+            raise ApiError(409, f"任务 {self.name} 正在运行中")
         with self.lock:
             self.lines = []
             self.trimmed = 0
@@ -87,8 +95,8 @@ class Job:
                 self.status = "failed"
             raise ApiError(
                 500,
-                "未找到命令 {}。请先安装它（例如 docker / uv / pnpm），"
-                "或改用 Docker 演示栈。".format(cmd[0]),
+                f"未找到命令 {cmd[0]}。请先安装它（例如 docker / uv / pnpm），"
+                "或改用 Docker 演示栈。",
             )
         threading.Thread(target=self._pump, args=(on_success,), daemon=True).start()
 
@@ -103,17 +111,17 @@ class Job:
         with self.lock:
             if self.status == "running":
                 self.status = "done" if code == 0 else "failed"
-            self.lines.append("[进程退出，代码 {}]".format(code))
+            self.lines.append(f"[进程退出，代码 {code}]")
         if code == 0 and on_success:
             try:
                 on_success()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 with self.lock:
-                    self.lines.append("[后续操作失败] {}".format(exc))
+                    self.lines.append(f"[后续操作失败] {exc}")
 
     def stop(self):
         if not self.proc or self.proc.poll() is not None:
-            raise ApiError(409, "任务 {} 未在运行".format(self.name))
+            raise ApiError(409, f"任务 {self.name} 未在运行")
         subprocess.run(
             ["taskkill", "/T", "/F", "/PID", str(self.proc.pid)],
             capture_output=True,
@@ -172,15 +180,15 @@ def start_environment_job(action, body):
     get_job("environment").start(environment_args(action, body), REPO)
 
 
-SIMULATOR_SCENARIOS = {"normal", "air-alert", "smoke"}
+SIMULATOR_SCENARIOS = {"normal", "air-watch", "air-alert", "smoke"}
 DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
 def write_compose_env_value(key, value):
     path = REPO / ".env"
     lines = path.read_text(encoding="utf-8-sig").splitlines() if path.exists() else []
-    replacement = "{}={}".format(key, value)
-    pattern = re.compile(r"^{}=".format(re.escape(key)))
+    replacement = f"{key}={value}"
+    pattern = re.compile(rf"^{re.escape(key)}=")
     for index, line in enumerate(lines):
         if pattern.match(line):
             lines[index] = replacement
@@ -194,42 +202,78 @@ def simulator_config(body=None):
     body = body or {}
     compose = parse_env(REPO / ".env")
     scenario = str(
-        body.get("scenario") or compose.get("AIOT_DEMO_SCENARIO") or "air-alert"
+        body.get("scenario") or compose.get("AIOT_DEMO_SCENARIO") or "normal"
     )
     device_id = str(
         body.get("deviceId") or compose.get("AIOT_DEMO_DEVICE_ID") or "esp32s3-001"
     )
     if scenario not in SIMULATOR_SCENARIOS:
-        raise ApiError(400, "模拟场景必须是 normal、air-alert 或 smoke")
+        raise ApiError(400, "模拟场景必须是 normal、air-watch、air-alert 或 smoke")
     if not DEVICE_ID_PATTERN.fullmatch(device_id):
         raise ApiError(
             400, "设备 ID 必须为 1-64 位，只能包含字母、数字、点、下划线和连字符"
         )
-    return compose, scenario, device_id
+    try:
+        interval = float(
+            body.get("interval")
+            or compose.get("AIOT_SIMULATOR_TELEMETRY_INTERVAL_SECONDS")
+            or 2
+        )
+        image_interval = float(
+            body.get("imageInterval")
+            or compose.get("AIOT_SIMULATOR_IMAGE_INTERVAL_SECONDS")
+            or 30
+        )
+    except (TypeError, ValueError) as exc:
+        raise ApiError(400, "模拟器周期必须是数字") from exc
+    if not 1 <= interval <= 60:
+        raise ApiError(400, "遥测周期必须在 1～60 秒之间")
+    if not 10 <= image_interval <= 3600:
+        raise ApiError(400, "图片周期必须在 10～3600 秒之间")
+    image_value = body.get("imageEnabled")
+    if image_value is None:
+        image_enabled = (
+            compose.get("AIOT_SIMULATOR_IMAGE_ENABLED", "true").lower() == "true"
+        )
+    elif isinstance(image_value, bool):
+        image_enabled = image_value
+    else:
+        image_enabled = str(image_value).lower() == "true"
+    return {
+        "compose": compose,
+        "scenario": scenario,
+        "device_id": device_id,
+        "interval": interval,
+        "image_enabled": image_enabled,
+        "image_interval": image_interval,
+    }
 
 
 def start_simulator(body=None, automatic=False):
-    compose, scenario, device_id = simulator_config(body)
+    config = simulator_config(body)
+    compose = config["compose"]
+    scenario = config["scenario"]
+    device_id = config["device_id"]
     if automatic and compose.get("AIOT_DEMO_DEVICE_MODE", "Simulator") != "Simulator":
         return
     job = get_job("simulator")
     if job.running():
         if automatic:
             return
-        job.stop()
+        stop_simulator()
         for _ in range(20):
             if not job.running():
                 break
             time.sleep(0.1)
         if job.running():
-            raise ApiError(409, "旧虚拟设备尚未停止，请稍后重试")
+            raise ApiError(409, "旧固件模拟器尚未停止，请稍后重试")
     if automatic:
         for _ in range(60):
             if probe(1883) and backend_ready():
                 break
             time.sleep(1)
         else:
-            raise RuntimeError("等待 MQTT 和后端就绪超时，虚拟设备未启动")
+            raise RuntimeError("等待 MQTT 和后端就绪超时，固件模拟器未启动")
     elif not (probe(1883) and probe(8000)):
         raise ApiError(409, "请先启动 Docker 演示栈或后端与 MQTT 服务")
 
@@ -237,17 +281,70 @@ def start_simulator(body=None, automatic=False):
     if not python.exists():
         raise ApiError(409, "缺少 server/.venv；请先在环境中心点击“一键补全演示环境”")
     write_compose_env_value("AIOT_DEMO_SCENARIO", scenario)
-    job.start(
-        [
-            str(python),
-            str(TOOLS / "simulate-device.py"),
-            "--scenario",
-            scenario,
-            "--device-id",
-            device_id,
-        ],
-        REPO,
+    write_compose_env_value(
+        "AIOT_SIMULATOR_TELEMETRY_INTERVAL_SECONDS", str(config["interval"])
     )
+    write_compose_env_value(
+        "AIOT_SIMULATOR_IMAGE_ENABLED", str(config["image_enabled"]).lower()
+    )
+    write_compose_env_value(
+        "AIOT_SIMULATOR_IMAGE_INTERVAL_SECONDS", str(config["image_interval"])
+    )
+    command = [
+        str(python),
+        str(TOOLS / "simulate-device.py"),
+        "--scenario",
+        scenario,
+        "--device-id",
+        device_id,
+        "--interval",
+        str(config["interval"]),
+        "--image-interval",
+        str(config["image_interval"]),
+        "--state-dir",
+        str(SIMULATOR_STATE_ROOT),
+    ]
+    if not config["image_enabled"]:
+        command.append("--no-image")
+    job.start(command, REPO)
+
+
+def stop_simulator():
+    job = get_job("simulator")
+    if not job.running():
+        raise ApiError(409, "固件模拟器未在运行")
+    config = simulator_config()
+    device_dir = SIMULATOR_STATE_ROOT / config["device_id"]
+    device_dir.mkdir(parents=True, exist_ok=True)
+    (device_dir / "stop.request").write_text("stop\n", encoding="utf-8")
+    for _ in range(40):
+        if not job.running():
+            return
+        time.sleep(0.1)
+    if job.running():
+        job.stop()
+
+
+def restart_simulator(body=None):
+    job = get_job("simulator")
+    if job.running():
+        stop_simulator()
+    start_simulator(body)
+
+
+def clear_simulator_nvs(body=None):
+    config = simulator_config(body)
+    job = get_job("simulator")
+    was_running = job.running()
+    if was_running:
+        stop_simulator()
+    nvs_path = SIMULATOR_STATE_ROOT / config["device_id"] / "nvs.json"
+    try:
+        nvs_path.unlink()
+    except FileNotFoundError:
+        pass
+    if was_running:
+        start_simulator(body)
 
 
 def backend_ready():
@@ -269,7 +366,7 @@ def start_docker_stack(_body):
 def stop_docker_stack(_body):
     simulator = get_job("simulator")
     if simulator.running():
-        simulator.stop()
+        stop_simulator()
     get_job("docker-down").start(["docker", "compose", "down"], REPO)
 
 
@@ -280,12 +377,19 @@ ACTIONS = {
         ["docker", "compose", "logs", "-f", "--tail", "100"], REPO
     ),
     "backend-start": lambda b: get_job("backend").start(
-        ["uv", "run", "python", "run_dev.py"], REPO / "server"
+        [str(REPO / "server" / ".venv" / "Scripts" / "python.exe"), "run_dev.py"],
+        REPO / "server",
+    ),
+    "worker-start": lambda b: get_job("worker").start(
+        [str(REPO / "server" / ".venv" / "Scripts" / "python.exe"), "run_worker.py"],
+        REPO / "server",
     ),
     "frontend-start": lambda b: get_job("frontend").start(
         ["cmd", "/c", "pnpm", "dev"], REPO / "web"
     ),
     "simulator-start": lambda b: start_simulator(b),
+    "simulator-reboot": lambda b: restart_simulator(b),
+    "simulator-clear-nvs": lambda b: clear_simulator_nvs(b),
     "idf-build": lambda b: get_job("idf").start(
         ps_file_args("esp-idf-task.ps1", "-Action", "Build"), FIRMWARE
     ),
@@ -311,7 +415,15 @@ CONSOLE_ACTIONS = {
     ),
 }
 
-STOPPABLE = {"docker-logs", "backend", "frontend", "simulator", "idf", "environment"}
+STOPPABLE = {
+    "docker-logs",
+    "backend",
+    "worker",
+    "frontend",
+    "simulator",
+    "idf",
+    "environment",
+}
 
 
 # ---------------------------------------------------------------- env config
@@ -322,7 +434,13 @@ ENV_FILES = {
     "web": REPO / "web" / ".env.local",
 }
 
-MASKED_KEYS = {"AIOT_LLM_API_KEY"}
+MASKED_KEYS = {
+    "AIOT_LLM_API_KEY",
+    "AIOT_MCP_INTERNAL_TOKEN",
+    "AIOT_MCP_READ_TOKEN",
+    "AIOT_MCP_CONTROL_TOKEN",
+    "AIOT_MQTT_PASSWORD",
+}
 
 
 def parse_env(path):
@@ -351,7 +469,7 @@ def get_env_config():
 def validate_http_url(value, label):
     parsed = urlparse(str(value or "").strip())
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise ApiError(400, "{}必须是完整的 http(s) 地址".format(label))
+        raise ApiError(400, f"{label}必须是完整的 http(s) 地址")
 
 
 def normalize_trigger_levels(value):
@@ -368,22 +486,6 @@ def normalize_trigger_levels(value):
             400, "自动处置触发级别只能选择 good、watch、alert，且至少选择一项"
         )
     return levels
-
-
-ENV_PARAM_FLAGS = [
-    ("deviceId", "-DeviceId"),
-    ("lanAddress", "-LanAddress"),
-    ("apiBaseUrl", "-ApiBaseUrl"),
-    ("llmEndpoint", "-LlmEndpoint"),
-    ("llmModel", "-LlmModel"),
-    ("llmApiKey", "-LlmApiKey"),
-    ("autopilotMinConfidence", "-AutopilotMinConfidence"),
-    ("autopilotTriggerLevels", "-AutopilotTriggerLevels"),
-]
-
-ENV_BOOL_FLAGS = [
-    ("autopilotEnabled", "-AutopilotEnabled"),
-]
 
 
 def save_env_config(body):
@@ -414,72 +516,51 @@ def save_env_config(body):
         # 兼容旧版面板和现有 VS Code 任务使用的预设名称。
         preset = body.get("preset", "MockDemo")
     if preset not in ("MockDemo", "DeviceDemo", "LlmDemo"):
-        raise ApiError(400, "未知预设 {}".format(preset))
+        raise ApiError(400, f"未知预设 {preset}")
     device_id = str(body.get("deviceId") or "esp32s3-001").strip()
     if not DEVICE_ID_PATTERN.fullmatch(device_id):
         raise ApiError(
             400, "设备 ID 必须为 1-64 位，只能包含字母、数字、点、下划线和连字符"
         )
     body["deviceId"] = device_id
-    try:
-        confidence = float(body.get("autopilotMinConfidence", 0.6))
-    except (TypeError, ValueError):
-        raise ApiError(400, "自动处置最低置信度必须是 0 到 1 之间的数字")
-    if not 0 <= confidence <= 1:
-        raise ApiError(400, "自动处置最低置信度必须在 0 到 1 之间")
-    body["autopilotMinConfidence"] = str(confidence)
-    body["autopilotTriggerLevels"] = ",".join(
-        normalize_trigger_levels(body.get("autopilotTriggerLevels", "alert"))
+    simulator = simulator_config(body)
+    lan = str(body.get("lanAddress") or "127.0.0.1").strip()
+    api_base = str(body.get("apiBaseUrl") or "").strip() or (
+        f"http://{lan}:8000" if device_mode == "Real" else "http://127.0.0.1:8000"
     )
-    args = ["-Preset", preset, "-NonInteractive"]
-    if device_mode is not None:
-        args += ["-DemoDeviceMode", device_mode, "-DemoAiMode", ai_mode]
-    for key, flag in ENV_PARAM_FLAGS:
-        value = body.get(key)
-        if value:
-            args += [flag, str(value)]
-    for key, flag in ENV_BOOL_FLAGS:
-        value = body.get(key)
-        if value is not None:
-            args += [flag, "true" if value else "false"]
-    result = subprocess.run(
-        ps_file_args("configure-local.ps1", *args),
-        cwd=str(REPO),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=60,
-    )
-    if result.returncode != 0:
-        raise ApiError(500, "配置脚本失败：{}\n{}".format(result.stdout, result.stderr))
-
-    stack_reconfigured = False
-    if probe(8000) or probe(1883) or probe(3000):
-        simulator = get_job("simulator")
-        if simulator.running():
-            simulator.stop()
-        compose = subprocess.run(
-            ["docker", "compose", "up", "-d"],
-            cwd=str(REPO),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=180,
-        )
-        if compose.returncode != 0:
-            raise ApiError(
-                500, "配置已保存，但 Docker 栈重新应用失败：{}".format(compose.stderr)
-            )
-        stack_reconfigured = True
-        if device_mode == "Simulator":
-            start_simulator({"deviceId": device_id}, automatic=True)
-    return {
-        "ok": True,
-        "output": result.stdout,
-        "stackReconfigured": stack_reconfigured,
+    changes = {
+        "AIOT_DEMO_DEVICE_ID": device_id,
+        "AIOT_DEMO_DEVICE_MODE": device_mode or "Simulator",
+        "AIOT_DEMO_AI_MODE": ai_mode or ("Mock" if preset == "MockDemo" else "Online"),
+        "AIOT_DEMO_SCENARIO": simulator["scenario"],
+        "AIOT_SIMULATOR_TELEMETRY_INTERVAL_SECONDS": str(simulator["interval"]),
+        "AIOT_SIMULATOR_IMAGE_ENABLED": str(simulator["image_enabled"]).lower(),
+        "AIOT_SIMULATOR_IMAGE_INTERVAL_SECONDS": str(simulator["image_interval"]),
+        "AIOT_BASE_URL": api_base,
+        "NEXT_PUBLIC_API_BASE_URL": api_base,
+        "AIOT_LLM_ENDPOINT": body.get("llmEndpoint") or "mock",
+        "AIOT_LLM_MODEL": body.get("llmModel") or "demo-model",
+        "AIOT_LLM_TIMEOUT_SECONDS": str(body.get("llmTimeoutSeconds") or 60),
+        "AIOT_COMMAND_ACK_TIMEOUT_SECONDS": str(body.get("ackTimeoutSeconds") or 60),
+        "AIOT_AI_TOOL_MAX_ROUNDS": str(body.get("toolMaxRounds") or 4),
+        "AIOT_AI_TOOL_MAX_CALLS": str(body.get("toolMaxCalls") or 8),
+        "AIOT_MCP_ENABLED": "true" if body.get("mcpEnabled") else "false",
     }
+    if body.get("llmApiKey"):
+        changes["AIOT_LLM_API_KEY"] = str(body["llmApiKey"])
+    if body.get("mcpReadToken"):
+        changes["AIOT_MCP_READ_TOKEN"] = str(body["mcpReadToken"])
+    if body.get("mcpControlToken"):
+        changes["AIOT_MCP_CONTROL_TOKEN"] = str(body["mcpControlToken"])
+    if body.get("mcpEnabled"):
+        existing = get_env_config().get("server", {})
+        if not body.get("mcpReadToken") and not existing.get("AIOT_MCP_READ_TOKEN"):
+            changes["AIOT_MCP_READ_TOKEN"] = "generated"
+        if not body.get("mcpControlToken") and not existing.get(
+            "AIOT_MCP_CONTROL_TOKEN"
+        ):
+            changes["AIOT_MCP_CONTROL_TOKEN"] = "generated"
+    return apply_config(changes, dry_run=bool(body.get("preview")))
 
 
 # ---------------------------------------------------------------- firmware config
@@ -536,7 +617,7 @@ def read_sdkconfig_values():
         return values
     text = source.read_text(encoding="utf-8", errors="replace")
     for key, kind in FIRMWARE_KEYS.items():
-        m = re.search(r"^{}=(.*)$".format(re.escape(key)), text, re.M)
+        m = re.search(rf"^{re.escape(key)}=(.*)$", text, re.M)
         if m:
             raw = m.group(1).strip()
             if kind == "bool":
@@ -545,7 +626,7 @@ def read_sdkconfig_values():
                 values[key] = raw.strip('"')
             else:
                 values[key] = raw
-        elif re.search(r"^# {} is not set$".format(re.escape(key)), text, re.M):
+        elif re.search(rf"^# {re.escape(key)} is not set$", text, re.M):
             values[key] = False
     if SDKCONFIG.exists():
         return {**PANEL_FIRMWARE_DEFAULTS, **values}
@@ -554,18 +635,18 @@ def read_sdkconfig_values():
 
 def format_sdk_line(key, kind, value):
     if kind == "bool":
-        return "{}=y".format(key) if value else "# {} is not set".format(key)
+        return f"{key}=y" if value else f"# {key} is not set"
     if kind == "int":
-        return "{}={}".format(key, int(value))
+        return f"{key}={int(value)}"
     escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
-    return '{}="{}"'.format(key, escaped)
+    return f'{key}="{escaped}"'
 
 
 def save_firmware_config(body):
     values = body.get("values") or {}
     unknown = set(values) - set(FIRMWARE_KEYS)
     if unknown:
-        raise ApiError(400, "不支持的配置项：{}".format(sorted(unknown)))
+        raise ApiError(400, f"不支持的配置项：{sorted(unknown)}")
 
     device_id = str(values.get("CONFIG_APP_DEVICE_ID") or "").strip()
     if device_id and not DEVICE_ID_PATTERN.fullmatch(device_id):
@@ -608,9 +689,7 @@ def save_firmware_config(body):
         text = ""
 
     for legacy_key in LEGACY_LED_KEYS:
-        pattern = r"^(?:{0}=.*|# {0} is not set)\r?\n?".format(
-            re.escape(legacy_key)
-        )
+        pattern = r"^(?:{0}=.*|# {0} is not set)\r?\n?".format(re.escape(legacy_key))
         text = re.sub(pattern, "", text, flags=re.M)
 
     for key, value in values.items():
@@ -618,7 +697,7 @@ def save_firmware_config(body):
         try:
             line = format_sdk_line(key, kind, value)
         except (TypeError, ValueError):
-            raise ApiError(400, "配置项 {} 的值无效：{!r}".format(key, value))
+            raise ApiError(400, f"配置项 {key} 的值无效：{value!r}")
         pattern = r"^(?:{0}=.*|# {0} is not set)$".format(re.escape(key))
         if re.search(pattern, text, re.M):
             text = re.sub(pattern, lambda _m: line, text, flags=re.M)
@@ -702,6 +781,33 @@ def detect_lan_ip():
 
 
 def get_status():
+    services = {
+        "migration": False,
+        "worker": False,
+        "mcp": False,
+        "capabilities": False,
+    }
+    if probe(8000):
+        try:
+            with urlopen("http://127.0.0.1:8000/health/ready", timeout=1) as response:
+                ready = json.loads(response.read().decode("utf-8"))
+                dependencies = ready.get("dependencies") or {}
+                services["migration"] = dependencies.get("migration") == "current"
+                services["worker"] = dependencies.get("worker") == "healthy"
+                services["mcp"] = dependencies.get("mcp") == "enabled"
+            device_id = parse_env(REPO / ".env").get(
+                "AIOT_DEMO_DEVICE_ID", "esp32s3-001"
+            )
+            with urlopen(
+                f"http://127.0.0.1:8000/api/v1/devices/{device_id}/capabilities",
+                timeout=1,
+            ) as response:
+                services["capabilities"] = response.status == 200
+        except (OSError, ValueError):
+            pass
+    compose = parse_env(REPO / ".env")
+    device_id = compose.get("AIOT_DEMO_DEVICE_ID", "esp32s3-001")
+    simulator_status = read_simulator_status(device_id)
     return {
         "lanIp": detect_lan_ip(),
         "ports": {
@@ -714,7 +820,30 @@ def get_status():
             name: {"status": job.status, "running": job.running()}
             for name, job in list(JOBS.items())
         },
+        "services": services,
+        "simulator": simulator_status,
     }
+
+
+def read_simulator_status(device_id):
+    path = SIMULATOR_STATE_ROOT / device_id / "status.json"
+    try:
+        status = json.loads(path.read_text(encoding="utf-8"))
+        updated_at = datetime.fromisoformat(
+            str(status["updated_at"]).replace("Z", "+00:00")
+        )
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=UTC)
+        age_seconds = max(0, (datetime.now(UTC) - updated_at).total_seconds())
+        if age_seconds > 15:
+            return {
+                "ready": False,
+                "reason": "状态已过期",
+                "updated_at": status.get("updated_at"),
+            }
+        return {"ready": True, **status}
+    except (OSError, ValueError, TypeError, KeyError):
+        return {"ready": False, "reason": "状态文件未就绪"}
 
 
 def get_comports():
@@ -745,7 +874,7 @@ def get_environment():
         timeout=30,
     )
     if result.returncode != 0:
-        raise ApiError(500, "环境检查失败：{}".format(result.stderr or result.stdout))
+        raise ApiError(500, f"环境检查失败：{result.stderr or result.stdout}")
     try:
         return json.loads(result.stdout.lstrip("\ufeff"))
     except ValueError:
@@ -775,9 +904,7 @@ def run_data_tool(operation, body):
             errors="replace",
             timeout=15,
         )
-        container_running = container.returncode == 0 and bool(
-            container.stdout.strip()
-        )
+        container_running = container.returncode == 0 and bool(container.stdout.strip())
     except (FileNotFoundError, subprocess.TimeoutExpired):
         container_running = False
     if container_running:
@@ -813,7 +940,9 @@ def run_data_tool(operation, body):
             timeout=120,
         )
     except FileNotFoundError as exc:
-        raise ApiError(503, "数据工具需要运行中的 Docker server 或本机 uv 环境") from exc
+        raise ApiError(
+            503, "数据工具需要运行中的 Docker server 或本机 uv 环境"
+        ) from exc
     except subprocess.TimeoutExpired as exc:
         raise ApiError(504, "数据操作超时，请缩短时间范围后重试") from exc
 
@@ -823,7 +952,7 @@ def run_data_tool(operation, body):
     except ValueError as exc:
         raise ApiError(
             500,
-            "数据工具返回了无效结果：{}".format(result.stderr.strip() or output),
+            f"数据工具返回了无效结果：{result.stderr.strip() or output}",
         ) from exc
     if result.returncode != 0:
         detail = data.get("detail") or result.stderr.strip() or "数据操作失败"
@@ -861,6 +990,22 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def validate_host(self):
+        host = (self.headers.get("Host") or "").split(":", 1)[0].lower()
+        if host not in {"127.0.0.1", "localhost"}:
+            raise ApiError(403, "面板只接受本机 Host")
+
+    def validate_write(self):
+        self.validate_host()
+        token = self.headers.get("X-Panel-Token") or ""
+        if not secrets.compare_digest(token, PANEL_TOKEN):
+            raise ApiError(403, "面板令牌无效，请刷新页面")
+        origin = self.headers.get("Origin")
+        if origin:
+            parsed = urlparse(origin)
+            if parsed.hostname not in {"127.0.0.1", "localhost"}:
+                raise ApiError(403, "不允许的请求来源")
+
     def read_body(self):
         length = int(self.headers.get("Content-Length") or 0)
         if not length:
@@ -883,6 +1028,19 @@ class Handler(BaseHTTPRequestHandler):
             "Content-Type",
             CONTENT_TYPES.get(resolved.suffix.lower(), "application/octet-stream"),
         )
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def send_index(self):
+        template = (STATIC / "index.html").read_text(encoding="utf-8")
+        data = template.replace(
+            "</head>",
+            f'<meta name="panel-token" content="{PANEL_TOKEN}" /></head>',
+        ).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -911,14 +1069,12 @@ class Handler(BaseHTTPRequestHandler):
                     status = job.status
                     alive = job.running()
                 for line in new:
-                    payload = "data: {}\n\n".format(line)
+                    payload = f"data: {line}\n\n"
                     self.wfile.write(payload.encode("utf-8"))
                 if new:
                     self.wfile.flush()
                 if not alive and status != "running" and not new:
-                    self.wfile.write(
-                        "event: end\ndata: {}\n\n".format(status).encode("utf-8")
-                    )
+                    self.wfile.write(f"event: end\ndata: {status}\n\n".encode())
                     self.wfile.flush()
                     return
                 time.sleep(0.4)
@@ -930,8 +1086,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?", 1)[0]
         try:
+            self.validate_host()
             if path == "/":
-                self.send_file(STATIC / "index.html")
+                self.send_index()
             elif path.startswith("/static/"):
                 self.send_file(STATIC / path[len("/static/") :])
             elif path == "/api/status":
@@ -957,12 +1114,13 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json({"detail": "未知路径"}, 404)
         except ApiError as e:
             self.send_json({"detail": e.message}, e.status)
-        except Exception as e:  # noqa: BLE001
-            self.send_json({"detail": "服务器内部错误：{}".format(e)}, 500)
+        except Exception as e:
+            self.send_json({"detail": f"服务器内部错误：{e}"}, 500)
 
     def do_POST(self):
         path = self.path.split("?", 1)[0]
         try:
+            self.validate_write()
             body = self.read_body()
             if path == "/api/config/env":
                 self.send_json(save_env_config(body))
@@ -982,8 +1140,11 @@ class Handler(BaseHTTPRequestHandler):
                 name, is_stop = m.group(1), bool(m.group(2))
                 if is_stop:
                     if name not in STOPPABLE:
-                        raise ApiError(400, "任务 {} 不支持停止".format(name))
-                    get_job(name).stop()
+                        raise ApiError(400, f"任务 {name} 不支持停止")
+                    if name == "simulator":
+                        stop_simulator()
+                    else:
+                        get_job(name).stop()
                     self.send_json({"ok": True})
                 elif name in CONSOLE_ACTIONS:
                     CONSOLE_ACTIONS[name](body)
@@ -992,11 +1153,11 @@ class Handler(BaseHTTPRequestHandler):
                     ACTIONS[name](body)
                     self.send_json({"ok": True})
                 else:
-                    self.send_json({"detail": "未知动作 {}".format(name)}, 404)
+                    self.send_json({"detail": f"未知动作 {name}"}, 404)
         except ApiError as e:
             self.send_json({"detail": e.message}, e.status)
-        except Exception as e:  # noqa: BLE001
-            self.send_json({"detail": "服务器内部错误：{}".format(e)}, 500)
+        except Exception as e:
+            self.send_json({"detail": f"服务器内部错误：{e}"}, 500)
 
 
 def main():
@@ -1005,7 +1166,8 @@ def main():
     args = parser.parse_args()
 
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print("IoTCmpt 配置面板已启动：http://127.0.0.1:{}".format(args.port))
+    print(f"IoTCmpt 配置面板已启动：http://127.0.0.1:{args.port}")
+    print(f"Panel Token: {PANEL_TOKEN}")
     print("关闭此窗口（或按 Ctrl+C）即可停止面板。")
     try:
         server.serve_forever()

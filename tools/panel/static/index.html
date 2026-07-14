@@ -42,7 +42,17 @@
             <i>:5432</i></span
           >
           <span class="led"
-            ><span class="dot" id="dot-simulator"></span>虚拟设备</span
+            ><span class="dot" id="dot-simulator"></span>固件模拟器</span
+          >
+          <span class="led"
+            ><span class="dot" id="dot-worker"></span>Worker</span
+          >
+          <span class="led"
+            ><span class="dot" id="dot-migration"></span>迁移</span
+          >
+          <span class="led"><span class="dot" id="dot-mcp"></span>MCP</span>
+          <span class="led"
+            ><span class="dot" id="dot-capabilities"></span>能力</span
           >
         </div>
       </header>
@@ -166,7 +176,8 @@
                   value="Simulator"
                   checked
                 />
-                <b>虚拟设备</b><small>无需开发板，使用设备模拟器</small></label
+                <b>固件模拟器</b
+                ><small>复刻采样、规则、命令与 MQTT 生命周期</small></label
               >
               <label
                 ><input type="radio" name="deviceMode" value="Real" />
@@ -206,6 +217,37 @@
               <button type="button" id="btnDetectIp">自动检测</button></span
             ></label
           >
+          <label data-for-device="simulator"
+            >环境场景
+            <select id="simulatorScenario">
+              <option value="normal" selected>正常环境</option>
+              <option value="air-watch">空气关注</option>
+              <option value="air-alert">空气告警（可触发 AI）</option>
+              <option value="smoke">烟雾告警（本地安全规则）</option>
+            </select></label
+          >
+          <label data-for-device="simulator"
+            >遥测周期（秒）
+            <input
+              id="simulatorInterval"
+              type="number"
+              min="1"
+              max="60"
+              value="2"
+          /></label>
+          <label class="check" data-for-device="simulator"
+            ><input type="checkbox" id="simulatorImageEnabled" checked />
+            每周期上传模拟摄像头图片</label
+          >
+          <label data-for-device="simulator"
+            >图片周期（秒）
+            <input
+              id="simulatorImageInterval"
+              type="number"
+              min="10"
+              max="3600"
+              value="30"
+          /></label>
           <label data-for-ai="online"
             >LLM Base URL
             <input
@@ -224,42 +266,56 @@
             >LLM API Key
             <input id="llmApiKey" type="password" placeholder="留空则不修改"
           /></label>
-          <label class="check"
-            ><input type="checkbox" id="autopilotEnabled" checked />
-            启用自动处置（autopilot）</label
-          >
-          <label data-for-autopilot="enabled"
-            >自动处置最低置信度
-            <input
-              id="autopilotMinConfidence"
+          <label
+            >模型超时（秒）<input
+              id="llmTimeoutSeconds"
               type="number"
-              min="0"
-              max="1"
-              step="0.05"
-              value="0.6"
+              min="5"
+              max="600"
+              value="60"
           /></label>
-          <fieldset class="choice-field" data-for-autopilot="enabled">
-            <legend>自动处置触发级别（至少一项）</legend>
-            <div class="choice-row" id="autopilotTriggerLevels" tabindex="-1">
-              <label class="check compact-check"
-                ><input type="checkbox" name="triggerLevel" value="good" /> 良好
-                good</label
-              >
-              <label class="check compact-check"
-                ><input type="checkbox" name="triggerLevel" value="watch" />
-                关注 watch</label
-              >
-              <label class="check compact-check"
-                ><input
-                  type="checkbox"
-                  name="triggerLevel"
-                  value="alert"
-                  checked
-                />
-                告警 alert</label
-              >
-            </div>
-          </fieldset>
+          <label
+            >设备 ACK 超时（秒）<input
+              id="ackTimeoutSeconds"
+              type="number"
+              min="5"
+              max="3600"
+              value="60"
+          /></label>
+          <label
+            >单任务最大工具轮次<input
+              id="toolMaxRounds"
+              type="number"
+              min="1"
+              max="10"
+              value="4"
+          /></label>
+          <label
+            >单任务最大工具调用<input
+              id="toolMaxCalls"
+              type="number"
+              min="1"
+              max="32"
+              value="8"
+          /></label>
+          <label class="check"
+            ><input type="checkbox" id="mcpEnabled" /> 启用外部 MCP（内部 Worker
+            MCP 始终可用）</label
+          >
+          <label
+            >外部 MCP 只读 Token<input
+              id="mcpReadToken"
+              type="password"
+              autocomplete="new-password"
+              placeholder="留空则保留；首次启用自动生成"
+          /></label>
+          <label
+            >外部 MCP 控制 Token<input
+              id="mcpControlToken"
+              type="password"
+              autocomplete="new-password"
+              placeholder="留空则保留；首次启用自动生成"
+          /></label>
         </div>
 
         <div class="actions">
@@ -285,23 +341,26 @@
         </div>
         <div class="svc" data-job="simulator">
           <div class="svc-head">
-            <h3>虚拟 ESP32-S3</h3>
-            <small
-              >虚拟设备模式下随 Docker 栈自动启动，真实走 MQTT、HTTP
-              和命令确认</small
-            >
+            <h3>ESP32-S3 固件模拟器</h3>
+            <small>运行固件行为状态机，真实连接 MQTT、HTTP 和命令确认</small>
           </div>
           <div class="row">
-            <label class="port-pick"
-              >场景
-              <select id="simulatorScenario">
-                <option value="air-alert" selected>空气告警（触发 AI）</option>
-                <option value="normal">正常环境</option>
-                <option value="smoke">烟雾告警</option>
-              </select>
-            </label>
-            <button data-action="simulator-start">启动 / 切换场景</button>
+            <button class="primary" data-action="simulator-start">
+              启动 / 应用配置
+            </button>
+            <button data-action="simulator-reboot">重启固件</button>
+            <button class="danger" data-action="simulator-clear-nvs">
+              清除模拟 NVS
+            </button>
             <button data-stop="simulator">停止</button>
+          </div>
+          <div
+            class="simulator-status"
+            id="simulatorStatus"
+            role="status"
+            aria-live="polite"
+          >
+            <span class="simulator-status-empty">模拟器状态未就绪</span>
           </div>
         </div>
         <div class="svc" data-job="backend">
@@ -312,6 +371,16 @@
           <div class="row">
             <button data-action="backend-start">启动</button>
             <button data-stop="backend">停止</button>
+          </div>
+        </div>
+        <div class="svc" data-job="worker">
+          <div class="svc-head">
+            <h3>AI Worker</h3>
+            <small>独立执行模型、MCP 工具调用、报告与周期巡检</small>
+          </div>
+          <div class="row">
+            <button data-action="worker-start">启动</button>
+            <button data-stop="worker">停止</button>
           </div>
         </div>
         <div class="svc" data-job="frontend">
@@ -396,7 +465,7 @@
             <input
               id="fw_CONFIG_APP_IMAGE_UPLOAD_URL"
               type="url"
-              placeholder="http://IP:8000/api/devices/xxx/images"
+              placeholder="http://IP:8000/api/v1/devices/xxx/images"
           /></label>
         </div>
         <h3 class="group-title">功能模块开关</h3>

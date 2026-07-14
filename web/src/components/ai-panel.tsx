@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import Link from "next/link";
 import {
   BellOff,
   BellRing,
@@ -19,7 +21,7 @@ import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import type { AiDecisionPayload, LatestState } from "@/lib/api";
+import type { AiRunOut, AutomationPolicyIn, AutomationPolicyOut } from "@/lib/api";
 import { commandLabel, describeTrigger, formatDateTime } from "@/lib/utils";
 
 const COMMAND_ICONS: Record<string, typeof DoorOpen> = {
@@ -30,7 +32,6 @@ const COMMAND_ICONS: Record<string, typeof DoorOpen> = {
   "led.on": Sparkles,
   "led.off": CircleSlash,
   "display.message": MessageSquare,
-  none: CircleSlash,
 };
 
 const RISK: Record<string, { label: string; color: string; soft: string; Icon: typeof ShieldCheck }> = {
@@ -59,124 +60,213 @@ function AutopilotSwitch({
 
 export function AiPanel({
   analyzing,
-  decision,
-  autopilot,
+  run,
+  runs,
+  policy,
   onToggleAutopilot,
+  onUpdatePolicy,
   onAnalyze,
+  onCancelRun,
   className,
 }: {
   analyzing: string | null;
-  decision: AiDecisionPayload | null;
-  autopilot: LatestState["autopilot"];
+  run: AiRunOut | null;
+  runs: AiRunOut[];
+  policy: AutomationPolicyOut | null;
   onToggleAutopilot: (enabled: boolean) => void;
+  onUpdatePolicy: (values: AutomationPolicyIn) => void;
   onAnalyze: () => void;
+  onCancelRun: (runId: string) => void;
   className?: string;
 }) {
-  const risk = decision ? (RISK[decision.risk_level] ?? RISK.unknown) : RISK.unknown;
-  const CommandIcon = decision ? (COMMAND_ICONS[decision.command?.type] ?? CircleSlash) : CircleSlash;
-  const confidencePercent = decision ? Math.round((decision.confidence ?? 0) * 100) : 0;
+  const [tab, setTab] = useState<"recent" | "history" | "policy">("recent");
+  const output = (run?.output ?? {}) as Record<string, unknown>;
+  const action = (output.action ?? null) as { data?: Record<string, unknown> } | null;
+  const command = action?.data ?? null;
+  const commandType = typeof command?.type === "string" ? command.type : "";
+  const riskLevel = typeof output.risk_level === "string" ? output.risk_level : "unknown";
+  const risk = RISK[riskLevel] ?? RISK.unknown;
+  const CommandIcon = COMMAND_ICONS[commandType] ?? CircleSlash;
 
   return (
     <Panel
       title="AI 决策"
       icon={<BrainCircuit size={17} />}
       className={className}
-      actions={<AutopilotSwitch enabled={autopilot?.enabled ?? null} onChange={onToggleAutopilot} />}
+      actions={<AutopilotSwitch enabled={policy?.enabled ?? null} onChange={onToggleAutopilot} />}
     >
       <div className="flex min-h-[15.5rem] flex-col">
-        {analyzing ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 py-6 text-center">
-            <BrainCircuit size={34} className="animate-pulse-soft text-accent" />
-            <div>
-              <p className="text-sm font-semibold text-ink">AI 正在分析</p>
-              <p className="mt-1 text-sm text-ink2">{describeTrigger(analyzing)}</p>
-            </div>
-            <div className="shimmer-bar h-1.5 w-40 animate-shimmer rounded-full" />
-          </div>
-        ) : decision ? (
-          <div className="flex flex-1 flex-col gap-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5">
-                <span
-                  className="flex h-10 w-10 items-center justify-center rounded-xl text-accent"
-                  style={{ background: "var(--accent-soft)" }}
-                >
-                  <CommandIcon size={20} />
-                </span>
-                <div>
-                  <p className="text-base font-semibold text-ink">{commandLabel(decision.command?.type)}</p>
-                  <p className="text-sm text-ink2">{describeTrigger(decision.trigger) || "最近一次决策"}</p>
+        <div className="mb-4 grid grid-cols-3 rounded-lg border border-line bg-raised p-1 text-xs">
+          {(
+            [
+              ["recent", "最近任务"],
+              ["history", "任务历史"],
+              ["policy", "自动化策略"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setTab(value)}
+              className={`rounded-md px-2 py-1.5 ${tab === value ? "bg-surface text-ink shadow-sm" : "text-ink3"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {tab === "history" ? (
+          <div className="space-y-2">
+            {runs.length ? (
+              runs.slice(0, 20).map((item) => (
+                <div key={item.run_id} className="rounded-lg border border-line bg-raised p-3 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-ink">
+                      {item.kind} · {item.trigger}
+                    </span>
+                    <span className="text-ink3">{item.status}</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-2 text-ink3">
+                    <span>{formatDateTime(item.created_at)}</span>
+                    {!["succeeded", "failed", "cancelled", "skipped"].includes(item.status) ? (
+                      <button type="button" className="text-alert" onClick={() => onCancelRun(item.run_id)}>
+                        取消
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
+              ))
+            ) : (
+              <p className="py-8 text-center text-sm text-ink3">暂无 AI 任务</p>
+            )}
+          </div>
+        ) : null}
+        <div className={tab === "history" ? "hidden" : "contents"}>
+          {analyzing ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 py-6 text-center">
+              <BrainCircuit size={34} className="animate-pulse-soft text-accent" />
+              <div>
+                <p className="text-sm font-semibold text-ink">AI 正在分析</p>
+                <p className="mt-1 text-sm text-ink2">{describeTrigger(analyzing)}</p>
               </div>
-              <Badge
-                variant="outline"
-                className="rounded-full border-line px-2.5 py-1 text-xs font-medium"
-                style={
-                  decision.published
-                    ? { color: "var(--good)", background: "var(--good-soft)" }
-                    : { color: "var(--ink-3)", background: "var(--raised)" }
-                }
-              >
-                {decision.published ? "已下发" : "仅建议"}
-              </Badge>
+              <div className="shimmer-bar h-1.5 w-40 animate-shimmer rounded-full" />
             </div>
-
-            <div className="flex items-center justify-between gap-2 text-sm">
-              <Badge
-                variant="outline"
-                className="gap-1.5 rounded-full border-line px-2 py-0.5 font-medium text-ink2"
-                style={{ background: risk.soft }}
-              >
-                <risk.Icon size={13} style={{ color: risk.color }} />
-                {risk.label}
-              </Badge>
-              {decision.scene_summary ? <span className="text-ink3">{decision.scene_summary}</span> : null}
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between text-sm text-ink2">
-                <span>置信度</span>
-                <span className="tnum font-medium text-ink2">{confidencePercent}%</span>
+          ) : run ? (
+            <div className="flex flex-1 flex-col gap-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className="flex h-10 w-10 items-center justify-center rounded-xl text-accent"
+                    style={{ background: "var(--accent-soft)" }}
+                  >
+                    <CommandIcon size={20} />
+                  </span>
+                  <div>
+                    <p className="text-base font-semibold text-ink">
+                      {commandType ? commandLabel(commandType) : "无需设备动作"}
+                    </p>
+                    <p className="text-sm text-ink2">{describeTrigger(run.trigger) || "最近一次决策"}</p>
+                  </div>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="rounded-full border-line px-2.5 py-1 text-xs font-medium"
+                  style={
+                    command
+                      ? { color: "var(--good)", background: "var(--good-soft)" }
+                      : { color: "var(--ink-3)", background: "var(--raised)" }
+                  }
+                >
+                  {command ? "已提交命令" : "分析完成"}
+                </Badge>
               </div>
-              <div
-                className="mt-1 h-1.5 overflow-hidden rounded-full"
-                style={{ background: "var(--accent-soft)" }}
-              >
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{ width: `${confidencePercent}%`, background: "var(--accent)" }}
-                />
-              </div>
-            </div>
 
-            <p className="flex-1 rounded-xl border border-line bg-raised px-3.5 py-3 text-sm leading-relaxed text-ink2">
-              {decision.reason || "（模型未给出理由）"}
-            </p>
-            {decision.speech ? (
-              <p className="rounded-xl border border-accent/30 bg-accent/5 px-3.5 py-2.5 text-sm text-ink2">
-                语音建议：{decision.speech}
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 rounded-full border-line px-2 py-0.5 font-medium text-ink2"
+                  style={{ background: risk.soft }}
+                >
+                  <risk.Icon size={13} style={{ color: risk.color }} />
+                  {risk.label}
+                </Badge>
+                <span className="text-ink3">{run.model || String(output.model || "")}</span>
+              </div>
+
+              <p className="flex-1 rounded-xl border border-line bg-raised px-3.5 py-3 text-sm leading-relaxed text-ink2">
+                {String(output.summary || "分析完成，未生成设备控制动作。")}
               </p>
-            ) : null}
+              <p className="text-xs text-ink3">
+                {formatDateTime(run.completed_at ?? run.created_at)} ·{" "}
+                <Link className="text-accent hover:underline" href={`/diagnostics?trace=${run.trace_id}`}>
+                  trace {run.trace_id}
+                </Link>
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 py-6 text-center text-ink3">
+              <Sparkles size={26} />
+              <p className="max-w-64 text-sm leading-relaxed">暂无决策记录，可立即发起分析</p>
+            </div>
+          )}
 
-            <p className="text-xs text-ink3">{formatDateTime(decision.command?.created_at)}</p>
+          <div className="mt-4 rounded-xl border border-line bg-raised p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-ink">变化后周期巡检</p>
+                <p className="mt-0.5 text-xs text-ink3">无有效变化时跳过模型调用</p>
+              </div>
+              <Switch
+                checked={policy?.patrol_enabled ?? false}
+                disabled={!policy}
+                onCheckedChange={(patrol_enabled) => onUpdatePolicy({ patrol_enabled })}
+                aria-label="周期巡检开关"
+              />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <label className="text-xs text-ink3">
+                巡检周期（秒）
+                <input
+                  key={`patrol-${policy?.patrol_interval_seconds}`}
+                  type="number"
+                  min={60}
+                  max={86400}
+                  defaultValue={policy?.patrol_interval_seconds ?? 300}
+                  disabled={!policy}
+                  onBlur={(event) =>
+                    onUpdatePolicy({ patrol_interval_seconds: Number(event.currentTarget.value) })
+                  }
+                  className="mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-2 text-sm text-ink"
+                />
+              </label>
+              <label className="text-xs text-ink3">
+                强制分析（秒）
+                <input
+                  key={`force-${policy?.patrol_force_interval_seconds}`}
+                  type="number"
+                  min={300}
+                  max={604800}
+                  defaultValue={policy?.patrol_force_interval_seconds ?? 3600}
+                  disabled={!policy}
+                  onBlur={(event) =>
+                    onUpdatePolicy({ patrol_force_interval_seconds: Number(event.currentTarget.value) })
+                  }
+                  className="mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-2 text-sm text-ink"
+                />
+              </label>
+            </div>
           </div>
-        ) : (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 py-6 text-center text-ink3">
-            <Sparkles size={26} />
-            <p className="max-w-64 text-sm leading-relaxed">暂无决策记录，可立即发起分析</p>
-          </div>
-        )}
 
-        <Button
-          type="button"
-          onClick={onAnalyze}
-          disabled={Boolean(analyzing)}
-          className="mt-4 min-h-11 w-full gap-2 rounded-xl px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-          style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-strong))" }}
-        >
-          <Send size={15} />
-          {analyzing ? "分析中…" : "立即 AI 分析"}
-        </Button>
+          <Button
+            type="button"
+            onClick={onAnalyze}
+            disabled={Boolean(analyzing)}
+            className="mt-4 min-h-11 w-full gap-2 rounded-xl px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-strong))" }}
+          >
+            <Send size={15} />
+            {analyzing ? "分析中…" : "立即 AI 分析"}
+          </Button>
+        </div>
       </div>
     </Panel>
   );

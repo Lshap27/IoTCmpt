@@ -12,7 +12,6 @@ from app.db import models
 from app.schemas import CommandMessage, CommandSource, CommandType
 
 ALLOWED_COMMANDS: set[str] = {
-    "none",
     "window.open",
     "window.close",
     "alarm.on",
@@ -30,7 +29,7 @@ ALLOWED_COMMANDS: set[str] = {
 def validate_command_type(raw: str) -> CommandType:
     if raw in ALLOWED_COMMANDS:
         return raw  # type: ignore[return-value]
-    return "none"
+    raise ValueError(f"unsupported command type: {raw}")
 
 
 def ensure_device(db: Session, device_id: str) -> models.Device:

@@ -1180,6 +1180,51 @@ dialog::backdrop {
   margin: 0;
 }
 
+.simulator-status {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  flex: 1 0 100%;
+  width: 100%;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+
+.simulator-status > span {
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--card);
+}
+
+.simulator-status small,
+.simulator-status b {
+  display: block;
+}
+
+.simulator-status small {
+  margin-bottom: 3px;
+  color: var(--ink-3);
+  font-size: 10.5px;
+}
+
+.simulator-status b {
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.simulator-status .simulator-status-empty {
+  grid-column: 1 / -1;
+  color: var(--ink-3);
+  font-size: 12px;
+  text-align: center;
+}
+
 /* ------------------------------------------------------------ 工具条（固件操作） */
 
 .toolbar {

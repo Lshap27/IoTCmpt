@@ -10,7 +10,7 @@ static const char *TAG = "COMMANDS";
 void command_clear(cloud_command_t *command) {
     if (command) {
         memset(command, 0, sizeof(*command));
-        command->type = CLOUD_COMMAND_NONE;
+        command->type = CLOUD_COMMAND_UNSET;
     }
 }
 
@@ -21,9 +21,7 @@ esp_err_t command_from_name(const char *name, cloud_command_t *out_command) {
 
     command_clear(out_command);
 
-    if (strcmp(name, "none") == 0 || strcmp(name, "") == 0) {
-        out_command->type = CLOUD_COMMAND_NONE;
-    } else if (strcmp(name, "window.open") == 0 || strcmp(name, "open") == 0) {
+    if (strcmp(name, "window.open") == 0 || strcmp(name, "open") == 0) {
         out_command->type = CLOUD_COMMAND_WINDOW_OPEN;
     } else if (strcmp(name, "window.close") == 0 || strcmp(name, "close") == 0) {
         out_command->type = CLOUD_COMMAND_WINDOW_CLOSE;
@@ -43,6 +41,8 @@ esp_err_t command_from_name(const char *name, cloud_command_t *out_command) {
         out_command->type = CLOUD_COMMAND_ALARM_SILENCE;
     } else if (strcmp(name, "voice.speak") == 0) {
         out_command->type = CLOUD_COMMAND_VOICE_SPEAK;
+    } else if (strcmp(name, "display.message") == 0) {
+        out_command->type = CLOUD_COMMAND_DISPLAY_MESSAGE;
     } else {
         out_command->type = CLOUD_COMMAND_UNKNOWN;
         app_string_copy(out_command->raw, sizeof(out_command->raw), name);
@@ -58,9 +58,8 @@ esp_err_t command_apply(const cloud_command_t *command) {
     }
 
     switch (command->type) {
-    case CLOUD_COMMAND_NONE:
-        ESP_LOGI(TAG, "没有下游设备命令");
-        return ESP_OK;
+    case CLOUD_COMMAND_UNSET:
+        return ESP_ERR_INVALID_STATE;
     case CLOUD_COMMAND_WINDOW_OPEN:
         ESP_LOGI(TAG, "执行命令：打开窗户");
         return ESP_OK;
@@ -83,6 +82,7 @@ esp_err_t command_apply(const cloud_command_t *command) {
     case CLOUD_COMMAND_CONTROL_RESUME_AUTO:
     case CLOUD_COMMAND_ALARM_SILENCE:
     case CLOUD_COMMAND_VOICE_SPEAK:
+    case CLOUD_COMMAND_DISPLAY_MESSAGE:
         ESP_LOGI(TAG, "执行扩展控制命令：%s", command_type_name(command->type));
         return ESP_OK;
     case CLOUD_COMMAND_UNKNOWN:
@@ -94,8 +94,8 @@ esp_err_t command_apply(const cloud_command_t *command) {
 
 const char *command_type_name(cloud_command_type_t type) {
     switch (type) {
-    case CLOUD_COMMAND_NONE:
-        return "none";
+    case CLOUD_COMMAND_UNSET:
+        return "unset";
     case CLOUD_COMMAND_WINDOW_OPEN:
         return "window.open";
     case CLOUD_COMMAND_WINDOW_CLOSE:
@@ -116,6 +116,8 @@ const char *command_type_name(cloud_command_type_t type) {
         return "alarm.silence";
     case CLOUD_COMMAND_VOICE_SPEAK:
         return "voice.speak";
+    case CLOUD_COMMAND_DISPLAY_MESSAGE:
+        return "display.message";
     case CLOUD_COMMAND_UNKNOWN:
     default:
         return "unknown";

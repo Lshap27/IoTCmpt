@@ -17,6 +17,7 @@ MessageHandler = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 SUBSCRIPTIONS: tuple[tuple[str, int], ...] = (
     ("devices/+/status", 1),
+    ("devices/+/capabilities", 1),
     ("devices/+/telemetry", 0),
     ("devices/+/event", 1),
     ("devices/+/command_ack", 1),
@@ -48,6 +49,10 @@ class MqttGateway:
             LOGGER.info("MQTT disabled")
             return
         self._task = asyncio.create_task(self.run(handler), name="mqtt-gateway")
+
+    @property
+    def connected(self) -> bool:
+        return self._client is not None
 
     async def run(self, handler: MessageHandler) -> None:
         while True:

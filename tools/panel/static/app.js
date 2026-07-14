@@ -3,6 +3,8 @@
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
+const PANEL_TOKEN =
+  document.querySelector('meta[name="panel-token"]')?.content || "";
 
 async function api(path, options) {
   const res = await fetch(path, options);
@@ -19,7 +21,10 @@ async function api(path, options) {
 function post(path, body) {
   return api(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Panel-Token": PANEL_TOKEN,
+    },
     body: JSON.stringify(body || {}),
   });
 }
@@ -36,6 +41,63 @@ $$(".tab").forEach((btn) => {
 
 // ------------------------------------------------------------------ 状态栏
 let lanIp = "";
+function renderSimulatorStatus(status) {
+  const root = $("#simulatorStatus");
+  if (!root) return;
+  root.replaceChildren();
+  if (!status?.ready) {
+    const empty = document.createElement("span");
+    empty.className = "simulator-status-empty";
+    empty.textContent = status?.reason || "模拟器状态未就绪";
+    root.append(empty);
+    return;
+  }
+  const state = status.state || {};
+  const last = status.last_command || {};
+  const values = [
+    ["MQTT", status.mqtt_connected ? "已连接" : "未连接"],
+    ["场景", status.scenario || "—"],
+    ["Boot ID", status.boot_id ? status.boot_id.slice(0, 8) : "—"],
+    [
+      "最近遥测",
+      status.last_telemetry_at
+        ? new Date(status.last_telemetry_at).toLocaleTimeString()
+        : "—",
+    ],
+    [
+      "计数",
+      `遥测 ${status.telemetry_count || 0} · 命令 ${status.command_count || 0}`,
+    ],
+    [
+      "窗户 / LED",
+      `${state.window_open ? "开" : "关"} / ${state.led_on ? "开" : "关"}`,
+    ],
+    [
+      "报警",
+      state.alarm_on ? (state.smoke_silenced ? "已静音" : "开启") : "关闭",
+    ],
+    [
+      "优先级",
+      state.control_priority === "auto_first" ? "自动优先" : "人工优先",
+    ],
+    [
+      "最近命令",
+      last.command_id
+        ? `${last.command_id.slice(0, 12)} · ${last.status || "—"}`
+        : "—",
+    ],
+  ];
+  for (const [label, value] of values) {
+    const item = document.createElement("span");
+    const name = document.createElement("small");
+    const content = document.createElement("b");
+    name.textContent = label;
+    content.textContent = value;
+    item.append(name, content);
+    root.append(item);
+  }
+}
+
 async function refreshStatus() {
   try {
     const s = await api("/api/status");
@@ -47,6 +109,10 @@ async function refreshStatus() {
     }
     const simulatorRunning = !!s.jobs?.simulator?.running;
     $("#dot-simulator")?.classList.toggle("on", simulatorRunning);
+    renderSimulatorStatus(s.simulator);
+    for (const [key, on] of Object.entries(s.services || {})) {
+      $("#dot-" + key)?.classList.toggle("on", on);
+    }
   } catch (_) {
     /* 面板自身请求失败时静默 */
   }
@@ -266,9 +332,12 @@ function syncModeFields() {
   );
   setModeFields('[data-for-ai="online"]', selectedMode("aiMode") === "Online");
   setModeFields(
-    '[data-for-autopilot="enabled"]',
-    $("#autopilotEnabled").checked,
+    '[data-for-device="simulator"]',
+    selectedMode("deviceMode") === "Simulator",
   );
+  $("#simulatorImageInterval").disabled =
+    selectedMode("deviceMode") !== "Simulator" ||
+    !$("#simulatorImageEnabled").checked;
 }
 
 function switchAiMode() {
@@ -316,21 +385,24 @@ async function loadEnvConfig() {
     }
     $("#llmEndpoint").value = online ? endpoint : "mock";
     if (server.AIOT_LLM_MODEL) $("#llmModel").value = server.AIOT_LLM_MODEL;
-    if (server.AIOT_AUTOPILOT_MIN_CONFIDENCE)
-      $("#autopilotMinConfidence").value = server.AIOT_AUTOPILOT_MIN_CONFIDENCE;
-    if (server.AIOT_AUTOPILOT_TRIGGER_LEVELS)
-      $$('input[name="triggerLevel"]').forEach((input) => {
-        input.checked = server.AIOT_AUTOPILOT_TRIGGER_LEVELS.split(",")
-          .map((item) => item.trim())
-          .includes(input.value);
-      });
+    $("#llmTimeoutSeconds").value = server.AIOT_LLM_TIMEOUT_SECONDS || "60";
+    $("#ackTimeoutSeconds").value =
+      server.AIOT_COMMAND_ACK_TIMEOUT_SECONDS || "60";
+    $("#toolMaxRounds").value = server.AIOT_AI_TOOL_MAX_ROUNDS || "4";
+    $("#toolMaxCalls").value = server.AIOT_AI_TOOL_MAX_CALLS || "8";
+    $("#mcpEnabled").checked = server.AIOT_MCP_ENABLED === "true";
     if (compose.AIOT_DEMO_DEVICE_ID) {
       $("#deviceId").value = compose.AIOT_DEMO_DEVICE_ID;
       $("#dataDeviceId").value = compose.AIOT_DEMO_DEVICE_ID;
     }
     if (compose.AIOT_DEMO_SCENARIO)
       $("#simulatorScenario").value = compose.AIOT_DEMO_SCENARIO;
-    $("#autopilotEnabled").checked = server.AIOT_AUTOPILOT_ENABLED !== "false";
+    $("#simulatorInterval").value =
+      compose.AIOT_SIMULATOR_TELEMETRY_INTERVAL_SECONDS || "2";
+    $("#simulatorImageEnabled").checked =
+      compose.AIOT_SIMULATOR_IMAGE_ENABLED !== "false";
+    $("#simulatorImageInterval").value =
+      compose.AIOT_SIMULATOR_IMAGE_INTERVAL_SECONDS || "30";
     syncModeFields();
   } catch (_) {
     switchAiMode();
@@ -353,8 +425,7 @@ $$('input[name="deviceMode"]').forEach((input) =>
     syncModeFields();
   }),
 );
-$("#autopilotEnabled").addEventListener("change", syncModeFields);
-
+$("#simulatorImageEnabled").addEventListener("change", syncModeFields);
 $("#btnDetectIp").addEventListener("click", () => {
   $("#lanAddress").value = lanIp;
 });
@@ -367,8 +438,7 @@ $("#btnSaveEnv").addEventListener("click", async () => {
   const aiMode = selectedMode("aiMode");
   const llmEndpoint = $("#llmEndpoint").value.trim();
   const deviceId = $("#deviceId");
-  const confidence = $("#autopilotMinConfidence");
-  if (!deviceId.reportValidity() || !confidence.reportValidity()) {
+  if (!deviceId.reportValidity()) {
     msg.className = "msg err";
     msg.textContent = "✘ 请修正标红的配置项";
     return;
@@ -379,15 +449,6 @@ $("#btnSaveEnv").addEventListener("click", async () => {
     $("#llmEndpoint").focus();
     return;
   }
-  const triggerLevels = [...$$('input[name="triggerLevel"]:checked')].map(
-    (input) => input.value,
-  );
-  if (!triggerLevels.length) {
-    msg.className = "msg err";
-    msg.textContent = "✘ 自动处置触发级别至少选择一项";
-    $("#autopilotTriggerLevels").focus();
-    return;
-  }
   const body = {
     deviceMode,
     aiMode,
@@ -396,16 +457,35 @@ $("#btnSaveEnv").addEventListener("click", async () => {
     llmEndpoint: llmEndpoint || null,
     llmModel: $("#llmModel").value || null,
     llmApiKey: $("#llmApiKey").value || null,
-    autopilotEnabled: $("#autopilotEnabled").checked,
-    autopilotMinConfidence: confidence.value || null,
-    autopilotTriggerLevels: triggerLevels,
+    llmTimeoutSeconds: $("#llmTimeoutSeconds").value,
+    ackTimeoutSeconds: $("#ackTimeoutSeconds").value,
+    toolMaxRounds: $("#toolMaxRounds").value,
+    toolMaxCalls: $("#toolMaxCalls").value,
+    mcpEnabled: $("#mcpEnabled").checked,
+    mcpReadToken: $("#mcpReadToken").value || null,
+    mcpControlToken: $("#mcpControlToken").value || null,
+    scenario: $("#simulatorScenario").value,
+    interval: $("#simulatorInterval").value,
+    imageEnabled: $("#simulatorImageEnabled").checked,
+    imageInterval: $("#simulatorImageInterval").value,
   };
   try {
+    const preview = await post("/api/config/env", { ...body, preview: true });
+    const lines = preview.diff.map(
+      (item) => `${item.file}: ${item.key} → ${item.after ?? "删除"}`,
+    );
+    const affected = preview.affectedServices.join("、") || "无";
+    if (
+      !window.confirm(
+        `将修改：\n${lines.join("\n")}\n\n需重启：${affected}\n\n确认保存？`,
+      )
+    ) {
+      msg.textContent = "已取消保存";
+      return;
+    }
     const result = await post("/api/config/env", body);
     msg.className = "msg ok";
-    msg.textContent = result.stackReconfigured
-      ? "✔ 配置已保存，并已重新应用到运行中的服务；虚拟设备正在连接"
-      : "✔ 配置已保存；启动 Docker 演示栈后自动生效";
+    msg.textContent = `✔ 配置已保存；请在服务页重启：${result.affectedServices.join("、") || "无"}`;
   } catch (e) {
     msg.className = "msg err";
     msg.textContent = "✘ 保存失败：" + e.message;
@@ -439,6 +519,8 @@ const JOB_OF_ACTION = {
   "backend-start": "backend",
   "frontend-start": "frontend",
   "simulator-start": "simulator",
+  "simulator-reboot": "simulator",
+  "simulator-clear-nvs": "simulator",
   "idf-build": "idf",
   "idf-flash": "idf",
 };
@@ -454,9 +536,20 @@ $$("button[data-action]").forEach((btn) => {
       const port = $("#comPort").value;
       if (port) body.port = port;
     }
-    if (action === "simulator-start") {
+    if (action.startsWith("simulator-")) {
       body.scenario = $("#simulatorScenario").value;
       body.deviceId = $("#deviceId").value || "esp32s3-001";
+      body.interval = $("#simulatorInterval").value;
+      body.imageEnabled = $("#simulatorImageEnabled").checked;
+      body.imageInterval = $("#simulatorImageInterval").value;
+    }
+    if (
+      action === "simulator-clear-nvs" &&
+      !window.confirm(
+        "确定清除模拟 NVS？控制优先级和最近终态 ACK 将丢失；运行中的模拟器会自动重启。",
+      )
+    ) {
+      return;
     }
     try {
       const result = await post(`/api/actions/${action}`, body);
@@ -562,7 +655,7 @@ $("#btnFwAutofill").addEventListener("click", () => {
   }
   $("#fw_CONFIG_APP_MQTT_BROKER_URI").value = `mqtt://${lanIp}:1883`;
   $("#fw_CONFIG_APP_IMAGE_UPLOAD_URL").value =
-    `http://${lanIp}:8000/api/devices/${deviceId}/images`;
+    `http://${lanIp}:8000/api/v1/devices/${deviceId}/images`;
   $("#fw_CONFIG_APP_WIFI_ENABLED").checked = true;
   $("#fw_CONFIG_APP_MQTT_ENABLED").checked = true;
   $("#fw_CONFIG_APP_IMAGE_UPLOAD_ENABLED").checked = true;

@@ -52,6 +52,7 @@ export function CommandPad({
   controlPriority,
   manualWindowOverride,
   manualLedOverride,
+  availableCommands,
   className,
 }: {
   onCommand: (type: string, parameter?: Record<string, unknown>) => void;
@@ -62,9 +63,11 @@ export function CommandPad({
   controlPriority: "manual_first" | "auto_first" | null | undefined;
   manualWindowOverride: boolean | null | undefined;
   manualLedOverride: boolean | null | undefined;
+  availableCommands?: string[];
   className?: string;
 }) {
   const pendingTypes = new Set(Object.values(pendingCommands));
+  const supported = availableCommands ? new Set(availableCommands) : null;
   const priorityPending = pendingTypes.has("control.set_priority");
   const resumePending = pendingTypes.has("control.resume_auto");
   const [pendingPriority, setPendingPriority] = useState<"manual_first" | "auto_first" | null>(null);
@@ -108,7 +111,11 @@ export function CommandPad({
               type="button"
               role="radio"
               aria-checked={controlPriority === value}
-              disabled={priorityPending || controlPriority === value}
+              disabled={
+                priorityPending ||
+                controlPriority === value ||
+                supported?.has("control.set_priority") === false
+              }
               onClick={() => {
                 setPendingPriority(value);
                 onCommand("control.set_priority", { priority: value });
@@ -142,7 +149,7 @@ export function CommandPad({
           {hasManualLock ? (
             <button
               type="button"
-              disabled={resumePending}
+              disabled={resumePending || supported?.has("control.resume_auto") === false}
               onClick={() => onCommand("control.resume_auto")}
               className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-accent hover:bg-accent/10 disabled:opacity-50"
             >
@@ -155,7 +162,7 @@ export function CommandPad({
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-        {COMMANDS.map(({ type, label, Icon }) => {
+        {COMMANDS.filter(({ type }) => !supported || supported.has(type)).map(({ type, label, Icon }) => {
           const pending = pendingTypes.has(type);
           return (
             <Button

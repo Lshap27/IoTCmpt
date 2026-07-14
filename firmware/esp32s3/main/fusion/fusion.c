@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "app_string.h"
+#include "firmware_behavior.generated.h"
 
 static void append_reason(char *dest, size_t dest_size, const char *format, ...) {
     if (!dest || dest_size == 0) {
@@ -52,17 +53,18 @@ esp_err_t fusion_evaluate(const sensor_sample_t *sample, fusion_state_t *out_sta
     bool ventilation_needed = false;
 
     if (sample->climate_valid) {
-        if (sample->temperature_c > 32.0f) {
+        if (sample->temperature_c > AIOT_FUSION_TEMPERATURE_ALERT_C) {
             bad = true;
             ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "温度严重偏高 %.1fC；", sample->temperature_c);
-        } else if (sample->temperature_c > 28.0f) {
+        } else if (sample->temperature_c > AIOT_FUSION_TEMPERATURE_WATCH_C) {
             watch = true;
             ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "温度偏高 %.1fC；", sample->temperature_c);
         }
 
-        if (sample->humidity_percent > 75.0f || sample->humidity_percent < 30.0f) {
+        if (sample->humidity_percent > AIOT_FUSION_HUMIDITY_HIGH_PERCENT ||
+            sample->humidity_percent < AIOT_FUSION_HUMIDITY_LOW_PERCENT) {
             watch = true;
             ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "湿度异常 %.1f%%；", sample->humidity_percent);
@@ -70,31 +72,31 @@ esp_err_t fusion_evaluate(const sensor_sample_t *sample, fusion_state_t *out_sta
     }
 
     if (sample->air_valid) {
-        if (sample->tvoc_ppb > 600) {
+        if (sample->tvoc_ppb > AIOT_FUSION_TVOC_ALERT_PPB) {
             bad = true;
             ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "TVOC 严重偏高 %u；", sample->tvoc_ppb);
-        } else if (sample->tvoc_ppb > 300) {
+        } else if (sample->tvoc_ppb > AIOT_FUSION_TVOC_WATCH_PPB) {
             watch = true;
             ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "TVOC 偏高 %u；", sample->tvoc_ppb);
         }
 
-        if (sample->hcho_ug_m3 > 100) {
+        if (sample->hcho_ug_m3 > AIOT_FUSION_HCHO_ALERT_UG_M3) {
             bad = true;
             ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "HCHO 严重偏高 %u；", sample->hcho_ug_m3);
-        } else if (sample->hcho_ug_m3 > 60) {
+        } else if (sample->hcho_ug_m3 > AIOT_FUSION_HCHO_WATCH_UG_M3) {
             watch = true;
             ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "HCHO 偏高 %u；", sample->hcho_ug_m3);
         }
 
-        if (sample->eco2_ppm > 1500) {
+        if (sample->eco2_ppm > AIOT_FUSION_ECO2_ALERT_PPM) {
             bad = true;
             ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "eCO2 严重偏高 %u；", sample->eco2_ppm);
-        } else if (sample->eco2_ppm > 1000) {
+        } else if (sample->eco2_ppm > AIOT_FUSION_ECO2_WATCH_PPM) {
             watch = true;
             ventilation_needed = true;
             append_reason(out_state->reason, sizeof(out_state->reason), "eCO2 偏高 %u；", sample->eco2_ppm);
