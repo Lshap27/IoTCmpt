@@ -1,37 +1,24 @@
-# AIoT Infrastructure
+# IoTCmpt Infrastructure
 
-Root `docker-compose.yml` is the default local deployment entrypoint.
+Root `docker-compose.yml` is the local demo and integration-test entry point:
 
-Services:
+| Service | Purpose | Host entry point |
+| --- | --- | --- |
+| postgres | PostgreSQL 16 + TimescaleDB for data, leases, and outboxes | `localhost:5432` |
+| emqx | MQTT broker | `localhost:1883` |
+| EMQX dashboard | Broker administration | `http://localhost:18083` |
+| server | Single-process HTTP/WS/MQTT/MCP Gateway | `http://localhost:8000` |
+| worker | Scalable AI Worker and patrol scheduler | no public port |
+| web | Next.js console | `http://localhost:3000` |
 
-- TimescaleDB (PostgreSQL 16) on `localhost:5432`.
-- EMQX MQTT broker on `localhost:1883`.
-- EMQX dashboard on `http://localhost:18083`.
-- FastAPI gateway on `http://localhost:8000`.
-- Next.js console on `http://localhost:3000`.
-
-Default local EMQX dashboard credentials:
-
-```text
-admin / public
+```powershell
+docker compose up --build
+docker compose ps
+docker compose logs -f server worker
 ```
 
-Anonymous MQTT is enabled for the first demo stack. Before any non-local
-deployment, add MQTT credentials and update firmware/server environment values.
+The local EMQX dashboard uses `admin / public`; anonymous MQTT is for a controlled local demo only. Before exposing the stack, enable broker authentication, replace database passwords, restrict ports, and configure distinct external MCP read/control tokens plus valid Host/Origin allowlists.
 
-## Device Local Targets
+For a board on the same Wi-Fi, use `<laptop-ip>:1883` for MQTT and `http://<laptop-ip>:8000` as the image API base. The setup panel can generate LAN targets, but board type, PSRAM, USB, and GPIO wiring still require manual verification.
 
-When the ESP32-S3 and laptop are on the same Wi-Fi:
-
-- MQTT broker: `<laptop-ip>:1883`
-- Image/API base URL: `http://<laptop-ip>:8000`
-
-## Secrets
-
-Do not store production secrets in this repository. Use local `.env` files or
-deployment-specific secret stores for:
-
-- `AIOT_LLM_API_KEY`
-- MQTT username/password
-- Wi-Fi SSID/password
-- database passwords outside local demo use
+Provider keys belong only to the Worker. The internal MCP token is shared only by Gateway and Worker. Local `.env`, `server/.env`, `web/.env.local`, and firmware `sdkconfig` files are untracked and must remain secret.

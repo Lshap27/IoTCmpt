@@ -1,58 +1,63 @@
 # ESP32-S3 Firmware
 
-This directory is the ESP-IDF firmware mainline for the AIoT architecture.
+This directory is the ESP-IDF 5.5.2 firmware mainline. Firmware owns sensing,
+execution, local real-time rules, and final safety vetoes; it never connects to
+a cloud LLM.
 
-## Behavior
+## Runtime behavior
 
-- Publish retained online/offline status through MQTT.
-- Publish periodic telemetry to `devices/{device_id}/telemetry`.
-- Upload JPEG images to `POST /api/devices/{device_id}/images`.
-- Subscribe to `devices/{device_id}/command`.
-- Execute supported commands locally.
-- Publish `devices/{device_id}/command_ack` after execution.
+- Publish retained online status and capabilities after MQTT connection.
+- Publish MQTT v2 telemetry, events, and logs.
+- Upload JPEG images to `POST /api/v1/devices/{device_id}/images`.
+- Accept only MQTT v2 commands and validate version, device/command ID, source,
+  parameters, TTL, capability, priority, and safety interlocks.
+- Reply `accepted` before independent execution, then `executed`, `rejected`,
+  or `failed`.
+- Persist the last 16 terminal ACKs by `command_id` in NVS so QoS 1 redelivery
+  replays a result without repeating hardware work.
+- Synchronize time with SNTP and enforce `expires_at` when the clock is trusted.
 
-## Hardware Modules
+## Hardware and local rules
 
-- SHT30, TVOC301, and LM393 sampling.
-- Configurable active level for LM393 darkness detection; the demo board
-  defaults to high-level-is-dark.
-- Local fusion rules; auto-first mode opens for a ventilation recommendation
-  and leaves the window open after recovery.
-- OV2640 camera.
-- ST7735 display.
-- SG90 servo.
-- Active beeper.
-- Local fixed SYN6288 smoke/ventilation announcements without the server or LLM.
-- Manual button.
-- Runtime control state.
+SHT30, TVOC301, and LM393 feed local air fusion. Automatic-first mode opens a
+window for ventilation but does not close it automatically after recovery.
+Smoke alarm logic never waits for the server or LLM; silence only masks the
+smoke source temporarily. OV2640, ST7735, SG90, beeper, SYN6288, and buttons are
+enabled per build configuration. Manual window targets reach the actuator loop,
+and manual-first/safety rules can reject AI or external-MCP commands.
 
-## Configuration
+Capabilities depend on the actual module: window/alarm, LED, display, and voice
+are independent. Parameter, policy, and safety refusals return `rejected` with
+stable codes; only execution faults return `failed`.
 
-The default configuration keeps Wi-Fi, MQTT, image upload, camera, display,
-actuator, and button modules disabled so the project can compile without local
-credentials or attached hardware.
+## Configuration and preflight
 
-Enable runtime features through `idf.py menuconfig` or local `sdkconfig`.
-Do not commit Wi-Fi credentials, MQTT credentials, LLM keys, or local server
-addresses.
+The safe default disables networking, image upload, physical modules, and mock
+sensor data. Enable real features through `idf.py menuconfig` or local
+`sdkconfig`. Never commit `sdkconfig`, credentials, or machine-specific URLs.
+
+Startup preflight rejects duplicate GPIOs, native-USB GPIO19/20 conflicts, and
+GPIO35-37 under octal-PSRAM configurations. Unknown board variants still need
+manual review. Keep the current OV2640 PWDN-only `pin_xclk=-1` design unless
+physical evidence justifies XCLK.
+
+`configs/full-hardware.defaults` is compile coverage, not a flash-ready demo
+profile; Wi-Fi, MQTT, and image upload remain disabled there.
 
 ## Build
-
-From the repository root, use PowerShell 7:
 
 ```powershell
 cd firmware\esp32s3
 idf.py -B build build
 ```
 
-## MQTT Behavior
+In this validation, the safe image was about `0xdf4a0` with roughly 40% of its
+application partition free; the full compile profile was about `0x10d980` with
+roughly 28% free. Treat current build output as authoritative as sizes evolve.
 
-When Wi-Fi and MQTT are enabled, the firmware:
+## Physical validation boundary
 
-- connects to the configured broker URI;
-- publishes retained `online` status;
-- publishes periodic telemetry from real or mock sensors;
-- subscribes to `devices/{device_id}/command`;
-- executes window, LED, manual alarm, runtime control-priority, smoke-silence,
-  and server-encoded SYN6288 speech commands;
-- publishes command ACKs with `executed`, `rejected`, or `failed` status.
+Compilation and the behavior simulator do not replace a board test. This run
+had no physical ESP32-S3, so USB/serial, power, real GPIO, PSRAM, OV2640 timing,
+display, voice, sensor levels, and mechanical actuator movement remain
+unverified. Complete `docs/hardware-loop.md` before claiming board readiness.

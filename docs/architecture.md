@@ -1,107 +1,90 @@
-# AIoT Architecture
+# IoTCmpt architecture
 
-## System Goal
+IoTCmpt uses a modular monolith on the server and ports/adapters at every external boundary. The design separates the device real-time path from the cloud-AI slow path.
 
-The system is a complete competition-grade AIoT loop:
-
-```text
-ESP32-S3 sensing -> MQTT telemetry -> FastAPI AIoT Gateway -> LLM decision -> MQTT command -> device action -> WebSocket dashboard
+```mermaid
+flowchart LR
+    FW["ESP32-S3 firmware"] <-->|"MQTT v2"| MA["MQTT adapter"]
+    WEB["Next.js console"] <-->|"HTTP /api/v1 + WebSocket v2"| HA["HTTP/WS adapter"]
+    EXT["External MCP client"] <-->|"Streamable HTTP + bearer token"| MCP["MCP adapter /mcp"]
+    MA --> APP["Application use cases"]
+    HA --> APP
+    MCP --> APP
+    APP --> DOMAIN["Domain rules"]
+    APP <--> PORTS["Ports"]
+    PORTS <--> ADAPTERS["PostgreSQL / MQTT / LLM adapters"]
+    APP <--> DB["PostgreSQL / TimescaleDB"]
+    WORKER["Persistent AI worker / MCP host"] --> LLM["Cloud LLM"]
+    WORKER -->|"MCP client"| MCP
+    WORKER --> DB
 ```
 
-The firmware collects fused sensor data and images. The server validates,
-persists, enriches, and distributes state. The frontend is a real-time control
-console for demonstration and debugging.
+## Responsibility boundaries
 
-## Components
+| Role | Owns | Must not own |
+| --- | --- | --- |
+| Firmware | sensing, hardware execution, local smoke rules, safety interlocks, command idempotency | cloud model calls, database queries, UI policy |
+| Server | device twin, protocol adapters, command lifecycle, automation policy, AI jobs, audit and trace | hardware timing loops, presentation state |
+| Web | state display, manual actions, configuration | direct MQTT, database or LLM access |
+| Cloud LLM | asynchronous analysis, reports and MCP tool selection | direct firmware or broker access |
 
-- ESP32-S3 firmware: reads SHT30, TVOC301, LM393, OV2640, button, display, SG90,
-  and beeper modules. It publishes status/telemetry/event/log messages to MQTT,
-  uploads JPEG images over HTTP, subscribes to command messages, and publishes
-  command acknowledgements. Smoke warnings and fusion-driven ventilation are
-  deterministic local safety rules: they do not wait for the gateway or LLM.
-- EMQX: MQTT broker for device-to-server and server-to-device messages. It is
-  also useful during demos because its dashboard exposes topic activity.
-- FastAPI AIoT Gateway: subscribes to MQTT with an asyncio-native client
-  (aiomqtt, automatic reconnect), exposes HTTP APIs, stores data in
-  TimescaleDB, saves images, calls the LLM provider, validates generated
-  commands, publishes commands to MQTT, and fans out updates over WebSocket.
-  Gateway singletons (MQTT client, autopilot) live on `app.state` and are
-  injected into routes with FastAPI dependencies.
-- TimescaleDB (PostgreSQL 16 + timescaledb): stores devices, telemetry,
-  events, commands, AI decisions, and image metadata. The `telemetry` table is
-  a hypertable partitioned on `sampled_at`; the schema is managed by Alembic
-  migrations.
-- Next.js console: reads initial state through HTTP (TanStack Query) and
-  receives live updates through WebSocket. A pure dispatcher maps each
-  WebSocket envelope onto the query cache.
+The firmware can reject any cloud command. Smoke and other safety behavior never waits for the server or model.
 
-## Contract Single Source
+## Server layers
 
-The HTTP/WebSocket wire contract is exported from the FastAPI app into
-`server/openapi.json` (`server/scripts/export_openapi.py`), which also embeds
-the `WsMessage` discriminated union used by the WebSocket stream. The
-frontend client under `web/src/lib/api-client/` is generated from that file
-with `@hey-api/openapi-ts` (`pnpm codegen`). Both artifacts are committed,
-and CI fails when either drifts from the code.
+- `app/domain`: pure command and patrol rules.
+- `app/application`: command, AI-run and policy use cases.
+- `app/ports`: interfaces required by the application layer.
+- `app/adapters`: PostgreSQL, outbox, MQTT, MCP, LLM and WebSocket implementations.
+- `app/api`: FastAPI transport only.
+- `app/main.py`: gateway dependency composition only.
+- `app/worker_main.py`: independent AI worker and patrol scheduler composition.
 
-## Data Flow
+`domain` and `application` cannot import FastAPI, SQLAlchemy, aiomqtt, the MCP SDK, HTTP model clients, or `app.adapters`. `tests/test_architecture.py` enforces this dependency direction.
 
-1. Firmware boots and publishes `devices/{device_id}/status` with `online`.
-2. Firmware publishes periodic telemetry to `devices/{device_id}/telemetry`.
-3. Server stores telemetry and broadcasts a WebSocket `telemetry` event.
-4. Firmware uploads images to `POST /api/devices/{device_id}/images`.
-5. An AI analysis starts from an explicit dashboard request, a pose-driven
-   lighting/sedentary workflow, or scheduled vision. Smoke and air-quality
-   telemetry never start an LLM call; firmware handles their immediate actions
-   and fixed SYN6288 announcements locally.
-6. Server broadcasts `ai_analyzing`, then calls the LLM provider with the
-   device snapshot and a recent telemetry trend. Ordinary analysis is always
-   text-only; only explicit or periodic vision analysis attaches a fresh JPEG.
-   The validated decision is
-   stored as an `ai_result` plus a command.
-7. If the command type is executable and its confidence passes the configured
-   gate, the server publishes it to `devices/{device_id}/command`; otherwise it
-   is kept as a pending suggestion. Either way an `ai_result` WebSocket event
-   is broadcast.
-8. Firmware executes the command and publishes `command_ack`.
-9. Server stores the acknowledgement and broadcasts a WebSocket `command_ack`
-   event.
-10. On demand, the dashboard calls `POST /api/devices/{device_id}/ai/report`
-    for an hour, day, or week. The server aggregates stored telemetry and
-    events, calculates data completeness, and asks the LLM for an auditable
-    health report with anomalies and prioritized actions.
+## Fast path and slow path
 
-In firmware `auto_first` mode, `fusion.recommend_open_window=true` opens a
-closed window and announces the action once. Recovery does not close the
-window automatically. Smoke announcements are edge-triggered and independent
-of Wi-Fi, MQTT, and the server autopilot switch.
+```mermaid
+sequenceDiagram
+    participant D as Device
+    participant S as Server core
+    participant W as AI worker
+    participant M as MCP tools
+    participant L as LLM
 
-The LLM integration is OpenAI-compatible (any provider exposing
-`chat/completions`), supports optional strict `json_schema` response formats,
-and offers a deterministic `mock` mode so the full closed loop can be
-demonstrated without network access or API keys.
+    D->>S: MQTT telemetry v2
+    S-->>D: manual command via outbox/MQTT
+    Note over D,S: telemetry and manual control never wait for the model
+    S->>W: persist ai_run (queued)
+    S-->>S: HTTP 202 immediately
+    W->>L: analysis with tool schemas
+    L-->>W: tool_call only
+    W->>M: MCP client call
+    M->>S: same application command use case
+    S-->>D: MQTT command
+    D-->>S: accepted, then terminal ACK
+```
 
-DeepSeek V4 uses the same transport. When thinking mode is enabled the gateway
-sends `thinking.type` and `reasoning_effort` and omits temperature. DeepSeek's
-text-only. If a provider rejects image input, the gateway marks that model as
-vision-unsupported and disables image-only controls instead of silently
-returning a text-only result.
+Every command is written together with its outbox row before MQTT publication. `trace_id` connects the HTTP request, AI run, MCP call, command events, MQTT envelope, firmware ACK and WebSocket event.
 
-## Deployment Topology
+## Versioned sources of truth
 
-Local demo deployment uses root `docker-compose.yml`:
+- `contracts/commands.json`: command name, parameters, safety class and AI exposure.
+- `contracts/mqtt-envelope.schema.json`: MQTT v2 envelope.
+- `contracts/device-capabilities.schema.json`: retained device capability payload.
+- `contracts/websocket-events.json`: WebSocket v2 event names.
+- `server/openapi.json`: HTTP `/api/v1` contract and generated WebSocket union.
 
-- `postgres`: TimescaleDB (PostgreSQL 16). The server container applies
-  Alembic migrations on start.
-- `emqx`: MQTT broker and dashboard.
-- `server`: FastAPI gateway on port 8000.
-- `web`: Next.js console on port 3000.
+Run `python tools/generate-contracts.py` after editing the command catalog. It generates the server Python catalog and firmware C header. CI runs the generator with `--check` and fails on drift.
 
-The ESP32-S3 connects to the host IP on MQTT port 1883 and HTTP port 8000.
+## Deployment boundary
 
-## Mainline Stance
+The gateway is one fixed single-process service containing HTTP, WebSocket, MQTT ingestion and the MCP server. AI workers are independent processes and may be safely scaled. `FOR UPDATE SKIP LOCKED` prevents concurrent claims; each claim also receives a unique `lease_token`. Every renewal, side-effect boundary and terminal update must still match `id + lease_owner + lease_token`, so a paused old Worker cannot resume after a newer Worker reclaimed the task. A separately fenced scheduler lease elects one patrol scheduler. PostgreSQL also carries Worker heartbeats and the realtime relay; Redis and Celery are not required.
 
-The repository keeps the current AIoT mainline only. New features target
-`server/`, `web/`, `infra/`, and `firmware/esp32s3/`. MQTT remains the device
-telemetry/control contract, and HTTP remains limited to images, health checks,
-and dashboard APIs.
+Outbox and realtime relay use the same fencing pattern. MQTT input is deduplicated by `(device_id, topic, message_id)`. This means database ownership, broker QoS 1 redelivery, firmware `command_id` replay and frontend `event_id` deduplication form four independent reliability layers rather than one optimistic lock.
+
+The browser and external clients use only `/api/v1`. There is no unversioned `/api` compatibility mount. Model provider settings and API keys are injected only into the worker; the gateway never creates an external LLM client.
+
+## Verification boundary
+
+The software architecture is covered by unit tests, Docker PostgreSQL/EMQX loops, two concurrent Workers, the firmware behavior simulator and ESP-IDF builds. Without a physical board, those checks do not prove USB enumeration, power integrity, actual GPIO wiring, PSRAM, camera timing, peripheral voltage levels or mechanical actuator movement.

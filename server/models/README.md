@@ -1,5 +1,9 @@
 # Vision models
 
+These assets provide deterministic image and pose preprocessing for `vision`
+AI Runs. The Gateway records perception data and queues work; it never calls a
+cloud model synchronously. Vision and report Runs receive read-only MCP tools.
+
 `pose_landmarker_full.task` is the official MediaPipe Pose Landmarker Full
 float16 bundle used by the gateway. It is committed so deployments never
 download or replace a model at runtime.
@@ -8,6 +12,10 @@ download or replace a model at runtime.
 - SHA-256: `4EAA5EB7A98365221087693FCC286334CF0858E2EB6E15B506AA4A7ECDCEC4AD`
 - Runtime path: `AIOT_POSE_MODEL_PATH`
 - The server never downloads or replaces this model at runtime.
+
+These are local perception models, not LLM provider models, and contain no
+provider credentials. Replacing either binary requires updating its SHA-256
+and rerunning image upload, pose, retention, and vision-run tests.
 
 `efficientdet_lite0_int8.tflite` is the official MediaPipe-compatible
 EfficientDet-Lite0 int8 object detector. The gateway restricts it to the COCO

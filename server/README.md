@@ -1,75 +1,72 @@
-# AIoT Gateway Server
+# IoTCmpt Server
 
-FastAPI gateway for the AIoT architecture.
+`server/` contains two independently started processes:
 
-Responsibilities:
+- **Gateway**: FastAPI, HTTP/WebSocket, MQTT ingestion, MCP Server, MQTT outbox publishing, and realtime relay.
+- **AI Worker**: model calls, MCP Host, reports, event decisions, patrol scheduling, and durable job recovery.
 
-- Subscribe to device MQTT topics (aiomqtt, single asyncio event loop with
-  automatic reconnect).
-- Store device status, telemetry, events, commands, AI results, and image
-  assets in TimescaleDB/PostgreSQL (telemetry is a hypertable).
-- Publish validated commands to MQTT.
-- Expose HTTP APIs for the web console; every endpoint declares a
-  `response_model`, and `openapi.json` is the committed API contract.
-- Broadcast live updates through WebSocket (`WsMessage` discriminated union).
-- Keep LLM provider credentials on the server side only.
+They share PostgreSQL/TimescaleDB. Only the Worker loads provider credentials and model settings, so an LLM outage does not stop telemetry, manual commands, or firmware-local safety.
 
-Tooling: dependencies are managed with uv (`pyproject.toml` + `uv.lock`),
-linting/formatting with Ruff, type checking with mypy, migrations with
-Alembic.
+## Boundaries
 
-## Local Run
+- `app/domain/`: framework-free device, command, AI-run, and policy rules.
+- `app/application/`: query, command, report, and diagnostic use cases.
+- `app/ports/`: database, MQTT, LLM, MCP, clock, and ID interfaces.
+- `app/adapters/`: SQLAlchemy, MQTT, MCP, model, outbox, and realtime implementations.
+- `app/api/`: FastAPI transport adapter.
+- `app/main.py`: Gateway composition.
+- `app/worker_main.py`: Worker composition.
 
-Requires the Docker `postgres` and `emqx` services from the repo root.
+HTTP, MQTT, and MCP enter the same application services. Adapters must not bypass command validation to publish MQTT directly. `tests/test_architecture.py` enforces the import direction.
+
+## Reliable jobs
+
+AI Runs, MQTT Outbox messages, and Realtime Events use PostgreSQL row leases. Each claim gets a unique `lease_token`; renew, complete, fail, and retry operations match `id + lease_owner + lease_token`. A stale worker therefore cannot commit side effects after losing ownership.
+
+AI control idempotency is derived from `run_id + round + call_index`, so a Worker retry cannot create a second hardware command. Cancellation and lease ownership are rechecked before model calls, MCP calls, and final completion.
+
+## Local run
+
+Start root Docker `postgres` and `emqx`, then use two PowerShell 7 windows:
 
 ```powershell
 cd server
 uv sync
-Copy-Item .env.example .env   # enables AIOT_MQTT_ENABLED=true for direct runs
+Copy-Item .env.example .env
 uv run alembic upgrade head
 uv run python run_dev.py
 ```
 
-`run_dev.py` starts uvicorn with the Windows `SelectorEventLoop` policy that
-aiomqtt requires. Without a `.env`, `AIOT_MQTT_ENABLED` defaults to `false`
-and the gateway starts without MQTT ingestion (no error is raised).
-
-## Test and Checks
-
 ```powershell
 cd server
-uv run pytest
+uv run python run_worker.py
+```
+
+The Gateway remains single-process; Workers may scale. Docker Compose starts both services. Generate the shared, browser-inaccessible `AIOT_MCP_INTERNAL_TOKEN` with the setup panel.
+
+## Interfaces and diagnostics
+
+- Application HTTP is versioned under `/api/v1`.
+- MCP is Streamable HTTP at `/mcp`; external access is off by default and read/control tokens must differ.
+- WebSocket v2 is `/ws/devices/{device_id}`.
+- `/health/ready` reports database, MQTT, Worker, MCP, and migration state. A Worker outage degrades readiness without disabling manual control.
+- `/api/v1/diagnostics/overview` exposes non-secret queue, heartbeat, MCP, and capability state.
+- `/api/v1/diagnostics/traces/{trace_id}` returns the ordered cross-component timeline.
+
+## Migrations
+
+Only add revisions under `alembic/versions/`; never edit an applied migration. `0006` introduces architecture v2, `0007` performs the reliable-worker cutover and legacy AI migration, and `0008` adds lease fencing and MQTT inbox idempotency.
+
+## Checks and generation
+
+```powershell
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy app
-```
-
-The test suite must run without PostgreSQL or EMQX. It uses SQLite and
-disables MQTT through environment overrides in `tests/conftest.py`.
-
-## API Contract
-
-After changing schemas or routes, re-export the OpenAPI document and
-regenerate the frontend client:
-
-```powershell
+uv run pytest
 uv run python scripts/export_openapi.py
 cd ..\web
 pnpm codegen
 ```
 
-CI (`.github/workflows/server.yml`) fails when `openapi.json` or the
-generated client drifts from the code.
-
-## Migrations
-
-Schema changes go through Alembic (`alembic/versions/`). `0001` creates the
-initial schema; `0002` converts `telemetry` into a TimescaleDB hypertable.
-Apply with `uv run alembic upgrade head`. The Docker image runs
-`alembic upgrade head` on start; `AIOT_AUTO_CREATE_TABLES` stays `false`
-whenever migrations manage the schema.
-
-## Environment
-
-Copy `.env.example` to `.env` for local direct-run configuration. Keep real
-LLM keys and MQTT credentials out of source control.
+Unit tests use SQLite and do not require PostgreSQL or EMQX. Dual-Worker leases and full MQTT loops are Docker integration tests. Never commit real `.env` files, provider keys, MCP tokens, or broker credentials.

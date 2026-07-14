@@ -1,223 +1,156 @@
 # AGENTS.md
 
-## Command Rules
+## Workspace rules
 
-- Run PowerShell commands with PowerShell 7:
-  `C:\Program Files\PowerShell\7\pwsh.exe`.
-- This root directory is the workspace Git repository. Check nested reference
-  repositories separately before using Git commands inside them.
-- The repository may have user edits in progress. Inspect `git status --short`
-  before changing files, and do not revert unrelated changes.
-- Prefer `rg` / `rg --files` for source discovery when available.
+- Use PowerShell 7 (`C:\Program Files\PowerShell\7\pwsh.exe`) for Windows commands.
+- This directory is the Git root. Inspect `git status --short` before edits and preserve unrelated work.
+- Prefer `rg` and `rg --files` for discovery.
+- The active mainline is `contracts/`, `docs/`, `firmware/esp32s3/`, `server/`, `web/`, `infra/`, root `docker-compose.yml`, and the local tools under `tools/`.
+- Treat `docs/architecture.md`, protocol documents, `contracts/*.json`, and `server/openapi.json` as implementation contracts.
 
-## Current Mainline
+## Current architecture
 
-- This repository now keeps only the AIoT mainline:
-  `docs/`, `server/`, `web/`, `infra/`, `firmware/esp32s3/`, and root
-  `docker-compose.yml`.
-- Older `backend/`, `s3-sensor-cloud/`, `legacy/`, and compatibility-era HTTP
-  sensor upload paths are historical only. Do not route new work there unless an
-  older branch or restored checkout actually contains them.
-- Treat `docs/architecture.md`, `docs/protocol-mqtt.md`,
-  `docs/protocol-http.md`, `docs/protocol-websocket.md`, and
-  `docs/data-model.md` as the implementation contract.
-- MQTT is the telemetry/control backbone. HTTP is for health checks, dashboard
-  APIs, manual actions, AI analysis triggers, and JPEG image upload.
-- The end-to-end loop is:
-  ESP32-S3 sensing -> MQTT telemetry -> FastAPI gateway -> LLM decision ->
-  MQTT command -> device action -> WebSocket dashboard.
+IoTCmpt is a modular monolith at the Gateway boundary with a separate durable AI Worker process:
 
-## System Responsibilities
+```text
+ESP32-S3 / firmware simulator <-- MQTT v2 --> Gateway <-- HTTP v1 / WS v2 --> Web
+                                              ^
+                                              +-- MCP /mcp <-- AI Worker --> LLM
+                                                        |
+                                      PostgreSQL / TimescaleDB
+```
 
-- `firmware/esp32s3/` is the ESP-IDF firmware for ESP32-S3-DevKitC-1.
-- `server/` is the FastAPI AIoT gateway. It owns MQTT ingestion, HTTP APIs,
-  TimescaleDB/PostgreSQL writes, image storage, LLM provider calls, JSON
-  command validation, MQTT command publishing, and WebSocket fanout.
-- `web/` is a Next.js real-time control console, not a marketing landing page.
-  The first screen should remain the working dashboard.
-- `infra/` documents local deployment targets and service configuration.
-- Root `docker-compose.yml` is the default local stack: TimescaleDB
-  (PostgreSQL 16), EMQX, FastAPI server, and Next.js web console.
+- Firmware owns sensing, actuators, local smoke safety, priority and command idempotency.
+- Gateway owns HTTP, WebSocket, MQTT ingestion, MCP Server, device state, command lifecycle, outbox and trace relay.
+- Worker owns model calls, reports, event analysis and patrol scheduling. It reaches device operations only through MCP.
+- Web owns presentation, manual actions and per-device policy configuration. It never connects to MQTT, PostgreSQL or an LLM.
+- PostgreSQL is the durable coordination layer. AI Run, MQTT outbox and realtime relay claims use owner plus unique `lease_token` fencing.
 
-## Protocol Contract
+## Protocol contract
 
-- MQTT topics:
-  `devices/{device_id}/status`,
-  `devices/{device_id}/telemetry`,
-  `devices/{device_id}/event`,
-  `devices/{device_id}/command`,
-  `devices/{device_id}/command_ack`, and
-  `devices/{device_id}/log`.
-- Default demo device id is `esp32s3-001`.
-- Server HTTP/WebSocket entry points include:
-  `GET /health`, `GET /api/devices`,
-  `GET /api/devices/{device_id}/latest`,
-  `GET /api/devices/{device_id}/history`,
-  `GET /api/devices/{device_id}/history/bucketed`,
-  `POST /api/devices/{device_id}/images`,
-  `POST /api/devices/{device_id}/commands`,
-  `GET/POST /api/devices/{device_id}/notifications`,
-  `POST /api/devices/{device_id}/ai/analyze`,
-  `GET/PUT /api/devices/{device_id}/autopilot`, and
-  `WS /ws/devices/{device_id}`.
-- Firmware must publish command acknowledgements with `executed`, `rejected`,
-  or `failed`. Unsupported commands should be rejected, not silently executed.
-- The frontend reads initial state through HTTP and then applies WebSocket
-  envelopes. It must not connect directly to PostgreSQL or MQTT.
+MQTT v2 topics:
 
-## LLM and Autopilot
+- `devices/{device_id}/status`
+- `devices/{device_id}/capabilities`
+- `devices/{device_id}/telemetry`
+- `devices/{device_id}/event`
+- `devices/{device_id}/command`
+- `devices/{device_id}/command_ack`
+- `devices/{device_id}/log`
 
-- Keep all LLM provider integration in `server/`; firmware and frontend must
-  not call external LLM providers directly.
-- LLM integration is OpenAI-compatible `chat/completions`. Ordinary analysis is
-  text-only; only explicit and scheduled vision analysis may attach a fresh JPEG.
-- `AIOT_LLM_ENDPOINT=mock` is the deterministic offline/demo mode and should
-  keep the full AI decision loop testable without network access or API keys.
-- AI-generated commands are persisted before publishing. Only executable
-  high-confidence commands are sent to MQTT; low-confidence decisions remain
-  pending suggestions.
-- Autopilot state is per-device and in-memory. It resets from
-  `AIOT_AUTOPILOT_ENABLED` on server restart.
+Every message uses the v2 envelope from `contracts/mqtt-envelope.schema.json`. Firmware accepts only v2 commands. Commands are validated against `contracts/commands.json`, acknowledged first as `accepted`, then as `executed`, `rejected`, or `failed`. Repeated `command_id` values replay the stored terminal ACK without repeating hardware work.
 
-## Firmware Build and Boundaries
+Application APIs are versioned under `/api/v1`; there is no active unversioned compatibility API. Important entry points:
 
-- Firmware mainline is `firmware/esp32s3/`.
-- From the repository root, use PowerShell 7 and build with:
+- `GET /health`, `GET /health/ready`
+- `GET /api/v1/devices`
+- `GET /api/v1/devices/{device_id}/latest`
+- `GET /api/v1/devices/{device_id}/history`
+- `GET /api/v1/devices/{device_id}/capabilities`
+- `POST /api/v1/devices/{device_id}/commands`
+- `POST /api/v1/devices/{device_id}/images`
+- `POST /api/v1/devices/{device_id}/ai/runs`
+- `GET/PUT /api/v1/devices/{device_id}/automation-policy`
+- `GET /api/v1/diagnostics/overview`
+- `GET /api/v1/diagnostics/traces/{trace_id}`
+- `POST /mcp` (Streamable HTTP with scoped bearer tokens)
+- `WS /ws/devices/{device_id}`
 
-  ```powershell
-  cd firmware\esp32s3
-  idf.py -B build build
-  ```
+AI Run creation always returns `202` and continues asynchronously. Active states include `queued`, `running`, `waiting_model`, `calling_tool`, and `waiting_device`; terminal states are `succeeded`, `failed`, `cancelled`, and `skipped`.
 
-- The current checkout does not contain `scripts/build.ps1`; do not cite it as
-  the active build entrypoint unless that script is restored and verified.
-- Primary framework is ESP-IDF v5.5.2. Prefer the EIM/VS Code ESP-IDF setup if
-  present; otherwise use the active shell's ESP-IDF environment.
-- Default firmware configuration disables Wi-Fi, MQTT, image upload, camera,
-  display, actuators, and button modules so the project can compile without
-  local credentials or attached hardware.
-- Enable runtime features through `idf.py menuconfig` or a local `sdkconfig`.
-  Do not commit local `sdkconfig` or secrets.
-- Keep `app_main` as an orchestrator: load config, initialize modules, and start
-  tasks. Do not collapse hardware logic into one monolithic function.
-- Keep local runtime state in `main/state/`; do not store manual
-  override/window/alarm state inside sensor samples.
-- `main/Kconfig` user-facing titles are intentionally Chinese. Do not rename
-  `APP_*` config symbols without updating all dependent C code.
-- OV2640 camera configuration currently uses PWDN, SIOD/SIOC, D0-D7, VSYNC,
-  HREF, and PCLK. Do not invent unsupported camera pins or Kconfig symbols
-  without matching hardware and source changes.
+## Server workflow
 
-## Server Workflow
+Dependencies are managed with uv (`server/pyproject.toml` and `server/uv.lock`). Direct development requires PostgreSQL and EMQX:
 
-- Dependencies are managed with uv (`server/pyproject.toml` + `server/uv.lock`).
-  Direct local run (requires the Docker `postgres` + `emqx` services):
+```powershell
+cd server
+uv sync
+Copy-Item .env.example .env
+uv run alembic upgrade head
+uv run python run_dev.py
+# second PowerShell window
+uv run python run_worker.py
+```
 
-  ```powershell
-  cd server
-  uv sync
-  Copy-Item .env.example .env   # enables AIOT_MQTT_ENABLED=true
-  uv run alembic upgrade head
-  uv run python run_dev.py
-  ```
+The Gateway must stay single-process. Worker processes may scale horizontally. Provider keys and model settings belong only to the Worker. `AIOT_LLM_ENDPOINT=mock` must exercise the same persistent AI -> MCP -> command path as an online provider.
 
-- `run_dev.py` starts uvicorn with the Windows `SelectorEventLoop` policy that
-  aiomqtt requires. Without a `.env`, `AIOT_MQTT_ENABLED` defaults to `false`
-  and the gateway starts silently without MQTT ingestion.
-- Server checks:
+Server checks:
 
-  ```powershell
-  cd server
-  uv run ruff check .
-  uv run ruff format --check .
-  uv run mypy app
-  uv run pytest
-  ```
+```powershell
+cd server
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy app
+uv run pytest
+```
 
-- Tests must run without PostgreSQL or EMQX. They use SQLite and environment
-  overrides from `server/tests/conftest.py`.
-- Schema changes go through Alembic (`server/alembic/versions/`); keep
-  `AIOT_AUTO_CREATE_TABLES=false` wherever migrations own the schema. The
-  `telemetry` table is a TimescaleDB hypertable (migration `0002`).
-- After changing schemas or routes, regenerate the API contract:
-  `uv run python scripts/export_openapi.py`, then `pnpm codegen` in `web/`.
-  CI fails on drift between code, `server/openapi.json`, and
-  `web/src/lib/api-client/`.
-- Configuration uses `AIOT_*` environment variables and `server/.env` for local
-  direct runs. Keep real `.env` files untracked.
+Tests default to SQLite and must not require PostgreSQL or EMQX. Concurrency, migrations and end-to-end behavior additionally require the Docker stack. Schema changes use new Alembic revisions; do not edit an applied revision.
 
-## Web Workflow
+After route or schema changes:
 
-- Direct local run:
+```powershell
+cd server
+uv run python scripts/export_openapi.py
+cd ..\web
+pnpm codegen
+```
 
-  ```powershell
-  cd web
-  pnpm install
-  pnpm dev
-  ```
+Never hand-edit `web/src/lib/api-client/`.
 
-- Verification:
+## Firmware workflow and board boundary
 
-  ```powershell
-  cd web
-  pnpm lint
-  pnpm format:check
-  pnpm typecheck
-  pnpm build
-  ```
+Firmware mainline is `firmware/esp32s3/`, targeting ESP-IDF 5.5.2. Build after loading the ESP-IDF environment:
 
-- The app uses Next.js 15, React 19, TypeScript, Tailwind CSS v4 (CSS-first
-  `@theme` in `src/app/globals.css`), shadcn/ui (`src/components/ui/`),
-  TanStack Query, Recharts, and lucide-react. Keep UI work dashboard-first and
-  consistent with the existing component structure under
-  `web/src/components/`.
-- Data flow: initial reads go through TanStack Query; WebSocket envelopes are
-  applied to the query cache by `src/lib/ws-dispatcher.ts`. Do not reintroduce
-  ad-hoc `useEffect` fetching.
-- `src/lib/api-client/` is generated from `server/openapi.json` by
-  `@hey-api/openapi-ts`. Never edit it by hand; run `pnpm codegen`.
-- Use `NEXT_PUBLIC_API_BASE_URL` when the FastAPI server is not on
-  `http://localhost:8000`.
+```powershell
+cd firmware\esp32s3
+idf.py -B build build
+```
 
-## Quality Gates
+- `app_main` composes modules; drivers, state, local rules, protocol and command registry remain separate.
+- Default configuration is safe and compile-oriented: physical modules, networking, image upload and simulated sensor data are disabled.
+- `configs/full-hardware.defaults` is a compile-check profile, not a flash-ready board profile.
+- Real-board configuration must pass duplicate-GPIO, native-USB GPIO19/20 and octal-PSRAM GPIO35-37 checks.
+- OV2640 currently uses the verified PWDN-only design with `pin_xclk=-1`; do not invent a clock pin without board evidence.
+- Local `sdkconfig` contains machine-specific addresses and may contain credentials. Never commit it.
 
-- `pre-commit run --all-files` must pass (end-of-file/whitespace/YAML checks,
-  Ruff lint + format, Prettier, clang-format).
-- GitHub Actions: `.github/workflows/server.yml` (Ruff, mypy, pytest, and an
-  OpenAPI codegen-drift job), `web.yml` (lint, format, typecheck, build), and
-  `firmware.yml` (ESP-IDF build).
+Compilation and simulation do not prove USB enumeration, power integrity, actual GPIO wiring, PSRAM, camera timing, display, voice, sensor levels or mechanical actuator movement. State those limitations plainly whenever no physical board was tested.
 
-## Local Stack
+## Firmware simulator and setup panel
 
-- Start the full local demo stack from the repository root:
+`tools/simulate-device.py` starts the lightweight firmware behavior simulator. Its implementation lives in `tools/firmware_simulator/` and shares generated behavior/command contracts with firmware.
 
-  ```powershell
-  docker compose up --build
-  ```
+```powershell
+server\.venv\Scripts\python.exe tools\simulate-device.py --scenario normal
+```
 
-- Default local services:
-  TimescaleDB/PostgreSQL `localhost:5432`, EMQX MQTT `localhost:1883`, EMQX
-  dashboard `http://localhost:18083`, FastAPI `http://localhost:8000`, Next.js
-  `http://localhost:3000`.
-- Default EMQX dashboard credentials are `admin / public`; anonymous MQTT is
-  only acceptable for the first local demo stack.
-- For real device demos on the same Wi-Fi, configure firmware targets with the
-  laptop IP: MQTT `<laptop-ip>:1883` and image/API base
-  `http://<laptop-ip>:8000`.
+Scenarios are `normal`, `air-watch`, `air-alert`, and `smoke`. It uses real MQTT/HTTP, a 100 ms local safety loop, command queueing, ACK replay and simulated NVS under `.runtime/firmware-simulator/`. It is for integration and demos, not electrical validation.
 
-## Secrets and Generated Files
+The setup panel is started by `启动配置面板.cmd`, listens only on `127.0.0.1:8765`, and protects writes with a per-process Panel Token. `config/runtime-config.json` is the configuration catalog and `tools/runtime_config.py` is the only writer for root/server/web environment files. Secrets are displayed only as “已配置”. Per-device automation policies belong in the Web console, not startup configuration.
 
-- Do not put LLM API keys, Wi-Fi credentials, MQTT credentials, cloud tokens, or
-  non-demo database passwords in firmware, frontend, docs, or committed config.
-- Do not commit build outputs, `managed_components/`, `sdkconfig*`, binaries,
-  uploaded images, captured images, virtual environments, frontend build
-  output, database files, or local SDK/reference checkouts.
-- Committed generated artifacts are intentional exceptions: keep
-  `server/openapi.json`, `web/src/lib/api-client/`, and
-  `firmware/esp32s3/dependencies.lock` (pins ESP-IDF component versions)
-  tracked, and refresh them through their generators rather than editing by
-  hand.
-- `references/` is ignored and may contain large local SDK/reference clones.
-  Treat it as local support material unless the user explicitly asks otherwise.
-- Keep `.agents/`, `.codex/`, `.claude/`, local `.env` files, logs, and editor
-  transients out of committed project state.
+## Web workflow
+
+```powershell
+cd web
+pnpm install
+pnpm dev
+
+pnpm lint
+pnpm format:check
+pnpm typecheck
+pnpm build
+pnpm test:e2e
+```
+
+The app uses Next.js 15, React 19, TypeScript, Tailwind CSS v4, shadcn/ui, TanStack Query and Recharts. `/` is the operational dashboard, `/admin` is the counselor product view, and `/diagnostics` is the non-secret engineering view.
+
+Initial state is loaded through HTTP. WebSocket v2 events update Query Cache through `web/src/lib/ws-dispatcher.ts`; `event_id` deduplication and irreversible terminal command status must be preserved. Reconnect invalidates snapshots, commands, capabilities, AI Runs and policy queries.
+
+## Quality gates and cleanup
+
+```powershell
+python tools/generate-contracts.py --check
+pre-commit run --all-files
+docker compose up --build
+```
+
+Do not commit `.env`, `web/.env.local`, firmware `sdkconfig`, credentials, `.runtime/`, build directories, `managed_components/`, `.next/`, `*.tsbuildinfo`, caches, uploads, local SDKs or test output. Intentionally tracked generated artifacts are `server/openapi.json`, `web/src/lib/api-client/`, firmware generated headers and `firmware/esp32s3/dependencies.lock`.

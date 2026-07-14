@@ -1,26 +1,31 @@
 # Hardware loop reproduction
 
-The simulator exercises the production MQTT, HTTP, database, WebSocket, and
-command-ack paths. It does not bypass the gateway with browser-only mock data.
-Every scenario produces bounded, deterministic fluctuations for temperature,
-humidity, TVOC, formaldehyde, and eCO2 instead of publishing frozen values.
+The lightweight firmware behavior simulator exercises the production MQTT,
+HTTP, database, WebSocket, and command-ack paths. It does not bypass the
+gateway with browser-only mock data. Scenarios generate only bounded raw sensor
+values; the shared firmware behavior contract drives fusion, local safety,
+command queueing, terminal ACK replay, and control priority.
 
 1. Start the stack with `AIOT_LLM_ENDPOINT=mock docker compose up --build`.
 2. In another PowerShell 7 terminal, run:
 
    ```powershell
    server\.venv\Scripts\python.exe tools\simulate-device.py --scenario normal
+   server\.venv\Scripts\python.exe tools\simulate-device.py --scenario air-watch
    server\.venv\Scripts\python.exe tools\simulate-device.py --scenario air-alert
    server\.venv\Scripts\python.exe tools\simulate-device.py --scenario smoke
    ```
 
-3. Open `http://localhost:3000` and verify telemetry, image upload, pose state,
+3. Open `http://localhost:3000` and verify telemetry, periodic image upload, pose state,
    smoke events, LED/window/alarm commands, control-priority changes, manual
    lock release, command acknowledgements, and the report generated from
    persisted samples.
 
 The one-pixel built-in JPEG verifies image transport and the no-person pose
-path. Pass `--image <jpeg>` to exercise a real person/posture image.
+path. It is uploaded every 30 seconds by default. Pass `--image <jpeg>` to
+exercise a real person/posture image, `--no-image` to disable it, or use the
+startup panel to change scenario and intervals. Simulated NVS lives under
+`.runtime/firmware-simulator/<device-id>/` and is intentionally untracked.
 
 Firmware compile-only full feature profile:
 
@@ -44,3 +49,28 @@ temporary directory and are removed afterward, so the repository keeps only
 the normal `firmware/esp32s3/build` directory. The compatibility profile drives
 the LED on GPIO41; the normal default remains logical-only until GPIO mode is
 explicitly enabled.
+
+## Current build evidence
+
+With ESP-IDF 5.5.2, the safe default profile built to about `0xdf4a0` with 40%
+of the application partition free. The isolated full compile profile built to
+about `0x10d980` with 28% free. These figures are evidence for this revision,
+not permanent limits; always use the newest build output.
+
+## Real-board checklist
+
+Do not flash an unknown board from the full compile profile. Before flashing:
+
+1. Record the exact ESP32-S3 module, flash size, PSRAM type, USB wiring and board revision.
+2. Draw the actual pin map and run the panel preflight. Resolve every duplicate GPIO, native-USB GPIO19/20 conflict and octal-PSRAM GPIO35-37 conflict.
+3. Confirm 3.3 V/5 V requirements, common ground and separate actuator power where needed.
+4. Keep the current OV2640 PWDN-only, `pin_xclk=-1` arrangement unless the physical schematic proves another clock source.
+5. Put Wi-Fi, MQTT and image URLs only in local `sdkconfig`; use the laptop LAN address, not `localhost`.
+6. Flash once with peripheral modules disabled, verify USB/serial boot and Wi-Fi, then enable modules in small groups.
+7. Verify retained status/capabilities, telemetry, image upload, `accepted` and terminal ACK, duplicate `command_id`, command TTL and Wi-Fi/MQTT reconnect.
+8. Test smoke handling with cloud services stopped. The local alarm and safety veto must still work.
+9. Test manual priority before AI/MCP commands, and observe physical window/LED/alarm behavior rather than trusting the UI alone.
+
+This repository revision has no physical-board result. USB/serial, power,
+real GPIO, PSRAM, OV2640 timing, display, voice, sensor voltage/logic levels and
+mechanical actuator movement remain explicitly unverified.

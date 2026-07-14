@@ -11,7 +11,7 @@ The first screen is the working dashboard (bento grid layout):
 - current sensor values with sparklines
 - live telemetry chart (raw and time-bucketed history)
 - latest image
-- AI decision panel with per-device autopilot switch
+- AI task history and per-device automation policy controls
 - manual command controls
 - live event stream
 - persisted dorm notifications with optional SYN6288 voice status
@@ -19,13 +19,18 @@ The first screen is the working dashboard (bento grid layout):
 The resident dashboard remains at `/`. The counselor-facing management and
 notification page is available at `/admin`; its `映雪3-301` live panel maps to
 the demo device `esp32s3-001`, while other prototype rooms are visibly marked
-as demo data.
+as demo data. `/diagnostics` is a separate non-secret engineering page for
+queue counts, Worker heartbeat, MCP state, device capabilities, and trace
+timelines.
 
 Data flow: initial state is fetched over HTTP with TanStack Query; after
 that, WebSocket envelopes from `WS /ws/devices/{device_id}` are written into
 the query cache by `src/lib/ws-dispatcher.ts` (a pure function over the
 `WsMessage` discriminated union). The socket reconnects with exponential
-backoff (`src/hooks/use-device-socket.ts`).
+backoff (`src/hooks/use-device-socket.ts`). The dispatcher performs bounded
+per-device `event_id` deduplication, does not append duplicate telemetry, and
+never lets a late event regress a terminal command status. Reconnect refreshes
+snapshots, commands, capabilities, AI Runs, and automation policy.
 
 ## API Client (generated)
 
@@ -57,6 +62,7 @@ pnpm lint
 pnpm format:check
 pnpm typecheck
 pnpm build
+pnpm test:e2e
 ```
 
 On Windows, if `node` is not on `PATH`, install Node.js LTS or run through a
