@@ -127,7 +127,7 @@ class AutopilotIn(BaseModel):
     enabled: bool | None = None
     vision_interval_enabled: bool | None = None
     vision_interval_seconds: float | None = Field(default=None, ge=30, le=3600)
-    sedentary_threshold_seconds: float | None = Field(default=None, ge=30, le=28800)
+    sedentary_threshold_seconds: float | None = Field(default=None, ge=5, le=28800)
     smoke_silence_seconds: int | None = Field(default=None, ge=10, le=600)
 
 
@@ -290,7 +290,10 @@ class AutopilotState(BaseModel):
     enabled: bool
     cooldown_seconds: float
     min_confidence: float
-    trigger_levels: list[str]
+    trigger_levels: list[str] = Field(
+        description="Deprecated: 空气质量与烟雾自动规则已移至固件；保留此字段仅用于兼容旧客户端。",
+        json_schema_extra={"deprecated": True},
+    )
     vision_capability: Literal["unknown", "supported", "unsupported"]
     vision_interval_enabled: bool
     vision_interval_effective: bool

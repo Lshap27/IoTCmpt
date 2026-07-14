@@ -17,7 +17,8 @@ console for demonstration and debugging.
 - ESP32-S3 firmware: reads SHT30, TVOC301, LM393, OV2640, button, display, SG90,
   and beeper modules. It publishes status/telemetry/event/log messages to MQTT,
   uploads JPEG images over HTTP, subscribes to command messages, and publishes
-  command acknowledgements.
+  command acknowledgements. Smoke warnings and fusion-driven ventilation are
+  deterministic local safety rules: they do not wait for the gateway or LLM.
 - EMQX: MQTT broker for device-to-server and server-to-device messages. It is
   also useful during demos because its dashboard exposes topic activity.
 - FastAPI AIoT Gateway: subscribes to MQTT with an asyncio-native client
@@ -49,11 +50,10 @@ and CI fails when either drifts from the code.
 2. Firmware publishes periodic telemetry to `devices/{device_id}/telemetry`.
 3. Server stores telemetry and broadcasts a WebSocket `telemetry` event.
 4. Firmware uploads images to `POST /api/devices/{device_id}/images`.
-5. An AI analysis starts in one of two ways:
-   - automatically ("autopilot"): incoming telemetry matches the trigger rules
-     (`fusion.air_quality` in the configured levels, or `fusion.alarm_enabled`),
-     the per-device switch is on, and the cooldown has expired; or
-   - manually: the frontend calls `POST /api/devices/{device_id}/ai/analyze`.
+5. An AI analysis starts from an explicit dashboard request, a pose-driven
+   lighting/sedentary workflow, or scheduled vision. Smoke and air-quality
+   telemetry never start an LLM call; firmware handles their immediate actions
+   and fixed SYN6288 announcements locally.
 6. Server broadcasts `ai_analyzing`, then calls the LLM provider with the
    device snapshot and a recent telemetry trend. Ordinary analysis is always
    text-only; only explicit or periodic vision analysis attaches a fresh JPEG.
@@ -70,6 +70,11 @@ and CI fails when either drifts from the code.
     for an hour, day, or week. The server aggregates stored telemetry and
     events, calculates data completeness, and asks the LLM for an auditable
     health report with anomalies and prioritized actions.
+
+In firmware `auto_first` mode, `fusion.recommend_open_window=true` opens a
+closed window and announces the action once. Recovery does not close the
+window automatically. Smoke announcements are edge-triggered and independent
+of Wi-Fi, MQTT, and the server autopilot switch.
 
 The LLM integration is OpenAI-compatible (any provider exposing
 `chat/completions`), supports optional strict `json_schema` response formats,

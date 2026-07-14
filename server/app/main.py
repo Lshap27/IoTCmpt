@@ -43,21 +43,18 @@ async def lifespan(app: FastAPI):
     pose_service.result_handler = autopilot.on_pose_result
 
     async def handle_mqtt_message(topic: str, payload: dict[str, Any]) -> None:
-        # DB writes stay on a worker thread; broadcast and autopilot run on the event loop.
+        # DB writes stay on a worker thread; smoke/air rules run locally in firmware, so MQTT ingress only broadcasts.
         envelope = await asyncio.to_thread(_ingest_sync, topic, payload)
         if envelope is None:
             return
         await manager.broadcast(envelope.device_id, envelope.model_dump(mode="json"))
-        if envelope.type == "telemetry":
-            autopilot.maybe_trigger(envelope.device_id, envelope.payload)
-        elif envelope.type == "event" and envelope.payload.get("type") == "smoke.detected":
-            autopilot.trigger_smoke(envelope.device_id)
 
     mqtt_service.start(handle_mqtt_message)
     await pose_service.start()
     app.state.mqtt_service = mqtt_service
     app.state.autopilot = autopilot
     app.state.pose_service = pose_service
+    app.state.mqtt_message_handler = handle_mqtt_message
     yield
     await pose_service.stop()
     await mqtt_service.stop()

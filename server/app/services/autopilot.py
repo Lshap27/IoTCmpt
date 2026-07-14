@@ -19,10 +19,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 class AutoPilot:
-    """遥测驱动的自动决策闭环：触发规则 + 冷却期 + 每设备开关。
+    """姿态与定时视觉驱动的自动决策闭环。
 
-    注意：不以 manual_override 作为跳过条件——云端开/关窗命令会让固件进入
-    manual_override，若据此跳过，首次自动动作之后闭环就会自锁。
+    烟雾报警和空气质量通风由固件本地规则直接处理，不在这里调用 LLM。
     """
 
     def __init__(self, settings: Settings, llm: LLMService, mqtt_service: MqttGateway | None = None) -> None:
@@ -39,7 +38,6 @@ class AutoPilot:
         self._smoke_silence_seconds: dict[str, int] = {}
         self._vision_capability = "unknown"
         self._last_vision_run: dict[str, float] = {}
-        self._last_air_quality: dict[str, str] = {}
         self._lighting_state: dict[str, tuple[bool, bool | None]] = {}
         self._sedentary_started: dict[str, float] = {}
         self._sedentary_announced: set[str] = set()
@@ -89,42 +87,6 @@ class AutoPilot:
             "smoke_silence_seconds": self._smoke_silence_seconds.get(device_id, self.settings.smoke_silence_seconds),
         }
 
-    def evaluate_trigger(self, telemetry_payload: dict[str, Any]) -> str | None:
-        fusion = telemetry_payload.get("fusion") or {}
-        air_quality = fusion.get("air_quality")
-        if air_quality in self.settings.autopilot_trigger_levels:
-            return f"air_quality={air_quality}"
-        if fusion.get("alarm_enabled"):
-            return "alarm_enabled"
-        return None
-
-    def should_run(self, device_id: str, telemetry_payload: dict[str, Any]) -> str | None:
-        """检查开关、触发规则与冷却期；通过则返回触发原因（冷却期由 run_once 实际开跑时记账）。"""
-        if not self.is_enabled(device_id):
-            return None
-        trigger = self.evaluate_trigger(telemetry_payload)
-        if trigger is None:
-            return None
-        now = time.monotonic()
-        last = self._last_run.get(device_id)
-        if last is not None and now - last < self.settings.autopilot_cooldown_seconds:
-            return None
-        return trigger
-
-    def maybe_trigger(self, device_id: str, telemetry_payload: dict[str, Any]) -> None:
-        """在事件循环内调用：命中触发条件时调度后台分析任务。"""
-        fusion = telemetry_payload.get("fusion") or {}
-        current = str(fusion.get("air_quality") or "unknown")
-        previous = self._last_air_quality.get(device_id)
-        self._last_air_quality[device_id] = current
-        trigger = self.should_run(device_id, telemetry_payload)
-        if trigger is None:
-            return
-        intent = "air_change" if previous == "good" and current in {"watch", "alert"} else "general"
-        task = asyncio.create_task(self.run_once(device_id, trigger, analysis_intent=intent))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
-
     def maybe_trigger_vision(self, device_id: str, image_path: Path) -> None:
         state = self.describe(device_id)
         if not state["vision_interval_effective"]:
@@ -136,11 +98,6 @@ class AutoPilot:
         task = asyncio.create_task(
             self.run_once(device_id, "vision_interval", image_path=image_path, analysis_intent="vision_interval")
         )
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
-
-    def trigger_smoke(self, device_id: str) -> None:
-        task = asyncio.create_task(self.run_once(device_id, "smoke", analysis_intent="smoke"))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 

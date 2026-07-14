@@ -82,14 +82,15 @@ panel and does not expose a public FastAPI administration route.
 The four supported combinations are Virtual Device + Mock AI (recommended
 offline demo), Virtual Device + Online LLM, Real ESP32-S3 + Mock AI, and Real
 ESP32-S3 + Online LLM. The default air-alert simulator publishes real MQTT
-telemetry/events; the backend persists them, runs Mock AI, publishes autopilot
-commands, and receives command acknowledgements from the simulator. It is not
-frontend-only sample data.
+telemetry/events for persistence and live dashboards; manual AI analysis
+remains available. On real firmware, smoke warnings and automatic ventilation
+run locally without an LLM or network dependency.
 
-Risky settings are constrained: autopilot levels are selected from `good`,
-`watch`, and `alert`, confidence is limited to `0..1`, and device IDs, URLs,
-intervals, and dependent firmware fields are validated in both the browser and
-backend/tooling.
+Risky settings are constrained: confidence is limited to `0..1`, and device
+IDs, URLs, intervals, and dependent firmware fields are validated in both the
+browser and backend/tooling. The legacy autopilot level setting still accepts
+only `good`, `watch`, and `alert`, but is deprecated because air/smoke rules now
+run in firmware.
 
 The generated `.env`, `server/.env`, `web/.env.local`, and firmware `sdkconfig`
 are local files ignored by Git. Never commit Wi-Fi passwords or LLM API keys.

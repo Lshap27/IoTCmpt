@@ -201,7 +201,11 @@ esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *s
     control_state_t local;
     control_state_get(&local);
 
-    bool target_open = local.manual_window_override ? local.manual_open : state->recommend_open_window;
+    /* 本地融合规则只在自动优先模式下负责开窗；空气恢复后保持当前状态，等待用户关窗。 */
+    bool target_open = local.window_open;
+    if (local.priority == CONTROL_PRIORITY_AUTO_FIRST && state->recommend_open_window) {
+        target_open = true;
+    }
 
     if (command) {
         switch (command->type) {

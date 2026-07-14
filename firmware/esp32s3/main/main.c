@@ -239,6 +239,10 @@ static void safety_task(void *arg) {
             actuator_refresh_alarm();
             if (!has_previous || detected != previous) {
                 if (detected) {
+                    const esp_err_t voice_result = voice_announce(VOICE_ANNOUNCEMENT_SMOKE);
+                    if (voice_result != ESP_OK && voice_result != ESP_ERR_INVALID_STATE) {
+                        ESP_LOGW(TAG, "烟雾语音入队失败: %s", esp_err_to_name(voice_result));
+                    }
                     mqtt_app_publish_event("smoke.detected", "critical", "MQ-2 检测到烟雾");
                 } else if (has_previous) {
                     mqtt_app_publish_event("smoke.cleared", "info", "MQ-2 烟雾状态已解除");
@@ -278,8 +282,21 @@ static void actuator_task(void *arg) {
             continue;
         }
 
+        control_state_t before;
+        control_state_get(&before);
         const esp_err_t command_result = actuator_apply(has_command ? &envelope.command : NULL, &fusion);
         status_set_command_result(command_result);
+        if (!has_command && command_result == ESP_OK && before.priority == CONTROL_PRIORITY_AUTO_FIRST &&
+            !before.window_open && fusion.recommend_open_window) {
+            control_state_t after;
+            control_state_get(&after);
+            if (after.window_open) {
+                const esp_err_t voice_result = voice_announce(VOICE_ANNOUNCEMENT_AIR_VENTILATION);
+                if (voice_result != ESP_OK && voice_result != ESP_ERR_INVALID_STATE) {
+                    ESP_LOGW(TAG, "通风语音入队失败: %s", esp_err_to_name(voice_result));
+                }
+            }
+        }
         if (has_command) {
             const char *ack_status = command_result == ESP_OK                  ? "executed"
                                      : command_result == ESP_ERR_NOT_SUPPORTED ? "rejected"

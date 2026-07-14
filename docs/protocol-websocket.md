@@ -53,9 +53,9 @@ switching on `type` (`web/src/lib/ws-dispatcher.ts`).
     "confidence": 0.86,
     "reason": "室内空气质量较差，建议开窗",
     "model": "qwen-vl-plus",
-    "trigger": "auto:air_quality=alert",
+    "trigger": "manual",
     "published": true,
-    "speech": "空气质量正在变差，请检查污染源并保持有效通风。",
+    "speech": "",
     "scene_summary": "窗户已打开但空气质量仍在恶化"
   }
   ```

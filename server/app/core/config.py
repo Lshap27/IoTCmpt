@@ -47,11 +47,14 @@ class Settings(BaseSettings):
     autopilot_enabled: bool = True
     autopilot_cooldown_seconds: float = 120.0
     autopilot_min_confidence: float = Field(default=0.6, ge=0.0, le=1.0)
-    autopilot_trigger_levels: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["alert"])
+    autopilot_trigger_levels: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["alert"],
+        description="Deprecated: 空气质量与烟雾自动规则已移至固件；保留此配置仅用于兼容旧部署。",
+    )
     vision_interval_enabled: bool = False
     vision_interval_seconds: float = Field(default=300.0, ge=30.0, le=3600.0)
     vision_image_max_age_seconds: float = Field(default=15.0, ge=1.0, le=120.0)
-    sedentary_threshold_seconds: float = Field(default=7200.0, ge=30.0, le=28800.0)
+    sedentary_threshold_seconds: float = Field(default=7200.0, ge=5.0, le=28800.0)
     smoke_silence_seconds: int = Field(default=60, ge=10, le=600)
 
     @field_validator("cors_origins", "autopilot_trigger_levels", mode="before")

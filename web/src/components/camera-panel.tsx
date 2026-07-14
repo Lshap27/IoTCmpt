@@ -178,7 +178,7 @@ export function CameraPanel({
             <input
               key={`sit-${autopilot?.sedentary_threshold_seconds}`}
               type="number"
-              min={30}
+              min={5}
               max={28800}
               defaultValue={autopilot?.sedentary_threshold_seconds ?? 7200}
               onBlur={(event) =>

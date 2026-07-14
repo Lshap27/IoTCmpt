@@ -12,7 +12,6 @@ from app.schemas import AiDecision, CommandMessage, TelemetryIn
 from app.services.analysis import resolve_recent_image, run_ai_analysis
 from app.services.autopilot import AutoPilot
 from app.services.llm import LLMService, extract_json_object
-from app.services.mqtt_ingest import ingest_mqtt_message
 from app.services.telemetry import record_telemetry
 
 
@@ -33,6 +32,11 @@ def test_autopilot_settings_normalize_and_validate_controlled_values():
         make_settings(autopilot_trigger_levels="danger")
     with pytest.raises(ValidationError):
         make_settings(autopilot_min_confidence=1.1)
+
+    assert make_settings().sedentary_threshold_seconds == 7200
+    assert make_settings(sedentary_threshold_seconds=5).sedentary_threshold_seconds == 5
+    with pytest.raises(ValidationError):
+        make_settings(sedentary_threshold_seconds=4)
 
 
 class FakeMqtt:
@@ -69,7 +73,7 @@ ALERT_TELEMETRY = {
     "fusion": {
         "air_quality": "alert",
         "recommend_open_window": True,
-        "alarm_enabled": True,
+        "alarm_enabled": False,
         "reason": "污染物浓度过高",
     },
 }
@@ -268,48 +272,31 @@ def test_runtime_automation_settings_are_reported():
 # ---- 自动决策闭环 ----
 
 
-def test_autopilot_trigger_rules_and_cooldown():
-    pilot = AutoPilot(make_settings(autopilot_cooldown_seconds=120), None)
-    good = {"fusion": {"air_quality": "good", "alarm_enabled": False}}
-    alert = {"fusion": {"air_quality": "alert", "alarm_enabled": False}}
-
-    assert pilot.evaluate_trigger(good) is None
-    assert pilot.should_run("dev", alert) == "air_quality=alert"
-
-    # 冷却期现在由 run_once 在实际执行时记账，
-    # should_run 自身不再消费/重置冷却计时器
-    import time
-
-    pilot._last_run["dev"] = time.monotonic()
-    assert pilot.should_run("dev", alert) is None  # 冷却期内不再触发
-
-
-def test_autopilot_alarm_enabled_triggers():
-    pilot = AutoPilot(make_settings(), None)
-    payload = {"fusion": {"air_quality": "good", "alarm_enabled": True}}
-    assert pilot.evaluate_trigger(payload) == "alarm_enabled"
-
-
 def test_autopilot_disabled_skips_and_toggle_restores():
     pilot = AutoPilot(make_settings(autopilot_enabled=False), None)
-    alert = {"fusion": {"air_quality": "alert"}}
-    assert pilot.should_run("dev", alert) is None
+    assert pilot.is_enabled("dev") is False
     pilot.set_enabled("dev", True)
-    assert pilot.should_run("dev", alert) == "air_quality=alert"
+    assert pilot.is_enabled("dev") is True
 
 
-def test_ingest_alert_telemetry_matches_autopilot_trigger(client):
-    from app.db.session import SessionLocal
+def test_firmware_rule_mqtt_events_do_not_call_llm_or_publish_commands(client):
+    pilot = client.app.state.autopilot
+    llm = FakeLLM(make_decision())
+    mqtt = FakeMqtt()
+    pilot.llm = llm
+    pilot.mqtt_service = mqtt
+    handler = client.app.state.mqtt_message_handler
 
-    db = SessionLocal()
-    try:
-        envelope = ingest_mqtt_message(db, "devices/esp32s3-001/telemetry", dict(ALERT_TELEMETRY))
-    finally:
-        db.close()
+    asyncio.run(handler("devices/esp32s3-001/telemetry", dict(ALERT_TELEMETRY)))
+    asyncio.run(
+        handler(
+            "devices/esp32s3-001/event",
+            {"type": "smoke.detected", "severity": "critical", "message": "MQ-2 检测到烟雾"},
+        )
+    )
 
-    assert envelope is not None and envelope.type == "telemetry"
-    pilot = AutoPilot(make_settings(), None)
-    assert pilot.should_run("esp32s3-001", envelope.payload) == "air_quality=alert"
+    assert llm.calls == []
+    assert mqtt.published == []
 
 
 def test_autopilot_endpoints_toggle_and_latest_reflects(client):
@@ -323,6 +310,16 @@ def test_autopilot_endpoints_toggle_and_latest_reflects(client):
 
     assert client.get("/api/devices/esp32s3-001/autopilot").json()["enabled"] is False
     assert client.get("/api/devices/esp32s3-001/latest").json()["autopilot"]["enabled"] is False
+
+    minimum = client.put("/api/devices/esp32s3-001/autopilot", json={"sedentary_threshold_seconds": 5})
+    assert minimum.status_code == 200
+    assert minimum.json()["sedentary_threshold_seconds"] == 5
+    assert client.put(
+        "/api/devices/esp32s3-001/autopilot", json={"sedentary_threshold_seconds": 4}
+    ).status_code == 422
+
+    schema = client.get("/openapi.json").json()["components"]["schemas"]["AutopilotState"]
+    assert schema["properties"]["trigger_levels"]["deprecated"] is True
 
 
 def test_analyze_route_broadcasts_analyzing_then_result(client):

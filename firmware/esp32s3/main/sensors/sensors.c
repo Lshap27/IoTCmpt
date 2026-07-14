@@ -275,7 +275,12 @@ static void lm393_init(void) {
         .intr_type = GPIO_INTR_DISABLE,
     };
     gpio_config(&cfg);
-    ESP_LOGI(TAG, "LM393 GPIO%d 初始化完成", CONFIG_APP_LM393_DO_GPIO);
+    ESP_LOGI(TAG, "LM393 GPIO%d 初始化完成，%s电平表示黑暗", CONFIG_APP_LM393_DO_GPIO,
+             CONFIG_APP_LM393_ACTIVE_LOW ? "低" : "高");
+}
+
+static bool lm393_is_dark(int level) {
+    return CONFIG_APP_LM393_ACTIVE_LOW ? level == 0 : level != 0;
 }
 
 static void mq2_init(void) {
@@ -355,7 +360,8 @@ esp_err_t sensors_read(sensor_sample_t *out_sample) {
         out_sample->eco2_ppm = eco2;
     }
 
-    out_sample->light_is_dark = gpio_get_level(CONFIG_APP_LM393_DO_GPIO) == 0;
+    const int light_level = gpio_get_level(CONFIG_APP_LM393_DO_GPIO);
+    out_sample->light_is_dark = lm393_is_dark(light_level);
     out_sample->light_valid = true;
     out_sample->smoke_detected = s_smoke_detected;
     out_sample->smoke_valid = s_smoke_valid;

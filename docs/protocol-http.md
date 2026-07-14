@@ -171,8 +171,9 @@ Response:
 }
 ```
 
-The same pipeline runs automatically when telemetry matches the autopilot
-trigger rules (see below); those results carry `trigger = "auto:<rule>"`.
+The same pipeline is also used by pose-driven lighting/sedentary workflows and
+scheduled vision. Smoke and air-quality telemetry are handled by deterministic
+firmware rules and do not start this AI pipeline.
 
 ## AI Health Report
 
@@ -229,11 +230,12 @@ Response (both methods):
 }
 ```
 
-When enabled, telemetry whose `fusion.air_quality` is in `trigger_levels` (or
-whose `fusion.alarm_enabled` is true) starts an AI analysis automatically,
-subject to the per-device cooldown. Toggling broadcasts an `autopilot`
-WebSocket event. The switch is in-memory; it resets to
-`AIOT_AUTOPILOT_ENABLED` on server restart.
+`trigger_levels` is deprecated and retained only for compatibility; it no
+longer starts an AI analysis. When enabled, autopilot still controls
+pose-driven lighting/sedentary workflows and scheduled vision. Toggling
+broadcasts an `autopilot` WebSocket event. The switch is in-memory; it resets
+to `AIOT_AUTOPILOT_ENABLED` on server restart. The accepted sedentary reminder
+range is 5–28800 seconds and its default remains 7200 seconds.
 
 ## Manual Command
 

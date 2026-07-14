@@ -113,6 +113,10 @@ MQ-2 transitions are published to `devices/{device_id}/event` with QoS 1:
 
 Clearing smoke publishes `smoke.cleared` with severity `info`. Repeated sensor
 samples do not create repeated events; the event represents the transition.
+The rising edge also queues a fixed local SYN6288 warning without waiting for
+MQTT or an LLM. In `auto_first` mode, firmware similarly opens a closed window
+when `fusion.recommend_open_window=true` and announces the successful action
+once. Pure smoke alerts do not set that ventilation recommendation.
 
 ## Command Ack Payload
 

@@ -14,11 +14,15 @@ This directory is the ESP-IDF firmware mainline for the AIoT architecture.
 ## Hardware Modules
 
 - SHT30, TVOC301, and LM393 sampling.
-- Local fusion rules.
+- Configurable active level for LM393 darkness detection; the demo board
+  defaults to high-level-is-dark.
+- Local fusion rules; auto-first mode opens for a ventilation recommendation
+  and leaves the window open after recovery.
 - OV2640 camera.
 - ST7735 display.
 - SG90 servo.
 - Active beeper.
+- Local fixed SYN6288 smoke/ventilation announcements without the server or LLM.
 - Manual button.
 - Runtime control state.
 

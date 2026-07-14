@@ -103,6 +103,13 @@ menu "AIoT MQTT 固件主线"
             int "LM393 数字输出引脚"
             default 4
 
+        config APP_LM393_ACTIVE_LOW
+            bool "LM393 低电平表示环境黑暗"
+            help
+                启用后将低电平解释为黑暗；关闭时将高电平解释为黑暗。
+                当前演示板实测为高电平表示黑暗，因此默认关闭。
+            default n
+
         config APP_MQ2_DO_GPIO
             int "MQ-2 数字输出引脚"
             default 5

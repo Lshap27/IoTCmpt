@@ -9,12 +9,23 @@
 #include "driver/uart.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "mbedtls/base64.h"
 #include "sensors.h"
 static const char *TAG = "VOICE";
 static SemaphoreHandle_t s_mutex;
+static QueueHandle_t s_announcement_queue;
+
+#define ANNOUNCEMENT_QUEUE_LENGTH 4
+
+/* “警告，检测到烟雾，请立即撤离并检查现场火源，确保人身安全。” */
+static const char *SMOKE_ANNOUNCEMENT_BASE64 =
+    "vq+45qOsvOyy4rW90czO7aOsx+vBory0s7fA67KivOyy6c/Ws6G78NS0o6zIt7GjyMvJ7bCyyKuhow==";
+/* “警告，空气质量较差，已自动开窗通风，请尽快检查污染源并持续关注空气指标。” */
+static const char *AIR_VENTILATION_ANNOUNCEMENT_BASE64 =
+    "vq+45qOsv9XG+NbKwb+9z7Luo6zS0dfUtq+/qrSwzai356Osx+u+ob/svOyy6c7byL7UtLKis9bQ+LnY16K/1cb41rix6qGj";
 
 static bool wait_idle(uint32_t timeout_ms) {
     const TickType_t start = xTaskGetTickCount();
@@ -62,6 +73,32 @@ static esp_err_t speak(const uint8_t *text, size_t text_len) {
     return written == (int)index ? ESP_OK : ESP_FAIL;
 }
 
+static const char *announcement_payload(voice_announcement_t announcement) {
+    switch (announcement) {
+    case VOICE_ANNOUNCEMENT_SMOKE:
+        return SMOKE_ANNOUNCEMENT_BASE64;
+    case VOICE_ANNOUNCEMENT_AIR_VENTILATION:
+        return AIR_VENTILATION_ANNOUNCEMENT_BASE64;
+    default:
+        return NULL;
+    }
+}
+
+static void announcement_task(void *arg) {
+    (void)arg;
+    voice_announcement_t announcement;
+    while (true) {
+        if (xQueueReceive(s_announcement_queue, &announcement, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+        const char *encoded = announcement_payload(announcement);
+        const esp_err_t err = encoded ? voice_speak_base64(encoded) : ESP_ERR_INVALID_ARG;
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "本地语音播报失败 type=%d: %s", (int)announcement, esp_err_to_name(err));
+        }
+    }
+}
+
 esp_err_t voice_init(void) {
     if (!CONFIG_APP_VOICE_ENABLED) {
         return ESP_ERR_INVALID_STATE;
@@ -99,6 +136,19 @@ esp_err_t voice_init(void) {
     if (!s_mutex) {
         return ESP_ERR_NO_MEM;
     }
+    s_announcement_queue = xQueueCreate(ANNOUNCEMENT_QUEUE_LENGTH, sizeof(voice_announcement_t));
+    if (!s_announcement_queue) {
+        vSemaphoreDelete(s_mutex);
+        s_mutex = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+    if (xTaskCreate(announcement_task, "voice_announce", 3072, NULL, 5, NULL) != pdPASS) {
+        vQueueDelete(s_announcement_queue);
+        vSemaphoreDelete(s_mutex);
+        s_announcement_queue = NULL;
+        s_mutex = NULL;
+        return ESP_ERR_NO_MEM;
+    }
     ESP_LOGI(TAG, "SYN6288 BY=GPIO%d，共用 UART%d TX", CONFIG_APP_SYN6288_BY_GPIO, CONFIG_APP_TVOC_UART_NUM);
     return ESP_OK;
 }
@@ -113,10 +163,27 @@ esp_err_t voice_speak_base64(const char *encoded) {
                               strlen(encoded)) != 0) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+    /* 本地和 MQTT 语音共用发送通道；允许等待当前短句结束，避免安全播报因互斥竞争直接丢失。 */
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(6000)) != pdTRUE) {
         return ESP_ERR_TIMEOUT;
     }
     esp_err_t err = speak(decoded, decoded_len);
     xSemaphoreGive(s_mutex);
     return err;
+}
+
+esp_err_t voice_announce(voice_announcement_t announcement) {
+    if (!CONFIG_APP_VOICE_ENABLED || !s_announcement_queue || !announcement_payload(announcement)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    BaseType_t queued = announcement == VOICE_ANNOUNCEMENT_SMOKE
+                            ? xQueueSendToFront(s_announcement_queue, &announcement, 0)
+                            : xQueueSendToBack(s_announcement_queue, &announcement, 0);
+    if (queued != pdTRUE && announcement == VOICE_ANNOUNCEMENT_SMOKE) {
+        /* 队列满时丢弃一条较早的普通播报，为烟雾安全告警让位。 */
+        voice_announcement_t dropped;
+        (void)xQueueReceive(s_announcement_queue, &dropped, 0);
+        queued = xQueueSendToFront(s_announcement_queue, &announcement, 0);
+    }
+    return queued == pdTRUE ? ESP_OK : ESP_ERR_TIMEOUT;
 }
