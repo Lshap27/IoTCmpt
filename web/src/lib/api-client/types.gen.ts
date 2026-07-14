@@ -296,6 +296,10 @@ export type AutopilotState = {
     smoke_silence_seconds: number;
     /**
      * Trigger Levels
+     *
+     * Deprecated: 空气质量与烟雾自动规则已移至固件；保留此字段仅用于兼容旧客户端。
+     *
+     * @deprecated
      */
     trigger_levels: Array<string>;
     /**
