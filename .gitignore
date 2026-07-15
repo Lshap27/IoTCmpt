@@ -105,3 +105,7 @@ references/
 
 # Local source documents or exports
 *.pdf
+README_easy.docx
+docs/README_easy_source.md
+docs/assets/readme-easy/
+tools/generate-readme-easy.py
