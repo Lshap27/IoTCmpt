@@ -228,7 +228,7 @@ export function AiPanel({
                 <input
                   key={`patrol-${policy?.patrol_interval_seconds}`}
                   type="number"
-                  min={60}
+                  min={5}
                   max={86400}
                   defaultValue={policy?.patrol_interval_seconds ?? 300}
                   disabled={!policy}
@@ -243,7 +243,7 @@ export function AiPanel({
                 <input
                   key={`force-${policy?.patrol_force_interval_seconds}`}
                   type="number"
-                  min={300}
+                  min={5}
                   max={604800}
                   defaultValue={policy?.patrol_force_interval_seconds ?? 3600}
                   disabled={!policy}
@@ -275,7 +275,7 @@ export function AiPanel({
                 <input
                   key={`strategy-min-${policy?.strategy_min_interval_seconds}`}
                   type="number"
-                  min={300}
+                  min={5}
                   max={86400}
                   defaultValue={policy?.strategy_min_interval_seconds ?? 300}
                   disabled={!policy}
@@ -290,7 +290,7 @@ export function AiPanel({
                 <input
                   key={`strategy-force-${policy?.strategy_force_interval_seconds}`}
                   type="number"
-                  min={300}
+                  min={5}
                   max={604800}
                   defaultValue={policy?.strategy_force_interval_seconds ?? 3600}
                   disabled={!policy}

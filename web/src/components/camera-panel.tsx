@@ -180,7 +180,7 @@ export function CameraPanel({
             <input
               key={`vision-${policy?.vision_interval_seconds}`}
               type="number"
-              min={60}
+              min={5}
               max={86400}
               defaultValue={policy?.vision_interval_seconds ?? 300}
               onBlur={(event) =>
@@ -200,7 +200,7 @@ export function CameraPanel({
             <input
               key={`sit-${policy?.sedentary_threshold_seconds}`}
               type="number"
-              min={300}
+              min={5}
               max={86400}
               defaultValue={policy?.sedentary_threshold_seconds ?? 7200}
               onBlur={(event) =>

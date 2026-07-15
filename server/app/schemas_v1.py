@@ -125,15 +125,15 @@ class AutomationPolicyIn(BaseModel):
     enabled: bool | None = None
     event_trigger_enabled: bool | None = None
     patrol_enabled: bool | None = None
-    patrol_interval_seconds: int | None = Field(default=None, ge=60, le=86400)
-    patrol_force_interval_seconds: int | None = Field(default=None, ge=300, le=604800)
+    patrol_interval_seconds: int | None = Field(default=None, ge=5, le=86400)
+    patrol_force_interval_seconds: int | None = Field(default=None, ge=5, le=604800)
     vision_schedule_enabled: bool | None = None
-    vision_interval_seconds: int | None = Field(default=None, ge=60, le=86400)
+    vision_interval_seconds: int | None = Field(default=None, ge=5, le=86400)
     sedentary_trigger_enabled: bool | None = None
-    sedentary_threshold_seconds: int | None = Field(default=None, ge=300, le=86400)
+    sedentary_threshold_seconds: int | None = Field(default=None, ge=5, le=86400)
     strategy_enabled: bool | None = None
-    strategy_min_interval_seconds: int | None = Field(default=None, ge=300, le=86400)
-    strategy_force_interval_seconds: int | None = Field(default=None, ge=300, le=604800)
+    strategy_min_interval_seconds: int | None = Field(default=None, ge=5, le=86400)
+    strategy_force_interval_seconds: int | None = Field(default=None, ge=5, le=604800)
     execution_mode: Literal["automatic"] | None = None
 
     @model_validator(mode="after")

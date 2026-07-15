@@ -843,7 +843,7 @@
             "anyOf": [
               {
                 "maximum": 604800.0,
-                "minimum": 300.0,
+                "minimum": 5.0,
                 "type": "integer"
               },
               {
@@ -856,7 +856,7 @@
             "anyOf": [
               {
                 "maximum": 86400.0,
-                "minimum": 60.0,
+                "minimum": 5.0,
                 "type": "integer"
               },
               {
@@ -869,7 +869,7 @@
             "anyOf": [
               {
                 "maximum": 86400.0,
-                "minimum": 300.0,
+                "minimum": 5.0,
                 "type": "integer"
               },
               {
@@ -904,7 +904,7 @@
             "anyOf": [
               {
                 "maximum": 604800.0,
-                "minimum": 300.0,
+                "minimum": 5.0,
                 "type": "integer"
               },
               {
@@ -917,7 +917,7 @@
             "anyOf": [
               {
                 "maximum": 86400.0,
-                "minimum": 300.0,
+                "minimum": 5.0,
                 "type": "integer"
               },
               {
@@ -930,7 +930,7 @@
             "anyOf": [
               {
                 "maximum": 86400.0,
-                "minimum": 60.0,
+                "minimum": 5.0,
                 "type": "integer"
               },
               {

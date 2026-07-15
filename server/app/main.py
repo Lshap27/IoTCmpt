@@ -37,6 +37,7 @@ from app.services.automation_runtime import AutomationRuntimeService, LightingAu
 from app.services.mqtt import MqttGateway
 from app.services.mqtt_ingest import ingest_mqtt_message
 from app.services.pose import PoseService
+from app.services.sedentary import detect_sedentary_event
 from app.services.websocket import manager
 
 LOGGER = logging.getLogger(__name__)
@@ -98,7 +99,22 @@ async def lifespan(app: FastAPI):
             event_type = str((event_payload or {}).get("type") or "event")
             await asyncio.to_thread(enqueue_event_run, SessionLocal, settings, envelope.device_id, event_type)
 
-    pose_service.result_handler = lambda device_id, _payload: evaluate_automation(device_id)
+    async def handle_pose_result(device_id: str, payload: dict[str, Any]) -> None:
+        await evaluate_automation(device_id)
+        event = await asyncio.to_thread(detect_sedentary_event, SessionLocal, device_id, int(payload["id"]))
+        if event is None:
+            return
+        await manager.broadcast(
+            device_id,
+            WebSocketEnvelope(
+                type="perception.updated",
+                device_id=device_id,
+                payload={"kind": "event", **event},
+            ).model_dump(mode="json"),
+        )
+        await asyncio.to_thread(enqueue_event_run, SessionLocal, settings, device_id, event["type"])
+
+    pose_service.result_handler = handle_pose_result
     mqtt_service.start(handle_mqtt_message)
     app.state.automation_application = AutomationApplicationService(SqlAlchemyAutomationRepository(SessionLocal))
     app.state.automation_plan_application = plan_application
