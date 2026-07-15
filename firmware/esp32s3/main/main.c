@@ -3,7 +3,6 @@
 #include "app_config_defaults.h"
 #include "app_status.h"
 #include "camera_app.h"
-#include "config_preflight.h"
 #include "control_state.h"
 #include "display.h"
 #include "esp_camera.h"
@@ -410,11 +409,6 @@ void app_main(void) {
     s_status.cloud = APP_STATUS_LINK_DISABLED;
 
     ESP_ERROR_CHECK(app_config_load(&s_config));
-    if (config_preflight_validate() != ESP_OK) {
-        ESP_LOGE(TAG, "firmware startup stopped by hardware configuration preflight");
-        return;
-    }
-
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());

@@ -2,7 +2,6 @@ idf_component_register(
     SRCS
         "main.c"
         "app_config.c"
-        "config_preflight.c"
         "mqtt_app.c"
         "sensors/sensors.c"
         "fusion/fusion.c"
