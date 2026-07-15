@@ -1,11 +1,31 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Bot, Check, Clock3, Pause, Play, RefreshCw, Send, Sparkles, Square, X } from "lucide-react";
+import {
+  Bot,
+  Check,
+  Clock3,
+  Maximize2,
+  Pause,
+  Play,
+  RefreshCw,
+  Send,
+  Sparkles,
+  Square,
+  X,
+} from "lucide-react";
 import { AiTextPreview } from "@/components/ai-markdown";
 import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useAutomationPlans } from "@/hooks/use-automation-plans";
 import type { AiStrategyOut, AutomationActuatorClaimOut, AutomationPlanOut } from "@/lib/api";
 
@@ -39,6 +59,9 @@ const EVENT: Record<string, string> = {
   "rule.suppressed": "系统规则被用户条件暂时压制",
   "command.retry_scheduled": "命令失败，已安排重试",
   "command.retry_exhausted": "命令重试已耗尽",
+  "delay.fired": "一次性提醒已触发",
+  "delay.missed": "一次性提醒已错过",
+  "delay.completed": "一次性提醒已完成",
   blocked_by_manual_override: "手动操作优先，规则已阻止",
 };
 
@@ -51,11 +74,29 @@ function specOf(plan: AutomationPlanOut) {
     rules?: Array<{
       id: string;
       description: string;
-      trigger: { type: string; every_seconds?: number; stability_samples?: number };
+      trigger: { type: string; every_seconds?: number; after_seconds?: number; stability_samples?: number };
       action: { command: string; text?: string };
       cooldown_seconds?: number;
     }>;
   };
+}
+
+function formatSeconds(seconds: number) {
+  if (seconds < 60) return `${seconds} 秒`;
+  if (seconds % 3600 === 0) return `${seconds / 3600} 小时`;
+  if (seconds % 60 === 0) return `${seconds / 60} 分钟`;
+  return `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
+}
+
+function triggerLabel(trigger: {
+  type: string;
+  every_seconds?: number;
+  after_seconds?: number;
+  stability_samples?: number;
+}) {
+  if (trigger.type === "interval") return `每 ${formatSeconds(trigger.every_seconds ?? 0)}触发`;
+  if (trigger.type === "delay") return `激活后 ${formatSeconds(trigger.after_seconds ?? 0)}提醒一次`;
+  return `连续 ${trigger.stability_samples ?? 1} 个稳定样本后触发`;
 }
 
 function remaining(endsAt?: string | null) {
@@ -100,6 +141,7 @@ function ControlOwnership({
 
 function PlanSummary({ plan, claims }: { plan: AutomationPlanOut; claims: AutomationActuatorClaimOut[] }) {
   const spec = specOf(plan);
+  const rules = spec.rules ?? [];
   const nextFire = plan.rule_states
     .map((state) => state.next_fire_at)
     .filter((value): value is string => Boolean(value))
@@ -120,9 +162,7 @@ function PlanSummary({ plan, claims }: { plan: AutomationPlanOut; claims: Automa
       <div className="grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-lg border border-line bg-surface/60 p-3">
           <div className="text-xs text-ink3">持续时间</div>
-          <div className="mt-1 font-medium text-ink">
-            {Math.round((spec.duration_seconds ?? 0) / 60)} 分钟
-          </div>
+          <div className="mt-1 font-medium text-ink">{formatSeconds(spec.duration_seconds ?? 0)}</div>
         </div>
         <div className="rounded-lg border border-line bg-surface/60 p-3">
           <div className="text-xs text-ink3">剩余时间</div>
@@ -146,23 +186,54 @@ function PlanSummary({ plan, claims }: { plan: AutomationPlanOut; claims: Automa
         {blocked ? <Badge variant="outline">{blocked.blocked_reason} · 已阻止重复发送</Badge> : null}
       </div>
       <ControlOwnership claims={claims} blockedReason={blocked?.blocked_reason ?? undefined} />
-      <ul className="space-y-2" aria-label="计划规则">
-        {(spec.rules ?? []).map((rule) => (
+      <ul className="space-y-2" aria-label="计划规则预览">
+        {rules.slice(0, 3).map((rule) => (
           <li key={rule.id} className="rounded-lg border border-line px-3 py-2.5 text-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium text-ink">{rule.description}</span>
               <Badge variant="secondary">{COMMAND[rule.action.command] ?? rule.action.command}</Badge>
             </div>
             <div className="mt-1 text-xs leading-5 text-ink3">
-              {rule.trigger.type === "interval"
-                ? `每 ${Math.round((rule.trigger.every_seconds ?? 0) / 60)} 分钟触发`
-                : `连续 ${rule.trigger.stability_samples ?? 1} 个稳定样本后触发`}
+              {triggerLabel(rule.trigger)}
               {rule.cooldown_seconds ? ` · 冷却 ${rule.cooldown_seconds} 秒` : ""}
               {rule.action.text ? ` · “${rule.action.text}”` : ""}
             </div>
           </li>
         ))}
       </ul>
+      {rules.length > 3 ? (
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button type="button" size="sm" variant="ghost" className="text-accent">
+              <Maximize2 /> 查看全部 {rules.length} 条规则
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{plan.title} · 完整规则</DialogTitle>
+              <DialogDescription>计划版本 v{plan.current_version}，按当前安全契约执行。</DialogDescription>
+            </DialogHeader>
+            <ul
+              className="min-h-0 space-y-2 overflow-y-auto overscroll-contain pr-1"
+              aria-label="完整计划规则"
+            >
+              {rules.map((rule) => (
+                <li key={rule.id} className="rounded-lg border border-line px-3 py-2.5 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium text-ink">{rule.description}</span>
+                    <Badge variant="secondary">{COMMAND[rule.action.command] ?? rule.action.command}</Badge>
+                  </div>
+                  <div className="mt-1 break-words text-xs leading-5 text-ink3">
+                    {triggerLabel(rule.trigger)}
+                    {rule.cooldown_seconds ? ` · 冷却 ${rule.cooldown_seconds} 秒` : ""}
+                    {rule.action.text ? ` · “${rule.action.text}”` : ""}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </DialogContent>
+        </Dialog>
+      ) : null}
       {plan.activation_blockers.length ? (
         <div className="rounded-lg border border-[var(--warn)] bg-[var(--warn-soft)] px-3 py-2 text-sm text-ink2">
           暂未自动激活：{plan.activation_blockers.join("；")}
@@ -182,7 +253,7 @@ function StrategyCard({
   busy: boolean;
 }) {
   return (
-    <article className="rounded-xl border border-line p-3 sm:p-4">
+    <article className="min-w-0 rounded-xl border border-line p-3 sm:p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="font-medium text-ink">AI 策略建议</div>
@@ -201,9 +272,9 @@ function StrategyCard({
         className="mt-3"
       />
       {strategy.diff.length ? (
-        <ul className="mt-3 max-h-36 space-y-1 overflow-auto rounded-lg bg-surface/70 p-2 text-xs text-ink2">
-          {strategy.diff.slice(0, 12).map((item, index) => (
-            <li key={`${String(item.path)}-${index}`} className="font-mono">
+        <ul className="mt-3 space-y-1 rounded-lg bg-surface/70 p-2 text-xs text-ink2">
+          {strategy.diff.slice(0, 4).map((item, index) => (
+            <li key={`${String(item.path)}-${index}`} className="truncate font-mono">
               {String(item.path)}
             </li>
           ))}
@@ -211,6 +282,27 @@ function StrategyCard({
       ) : (
         <p className="mt-3 text-sm text-ink3">服务器比较后确认与当前版本没有差异。</p>
       )}
+      {strategy.diff.length ? (
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button type="button" size="sm" variant="ghost" className="mt-2 text-accent">
+              <Maximize2 /> 查看完整差异
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>AI 策略字段级差异</DialogTitle>
+              <DialogDescription>
+                基础版本 {strategy.base_version ? `v${strategy.base_version}` : "新计划"}，共{" "}
+                {strategy.diff.length} 项变化。
+              </DialogDescription>
+            </DialogHeader>
+            <pre className="min-h-0 max-w-full overflow-auto overscroll-contain rounded-xl border border-line bg-raised p-3 text-xs whitespace-pre-wrap break-all text-ink2">
+              {JSON.stringify(strategy.diff, null, 2)}
+            </pre>
+          </DialogContent>
+        </Dialog>
+      ) : null}
       {strategy.status === "proposed" ? (
         <div className="mt-3 flex gap-2">
           <Button size="sm" disabled={busy} onClick={() => onResolve("approve")}>
@@ -229,9 +321,7 @@ function StrategyCard({
 
 export function AutomationPlanPanel({ deviceId, className }: { deviceId: string; className?: string }) {
   const automation = useAutomationPlans(deviceId);
-  const [goal, setGoal] = useState(
-    "我要学习 10 分钟。光线暗并且检测到有人时开灯；光线明亮并且确认无人时关灯。请尊重我的手动操作。",
-  );
+  const [goal, setGoal] = useState("半分钟后，提醒我“同学，学了这么久，该喝水啦”");
   const selected = automation.selectedPlan;
   const latestEvent = automation.events[0];
   const canSubmit = goal.trim().length > 0 && !automation.compiling;
@@ -242,7 +332,11 @@ export function AutomationPlanPanel({ deviceId, className }: { deviceId: string;
 
   return (
     <>
-      <Panel title="AI 自动化计划" icon={<Bot size={18} />} className={className}>
+      <Panel
+        title="AI 自动化计划"
+        icon={<Bot size={18} />}
+        className={`${className ?? ""} xl:flex xl:h-[34rem] xl:flex-col`}
+      >
         <form
           className="space-y-3"
           onSubmit={(event) => {
@@ -281,95 +375,97 @@ export function AutomationPlanPanel({ deviceId, className }: { deviceId: string;
           </div>
         </form>
 
-        <div className="my-5 h-px bg-line" />
-        {selected ? (
-          <>
-            <PlanSummary plan={selected} claims={automation.controlClaims} />
-            <div className="mt-4 flex flex-wrap gap-2">
-              {selected.status === "active" ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={automation.busy}
-                  onClick={() => automation.transition(selected.plan_id, "pause")}
-                >
-                  <Pause />
-                  暂停
-                </Button>
-              ) : null}
-              {selected.status === "paused" ? (
-                <Button
-                  size="sm"
-                  disabled={automation.busy}
-                  onClick={() => automation.transition(selected.plan_id, "resume")}
-                >
-                  <Play />
-                  恢复
-                </Button>
-              ) : null}
-              {selected.status === "draft" ? (
-                <Button
-                  size="sm"
-                  disabled={automation.busy}
-                  onClick={() => automation.transition(selected.plan_id, "activate")}
-                >
-                  <Play />
-                  重新校验并激活
-                </Button>
-              ) : null}
-              {(["draft", "active", "paused"] as string[]).includes(selected.status) ? (
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={automation.busy}
-                  onClick={() => automation.transition(selected.plan_id, "cancel")}
-                >
-                  <Square />
-                  取消计划
-                </Button>
-              ) : null}
+        <div className="my-4 h-px shrink-0 bg-line" />
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+          {selected ? (
+            <>
+              <PlanSummary plan={selected} claims={automation.controlClaims} />
+              <div className="mt-4 flex flex-wrap gap-2">
+                {selected.status === "active" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={automation.busy}
+                    onClick={() => automation.transition(selected.plan_id, "pause")}
+                  >
+                    <Pause />
+                    暂停
+                  </Button>
+                ) : null}
+                {selected.status === "paused" ? (
+                  <Button
+                    size="sm"
+                    disabled={automation.busy}
+                    onClick={() => automation.transition(selected.plan_id, "resume")}
+                  >
+                    <Play />
+                    恢复
+                  </Button>
+                ) : null}
+                {selected.status === "draft" ? (
+                  <Button
+                    size="sm"
+                    disabled={automation.busy}
+                    onClick={() => automation.transition(selected.plan_id, "activate")}
+                  >
+                    <Play />
+                    重新校验并激活
+                  </Button>
+                ) : null}
+                {(["draft", "active", "paused"] as string[]).includes(selected.status) ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={automation.busy}
+                    onClick={() => automation.transition(selected.plan_id, "cancel")}
+                  >
+                    <Square />
+                    取消计划
+                  </Button>
+                ) : null}
+              </div>
+              <div className="mt-3 rounded-lg bg-surface/60 px-3 py-2 text-xs text-ink3">
+                <Clock3 className="mr-1 inline size-3.5" />
+                最近事件：
+                {latestEvent
+                  ? `${EVENT[latestEvent.event_type] ?? latestEvent.event_type} · ${new Date(latestEvent.occurred_at).toLocaleString()}`
+                  : "暂无"}
+              </div>
+            </>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-ink3">还没有用户计划。系统默认计划仍会按自动化总开关独立运行。</p>
+              <ControlOwnership
+                claims={automation.controlClaims}
+                blockedReason={automation.controlBlockedReason}
+              />
             </div>
-            <div className="mt-3 rounded-lg bg-surface/60 px-3 py-2 text-xs text-ink3">
-              <Clock3 className="mr-1 inline size-3.5" />
-              最近事件：
-              {latestEvent
-                ? `${EVENT[latestEvent.event_type] ?? latestEvent.event_type} · ${new Date(latestEvent.occurred_at).toLocaleString()}`
-                : "暂无"}
+          )}
+          {draftNotice ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm text-ink2">
+              <span>新草案“{draftNotice.title}”已保留为替换预览，不会中断当前计划。</span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={automation.busy}
+                onClick={() => automation.transition(draftNotice.plan_id, "activate", true)}
+              >
+                确认替换
+              </Button>
             </div>
-          </>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-ink3">还没有用户计划。系统默认计划仍会按自动化总开关独立运行。</p>
-            <ControlOwnership
-              claims={automation.controlClaims}
-              blockedReason={automation.controlBlockedReason}
-            />
-          </div>
-        )}
-        {draftNotice ? (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm text-ink2">
-            <span>新草案“{draftNotice.title}”已保留为替换预览，不会中断当前计划。</span>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={automation.busy}
-              onClick={() => automation.transition(draftNotice.plan_id, "activate", true)}
-            >
-              确认替换
-            </Button>
-          </div>
-        ) : null}
-        {automation.error ? (
-          <p role="alert" className="mt-3 text-sm text-[var(--alert)]">
-            {automation.error}
-          </p>
-        ) : null}
+          ) : null}
+          {automation.error ? (
+            <p role="alert" className="mt-3 text-sm text-[var(--alert)]">
+              {automation.error}
+            </p>
+          ) : null}
+        </div>
       </Panel>
 
       <Panel
         title="AI 策略"
         icon={<Sparkles size={18} />}
-        className={className}
+        className={`${className ?? ""} xl:flex xl:h-[34rem] xl:flex-col`}
         actions={
           <Button
             size="sm"
@@ -382,35 +478,37 @@ export function AutomationPlanPanel({ deviceId, className }: { deviceId: string;
           </Button>
         }
       >
-        <p className="mb-4 text-sm leading-6 text-ink3">
-          策略只生成候选版本，永远不会自动替换活动计划。批准时服务器会重新校验能力、安全约束和基础版本。
-        </p>
-        {automation.strategyRun?.status === "failed" ? (
-          <AiTextPreview
-            content={
-              automation.strategyRun.error_message || automation.strategyRun.error_code || "策略生成失败"
-            }
-            title="AI 策略生成失败详情"
-            className="mb-4"
-          />
-        ) : null}
-        <div className="space-y-3">
-          {automation.strategies.length ? (
-            automation.strategies
-              .slice(0, 5)
-              .map((strategy) => (
-                <StrategyCard
-                  key={strategy.strategy_id}
-                  strategy={strategy}
-                  busy={automation.busy}
-                  onResolve={(action) => automation.resolveStrategy(strategy.strategy_id, action)}
-                />
-              ))
-          ) : (
-            <p className="text-sm text-ink3">
-              尚无策略建议。开启策略开关后，显著变化和每小时复盘会自动生成候选。
-            </p>
-          )}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+          <p className="mb-4 text-sm leading-6 text-ink3">
+            策略只生成候选版本，永远不会自动替换活动计划。批准时服务器会重新校验能力、安全约束和基础版本。
+          </p>
+          {automation.strategyRun?.status === "failed" ? (
+            <AiTextPreview
+              content={
+                automation.strategyRun.error_message || automation.strategyRun.error_code || "策略生成失败"
+              }
+              title="AI 策略生成失败详情"
+              className="mb-4"
+            />
+          ) : null}
+          <div className="space-y-3">
+            {automation.strategies.length ? (
+              automation.strategies
+                .slice(0, 5)
+                .map((strategy) => (
+                  <StrategyCard
+                    key={strategy.strategy_id}
+                    strategy={strategy}
+                    busy={automation.busy}
+                    onResolve={(action) => automation.resolveStrategy(strategy.strategy_id, action)}
+                  />
+                ))
+            ) : (
+              <p className="text-sm text-ink3">
+                尚无策略建议。开启策略开关后，显著变化和每小时复盘会自动生成候选。
+              </p>
+            )}
+          </div>
         </div>
       </Panel>
     </>

@@ -79,6 +79,72 @@ def test_mock_compiler_supports_explicit_two_way_lighting_without_inventing_it()
     assert simple["rules"][0]["trigger"]["items"] == [{"fact": "light_is_dark", "op": "eq", "value": True}]
 
 
+def test_mock_compiler_supports_short_one_time_and_interval_reminders():
+    delayed, _ = compile_mock_plan("半分钟后，提醒我“同学，学了这么久，该喝水啦”")
+    assert delayed["title"] == "喝水提醒"
+    assert delayed["duration_seconds"] == 60
+    assert delayed["clarifications"] == []
+    assert delayed["rules"] == [
+        {
+            "id": "drink-water-reminder",
+            "description": "激活后 30 秒提醒一次",
+            "trigger": {"type": "delay", "after_seconds": 30},
+            "action": {
+                "command": "voice.speak",
+                "parameter": {},
+                "text": "同学，学了这么久，该喝水啦",
+            },
+            "cooldown_seconds": 0,
+        }
+    ]
+
+    repeating, _ = compile_mock_plan("每 15 秒提醒我喝水")
+    assert repeating["duration_seconds"] == 60
+    assert repeating["rules"][0]["trigger"] == {"type": "interval", "every_seconds": 15}
+    assert repeating["rules"][0]["action"]["text"] == "喝水"
+
+    too_short, _ = compile_mock_plan("14 秒后提醒我喝水")
+    assert too_short["rules"] == []
+    assert "一次性提醒延迟必须在 15 秒到 24 小时之间" in too_short["clarifications"]
+
+
+def test_delay_reminder_fires_once_and_completes_after_executed_ack(client):
+    seed_device(commands=["voice.speak", "led.on", "led.off"])
+    spec, explanation = compile_mock_plan("半分钟后，提醒我“同学，学了这么久，该喝水啦”")
+    plan = asyncio.run(
+        client.app.state.automation_plan_application.create_draft(
+            "plan-device", "drink reminder", spec, explanation, None, "trace-delay"
+        )
+    )
+    from app.db.session import SessionLocal
+
+    with SessionLocal() as db:
+        state = db.query(models.AutomationRuleState).filter_by(plan_id=plan["plan_id"]).one()
+        state.next_fire_at = utcnow() - timedelta(milliseconds=100)
+        db.commit()
+    runtime = client.app.state.automation_runtime
+    commands = asyncio.run(runtime.evaluate("plan-device", include_conditions=False))
+    assert len(commands) == 1
+    command_id = commands[0]["command_id"]
+    assert asyncio.run(runtime.evaluate("plan-device", include_conditions=False)) == []
+
+    with SessionLocal() as db:
+        command = db.query(models.Command).filter_by(command_id=command_id).one()
+        command.status = "executed"
+        command.executed_at = utcnow()
+        db.commit()
+    asyncio.run(runtime.reconcile_command("plan-device", command_id, "executed"))
+
+    with SessionLocal() as db:
+        stored = db.query(models.AutomationPlan).filter_by(plan_id=plan["plan_id"]).one()
+        assert stored.status == "completed"
+        assert db.query(models.Command).filter_by(device_id="plan-device", type="voice.speak").count() == 1
+        event_types = {
+            row.event_type for row in db.query(models.AutomationPlanEvent).filter_by(plan_id=plan["plan_id"]).all()
+        }
+        assert {"delay.fired", "delay.completed", "plan.completed"}.issubset(event_types)
+
+
 def test_user_claim_only_owns_actuator_while_condition_matches(client):
     seed_device(commands=["window.open", "window.close", "led.on", "led.off", "voice.speak"])
     user_spec = {

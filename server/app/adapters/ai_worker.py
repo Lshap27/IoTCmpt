@@ -22,6 +22,13 @@ from app.services.llm import LLMService
 from app.services.plan_compiler import compile_mock_plan
 
 LOGGER = logging.getLogger(__name__)
+MAX_PLAN_REPAIR_ATTEMPTS = 3
+
+
+class AiRunExecutionError(RuntimeError):
+    def __init__(self, error_code: str, message: str):
+        super().__init__(message)
+        self.error_code = error_code
 
 
 def utcnow() -> datetime:
@@ -276,6 +283,11 @@ class AiRunWorker:
             "只编译用户明确要求的动作，禁止补充关闭、复位、会话结束动作。"
             "DSL schema_version 必须为 1.0，manual_override_policy=respect，end_behavior=keep_state；"
             "只能使用工具 schema 允许的事实、触发器与动作。有歧义时写入 clarifications，不要自行猜测。"
+            "时间语义必须严格区分：‘N 秒后’使用一次性 delay，‘每 N 秒’才使用 interval；两者最短 15 秒。"
+            "中文‘提醒我’默认且必须使用 voice.speak；只有用户明确说在屏幕显示时才使用 display.message。"
+            "例如‘半分钟后，提醒我“同学，学了这么久，该喝水啦”’应创建 duration_seconds=60、"
+            "trigger={type:delay,after_seconds:30}、action={command:voice.speak,parameter:{},"
+            "text:同学，学了这么久，该喝水啦} 的单规则计划。"
             "source_prompt 必须保留原始用户目标。"
         )
         messages = [
@@ -289,7 +301,6 @@ class AiRunWorker:
                 ),
             },
         ]
-        await self._transition(run, "waiting_model")
         async with self.mcp.session(run["trace_id"]) as session:
             listed = await session.list_tools()
             tools = self.mcp.openai_tools(
@@ -297,43 +308,23 @@ class AiRunWorker:
                 allow_control=True,
                 allowed_names={"automation_plan_create_draft"},
             )
-            assistant = await self.llm.complete_with_tools(
+            result, response_model = await self._call_required_tool_with_repairs(
+                run,
+                session,
                 messages,
                 tools,
-                required_tool="automation_plan_create_draft",
-            )
-            calls = assistant.get("tool_calls") or []
-            if len(calls) != 1:
-                raise ValueError("plan compiler must call automation_plan_create_draft exactly once")
-            function = calls[0].get("function") or {}
-            if function.get("name") != "automation_plan_create_draft":
-                raise ValueError("plan compiler called an unsupported tool")
-            arguments = function.get("arguments") or "{}"
-            if isinstance(arguments, str):
-                arguments = json.loads(arguments)
-            if not isinstance(arguments, dict):
-                raise ValueError("plan tool arguments must be an object")
-            arguments.update(
-                {
+                tool_name="automation_plan_create_draft",
+                call_label="plan-create",
+                argument_overrides={
                     "device_id": run["device_id"],
                     "run_id": run["run_id"],
                     "source_prompt": goal,
-                }
+                },
             )
-            await self._transition(run, "calling_tool")
-            result = await self._call_tool_with_session(
-                run,
-                session,
-                self._call_id(run, "plan-create"),
-                "automation_plan_create_draft",
-                arguments,
-            )
-        if not result.get("ok"):
-            raise ValueError(f"plan validation failed: {result.get('error')}")
         plan = result.get("data") or {}
         return {
             "kind": "plan_compile",
-            "model": self.settings.llm_model,
+            "model": response_model,
             "plan": plan,
             "auto_activated": plan.get("status") == "active",
             "blockers": plan.get("activation_blockers") or [],
@@ -403,7 +394,11 @@ class AiRunWorker:
             raise ValueError(f"strategy validation failed: {result.get('error')}")
         return {
             "kind": "strategy",
-            "model": "mock" if self.settings.llm_endpoint == "mock" else self.settings.llm_model,
+            "model": (
+                "mock"
+                if self.settings.llm_endpoint == "mock"
+                else str(result.pop("_response_model", self.settings.llm_model))
+            ),
             "strategy": result.get("data"),
         }
 
@@ -443,7 +438,6 @@ class AiRunWorker:
             {"role": "system", "content": system},
             {"role": "user", "content": json.dumps(context, ensure_ascii=False, default=str)},
         ]
-        await self._transition(run, "waiting_model")
         async with self.mcp.session(run["trace_id"]) as session:
             listed = await session.list_tools()
             tools = self.mcp.openai_tools(
@@ -451,38 +445,112 @@ class AiRunWorker:
                 allow_control=True,
                 allowed_names={"automation_strategy_propose"},
             )
-            assistant = await self.llm.complete_with_tools(
+            result, response_model = await self._call_required_tool_with_repairs(
+                run,
+                session,
                 messages,
                 tools,
-                required_tool="automation_strategy_propose",
-            )
-            calls = assistant.get("tool_calls") or []
-            if len(calls) != 1:
-                raise ValueError("strategy model must call automation_strategy_propose exactly once")
-            function = calls[0].get("function") or {}
-            if function.get("name") != "automation_strategy_propose":
-                raise ValueError("strategy model called an unsupported tool")
-            arguments = function.get("arguments") or "{}"
-            if isinstance(arguments, str):
-                arguments = json.loads(arguments)
-            if not isinstance(arguments, dict):
-                raise ValueError("strategy tool arguments must be an object")
-            arguments.update(
-                {
+                tool_name="automation_strategy_propose",
+                call_label="strategy-propose",
+                argument_overrides={
                     "device_id": run["device_id"],
                     "run_id": run["run_id"],
                     "plan_id": base.get("plan_id") if base else None,
                     "base_version": base.get("current_version") if base else None,
-                }
+                },
             )
+            return {**result, "_response_model": response_model}
+
+    async def _call_required_tool_with_repairs(
+        self,
+        run: dict[str, Any],
+        session: Any,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        *,
+        tool_name: str,
+        call_label: str,
+        argument_overrides: dict[str, Any],
+    ) -> tuple[dict[str, Any], str]:
+        last_error = "模型未返回有效工具调用"
+        response_model = self.settings.llm_model
+        for attempt in range(1, MAX_PLAN_REPAIR_ATTEMPTS + 1):
+            await self._transition(run, "waiting_model")
+            try:
+                assistant = await self.llm.complete_with_tools(messages, tools, required_tool=tool_name)
+            except Exception as exc:
+                raise AiRunExecutionError(
+                    "provider_tool_call_failed",
+                    f"大模型工具调用失败：{type(exc).__name__}: {exc}",
+                ) from exc
+            response_model = str(assistant.get("_response_model") or response_model)
+            calls = assistant.get("tool_calls") or []
+            if len(calls) != 1:
+                last_error = f"必须且只能调用 {tool_name} 一次，实际调用 {len(calls)} 次"
+                self._append_repair_instruction(messages, last_error)
+                continue
+            call = calls[0]
+            function = call.get("function") or {}
+            if function.get("name") != tool_name:
+                last_error = f"调用了不允许的工具：{function.get('name') or 'unknown'}"
+                self._append_repair_instruction(messages, last_error)
+                continue
+            try:
+                arguments = function.get("arguments") or "{}"
+                if isinstance(arguments, str):
+                    arguments = json.loads(arguments)
+                if not isinstance(arguments, dict):
+                    raise TypeError("工具参数必须是 JSON 对象")
+            except (json.JSONDecodeError, TypeError) as exc:
+                last_error = f"工具参数不是合法 JSON 对象：{exc}"
+                self._append_repair_instruction(messages, last_error)
+                continue
+            arguments.update(argument_overrides)
             await self._transition(run, "calling_tool")
-            return await self._call_tool_with_session(
-                run,
-                session,
-                self._call_id(run, "strategy-propose"),
-                "automation_strategy_propose",
-                arguments,
+            call_id = self._call_id(run, f"{call_label}-{attempt}")
+            try:
+                result = await self._call_tool_with_session(
+                    run,
+                    session,
+                    call_id,
+                    tool_name,
+                    arguments,
+                )
+            except Exception as exc:
+                last_error = f"工具参数校验失败：{type(exc).__name__}: {exc}"
+                result = {"ok": False, "error": last_error}
+            if result.get("ok"):
+                return result, response_model
+            last_error = f"工具校验失败：{result.get('error') or 'unknown error'}"
+            tool_call_id = str(call.get("id") or call_id)
+            clean_assistant = {key: value for key, value in assistant.items() if not key.startswith("_")}
+            messages.extend(
+                [
+                    clean_assistant,
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": json.dumps({"ok": False, "error": last_error[:1000]}, ensure_ascii=False),
+                    },
+                ]
             )
+            self._append_repair_instruction(messages, last_error)
+        raise AiRunExecutionError(
+            "plan_repair_exhausted",
+            f"AI 计划在 {MAX_PLAN_REPAIR_ATTEMPTS} 次修复后仍未通过校验：{last_error[:1200]}",
+        )
+
+    @staticmethod
+    def _append_repair_instruction(messages: list[dict[str, Any]], error: str) -> None:
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "上一次输出未通过受限计划校验。请仅修复下列错误，并重新调用同一个工具一次；"
+                    f"不要输出解释文本：{error[:1000]}"
+                ),
+            }
+        )
 
     async def _execute_mock_tool_run(self, run: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]:
         snapshot["analysis_intent"] = run["input"].get("goal") or run["kind"]

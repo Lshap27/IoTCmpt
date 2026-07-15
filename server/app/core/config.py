@@ -68,9 +68,9 @@ class Settings(BaseSettings):
 
     cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["http://localhost:3000"])
 
-    llm_endpoint: str = "https://api.deepseek.com"
+    llm_endpoint: str = "https://ai-gateway.vei.volces.com/v1"
     llm_api_key: str = ""
-    llm_model: str = "deepseek-v4-flash"
+    llm_model: str = "Doubao-Seed-1.6-flash"
     llm_timeout_seconds: float = 60.0
     llm_image_max_age_seconds: float = 600.0
     llm_response_format: str = "json_object"

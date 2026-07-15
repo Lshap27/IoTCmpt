@@ -166,7 +166,10 @@ class LLMService:
             "tool_choice": ({"type": "function", "function": {"name": required_tool}} if required_tool else "auto"),
             "temperature": 0.1,
         }
-        if self.settings.llm_thinking_enabled:
+        is_deepseek = (urlsplit(self.settings.llm_endpoint).hostname or "").lower().endswith("deepseek.com")
+        if is_deepseek and required_tool:
+            payload["thinking"] = {"type": "disabled"}
+        elif is_deepseek and self.settings.llm_thinking_enabled:
             payload.pop("temperature", None)
             payload["thinking"] = {"type": "enabled"}
             payload["reasoning_effort"] = self.settings.llm_reasoning_effort
@@ -182,7 +185,7 @@ class LLMService:
         message = data["choices"][0]["message"]
         if not isinstance(message, dict):
             raise ValueError("LLM assistant message is not an object")
-        return message
+        return {**message, "_response_model": str(data.get("model") or self.settings.llm_model)}
 
     def _no_action_decision(self, reason: str, *, risk_level: RiskLevel = "unknown") -> AiDecision:
         return AiDecision(
@@ -385,7 +388,8 @@ class LLMService:
 
     async def _call_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         payload: dict[str, Any] = {"model": self.settings.llm_model, "messages": messages}
-        if self.settings.llm_thinking_enabled:
+        is_deepseek = (urlsplit(self.settings.llm_endpoint).hostname or "").lower().endswith("deepseek.com")
+        if is_deepseek and self.settings.llm_thinking_enabled:
             payload["thinking"] = {"type": "enabled"}
             payload["reasoning_effort"] = self.settings.llm_reasoning_effort
         else:

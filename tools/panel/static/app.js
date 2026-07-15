@@ -307,8 +307,8 @@ loadEnvironment();
 
 // ------------------------------------------------------------------ 环境配置
 const ONLINE_LLM_DEFAULTS = {
-  endpoint: "https://api.deepseek.com",
-  model: "deepseek-v4-flash",
+  endpoint: "https://ai-gateway.vei.volces.com/v1",
+  model: "Doubao-Seed-1.6-flash",
 };
 let onlineLlmDraft = { ...ONLINE_LLM_DEFAULTS };
 

@@ -89,7 +89,14 @@ def _validate_trigger(trigger: Any) -> dict[str, Any]:
             raise ValueError("interval trigger contains unsupported fields")
         return {
             "type": "interval",
-            "every_seconds": _integer(trigger.get("every_seconds"), "every_seconds", 60, 86400),
+            "every_seconds": _integer(trigger.get("every_seconds"), "every_seconds", 15, 86400),
+        }
+    if trigger_type == "delay":
+        if set(trigger) != {"type", "after_seconds"}:
+            raise ValueError("delay trigger contains unsupported fields")
+        return {
+            "type": "delay",
+            "after_seconds": _integer(trigger.get("after_seconds"), "after_seconds", 15, 86400),
         }
     raise ValueError(f"unsupported automation trigger: {trigger_type}")
 
@@ -109,6 +116,8 @@ def _validate_action(action: Any) -> dict[str, Any]:
     if command == "voice.speak":
         if not isinstance(text, str) or not text.strip() or len(text.strip()) > 60:
             raise ValueError("voice.speak requires text with 1..60 characters")
+        if parameter:
+            raise ValueError("voice.speak parameter must be empty")
         parameter = {}
     elif command == "display.message":
         if text is not None:
@@ -174,9 +183,12 @@ def validate_plan_spec(spec: Any) -> dict[str, Any]:
         if not 1 <= len(text) <= 240:
             raise ValueError("clarification must have 1..240 characters")
         normalized_clarifications.append(text)
+    duration_seconds = _integer(spec.get("duration_seconds"), "duration_seconds", 60, 86400)
     rules = spec.get("rules")
-    if not isinstance(rules, list) or not 1 <= len(rules) <= 16:
-        raise ValueError("automation plan requires 1..16 rules")
+    if not isinstance(rules, list) or len(rules) > 16:
+        raise ValueError("automation plan allows at most 16 rules")
+    if not rules and not normalized_clarifications:
+        raise ValueError("a plan without rules must include clarifications")
     normalized_rules: list[dict[str, Any]] = []
     rule_ids: set[str] = set()
     for raw in rules:
@@ -191,11 +203,14 @@ def validate_plan_spec(spec: Any) -> dict[str, Any]:
         description = str(raw.get("description") or "").strip()
         if not 1 <= len(description) <= 240:
             raise ValueError("rule description must have 1..240 characters")
+        trigger = _validate_trigger(raw.get("trigger"))
+        if trigger["type"] == "delay" and trigger["after_seconds"] > duration_seconds:
+            raise ValueError("delay after_seconds must not exceed duration_seconds")
         normalized_rules.append(
             {
                 "id": rule_id,
                 "description": description,
-                "trigger": _validate_trigger(raw.get("trigger")),
+                "trigger": trigger,
                 "action": _validate_action(raw.get("action")),
                 "cooldown_seconds": _integer(raw.get("cooldown_seconds"), "cooldown_seconds", 0, 86400),
             }
@@ -203,7 +218,7 @@ def validate_plan_spec(spec: Any) -> dict[str, Any]:
     return {
         "schema_version": PLAN_SCHEMA_VERSION,
         "title": title,
-        "duration_seconds": _integer(spec.get("duration_seconds"), "duration_seconds", 60, 86400),
+        "duration_seconds": duration_seconds,
         "timezone": timezone,
         "manual_override_policy": "respect",
         "end_behavior": "keep_state",

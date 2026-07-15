@@ -241,19 +241,37 @@ class AutomationRuntimeService:
                         occurrence_key = observation_key
                     elif state.next_fire_at and state.next_fire_at <= now:
                         due = state.next_fire_at
-                        state.next_fire_at = _next_future(plan.started_at or now, trigger["every_seconds"], now)
                         grace_seconds = max(5.0, self.settings.automation_scheduler_seconds * 2)
+                        if trigger["type"] == "interval":
+                            state.next_fire_at = _next_future(plan.started_at or now, trigger["every_seconds"], now)
+                            missed_event = "interval.missed"
+                        else:
+                            state.next_fire_at = None
+                            missed_event = "delay.missed"
                         if (now - due).total_seconds() > grace_seconds:
+                            if trigger["type"] == "delay":
+                                state.meta = {**(state.meta or {}), "delay_status": "missed"}
                             self._event(
                                 db,
                                 plan,
                                 rule["id"],
-                                "interval.missed",
+                                missed_event,
                                 {"missed_at": due.isoformat(timespec="seconds")},
                             )
+                            if trigger["type"] == "delay":
+                                self._finish_delay_only_plan(db, plan, succeeded=False, detail={"reason": "missed"})
                             continue
                         occurrence_key = due.isoformat(timespec="seconds")
                         became_true = True
+                        if trigger["type"] == "delay":
+                            state.meta = {**(state.meta or {}), "delay_status": "firing"}
+                            self._event(
+                                db,
+                                plan,
+                                rule["id"],
+                                "delay.fired",
+                                {"scheduled_at": due.isoformat(timespec="seconds")},
+                            )
                     else:
                         continue
                     entry = {
@@ -366,7 +384,7 @@ class AutomationRuntimeService:
             for state in states:
                 rule = rules[state.rule_id]
                 actuator = _stateful_actuator(str(rule["action"]["command"]))
-                if rule["trigger"]["type"] != "interval" or not actuator or actuator in desired:
+                if rule["trigger"]["type"] not in {"interval", "delay"} or not actuator or actuator in desired:
                     continue
                 if not state.last_command_id:
                     continue
@@ -612,6 +630,11 @@ class AutomationRuntimeService:
                 rule = self._rule_by_id(db, plan.plan_id, candidate["version"], state.rule_id)
                 if command_id is None and rule["trigger"]["type"] == "condition":
                     self._schedule_retry(db, plan, state, detail)
+                elif rule["trigger"]["type"] == "delay":
+                    state.meta = {
+                        **(state.meta or {}),
+                        "delay_status": "submitted" if command_id else "failed",
+                    }
                 self._event(db, plan, state.rule_id, event_type, detail, candidate["trace_id"])
             if command_id:
                 actuator = _stateful_actuator(str(candidate["action"]["command"]))
@@ -624,6 +647,8 @@ class AutomationRuntimeService:
                 )
                 if claim is not None and set(claim.rule_ids or []) == set(candidate["rule_ids"]):
                     claim.command_id = command_id
+            if command_id is None:
+                self._finish_delay_only_plan(db, plan, succeeded=False, detail=detail)
             db.commit()
 
     def _record_command_terminal(self, device_id: str, command_id: str, status: str) -> dict[str, Any] | None:
@@ -657,10 +682,30 @@ class AutomationRuntimeService:
                     rule = self._rule_by_id(db, plan.plan_id, plan.current_version, item.rule_id)
                     if rule["trigger"]["type"] == "condition":
                         self._schedule_retry(db, plan, item, {"status": status, "command_id": command_id})
+                rule = self._rule_by_id(db, plan.plan_id, plan.current_version, item.rule_id)
+                if rule["trigger"]["type"] == "delay":
+                    meta = dict(item.meta or {})
+                    meta["delay_status"] = "executed" if status == "executed" else "failed"
+                    item.meta = meta
+                    if status == "executed":
+                        self._event(
+                            db,
+                            plan,
+                            item.rule_id,
+                            "delay.completed",
+                            {"command_id": command_id},
+                            trace_id,
+                        )
                 self._event(db, plan, item.rule_id, f"command.{status}", {"command_id": command_id}, trace_id)
                 if item.rule_id in SYSTEM_ANNOUNCEMENTS and announcement is None:
                     announcement = SYSTEM_ANNOUNCEMENTS[item.rule_id]
                     speech_command_id = meta.get("speech_command_id")
+            self._finish_delay_only_plan(
+                db,
+                plan,
+                succeeded=status == "executed",
+                detail={"status": status, "command_id": command_id},
+            )
             result = {
                 "state_id": state.id,
                 "plan_id": state.plan_id,
@@ -672,6 +717,38 @@ class AutomationRuntimeService:
             }
             db.commit()
             return result
+
+    def _finish_delay_only_plan(
+        self,
+        db: Session,
+        plan: models.AutomationPlan,
+        *,
+        succeeded: bool,
+        detail: dict[str, Any],
+    ) -> None:
+        if plan.plan_type != "user" or plan.status != "active":
+            return
+        spec = self._spec(db, plan)
+        if not spec["rules"] or any(rule["trigger"]["type"] != "delay" for rule in spec["rules"]):
+            return
+        states = (
+            db.query(models.AutomationRuleState).filter_by(plan_id=plan.plan_id, version=plan.current_version).all()
+        )
+        terminal = {"executed", "failed", "missed"}
+        statuses = {str((state.meta or {}).get("delay_status") or "") for state in states}
+        if not statuses or not statuses.issubset(terminal):
+            return
+        all_executed = statuses == {"executed"}
+        plan.status = "completed" if all_executed else "failed"
+        plan.completed_at = utcnow()
+        db.query(models.AutomationActuatorClaim).filter_by(plan_id=plan.plan_id).delete(synchronize_session=False)
+        self._event(
+            db,
+            plan,
+            None,
+            "plan.completed" if all_executed else "plan.failed",
+            {**detail, "delay_only": True, "succeeded": succeeded and all_executed},
+        )
 
     def _schedule_retry(
         self,

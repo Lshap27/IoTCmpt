@@ -28,11 +28,16 @@
     },
     "rules": {
       "type": "array",
-      "minItems": 1,
       "maxItems": 16,
       "items": {"$ref": "#/$defs/rule"}
     }
   },
+  "allOf": [
+    {
+      "if": {"properties": {"rules": {"maxItems": 0}}},
+      "then": {"properties": {"clarifications": {"minItems": 1}}}
+    }
+  ],
   "$defs": {
     "predicate": {
       "type": "object",
@@ -81,27 +86,63 @@
       "required": ["type", "every_seconds"],
       "properties": {
         "type": {"const": "interval"},
-        "every_seconds": {"type": "integer", "minimum": 60, "maximum": 86400}
+        "every_seconds": {"type": "integer", "minimum": 15, "maximum": 86400}
       }
     },
-    "action": {
+    "delayTrigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "after_seconds"],
+      "properties": {
+        "type": {"const": "delay"},
+        "after_seconds": {"type": "integer", "minimum": 15, "maximum": 86400}
+      }
+    },
+    "emptyParameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "stateAction": {
       "type": "object",
       "additionalProperties": false,
       "required": ["command", "parameter"],
       "properties": {
-        "command": {
-          "enum": [
-            "window.open",
-            "window.close",
-            "led.on",
-            "led.off",
-            "voice.speak",
-            "display.message"
-          ]
+        "command": {"enum": ["window.open", "window.close", "led.on", "led.off"]},
+        "parameter": {"$ref": "#/$defs/emptyParameter"}
+      }
+    },
+    "voiceAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "parameter", "text"],
+      "properties": {
+        "command": {"const": "voice.speak"},
+        "parameter": {"$ref": "#/$defs/emptyParameter"},
+        "text": {"type": "string", "minLength": 1, "maxLength": 60}
+      }
+    },
+    "displayAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "parameter"],
+      "properties": {
+        "command": {"const": "display.message"},
+        "parameter": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text"],
+          "properties": {"text": {"type": "string", "minLength": 1, "maxLength": 120}}
         },
-        "parameter": {"type": "object"},
         "text": {"type": "string", "minLength": 1, "maxLength": 120}
       }
+    },
+    "action": {
+      "oneOf": [
+        {"$ref": "#/$defs/stateAction"},
+        {"$ref": "#/$defs/voiceAction"},
+        {"$ref": "#/$defs/displayAction"}
+      ]
     },
     "rule": {
       "type": "object",
@@ -113,7 +154,8 @@
         "trigger": {
           "oneOf": [
             {"$ref": "#/$defs/conditionTrigger"},
-            {"$ref": "#/$defs/intervalTrigger"}
+            {"$ref": "#/$defs/intervalTrigger"},
+            {"$ref": "#/$defs/delayTrigger"}
           ]
         },
         "action": {"$ref": "#/$defs/action"},

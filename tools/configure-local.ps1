@@ -35,10 +35,10 @@ if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
     $ApiBaseUrl = if ($DemoDeviceMode -eq "Real") { "http://${LanAddress}:8000" } else { "http://127.0.0.1:8000" }
 }
 if ([string]::IsNullOrWhiteSpace($LlmEndpoint)) {
-    $LlmEndpoint = if ($DemoAiMode -eq "Mock") { "mock" } else { "https://api.deepseek.com" }
+    $LlmEndpoint = if ($DemoAiMode -eq "Mock") { "mock" } else { "https://ai-gateway.vei.volces.com/v1" }
 }
 if ([string]::IsNullOrWhiteSpace($LlmModel)) {
-    $LlmModel = if ($DemoAiMode -eq "Mock") { "demo-model" } else { "deepseek-v4-flash" }
+    $LlmModel = if ($DemoAiMode -eq "Mock") { "demo-model" } else { "Doubao-Seed-1.6-flash" }
 }
 
 $Values = @{

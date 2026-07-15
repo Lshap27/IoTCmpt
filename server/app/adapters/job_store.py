@@ -231,7 +231,7 @@ class SqlAlchemyJobStore:
                 event_type = "ai.run.retry_scheduled"
             else:
                 run.status = "failed"
-                run.error_code = "ai_run_failed"
+                run.error_code = str(getattr(error, "error_code", "ai_run_failed"))[:80]
                 run.error_message = str(error)[:2000]
                 run.completed_at = now
                 event_type = "ai.run.failed"

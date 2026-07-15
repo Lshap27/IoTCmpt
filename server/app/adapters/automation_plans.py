@@ -325,6 +325,8 @@ class SqlAlchemyAutomationPlanRepository:
             advertised = {str(row.get("name")) for row in (capability.commands if capability else [])}
             commands = {str(rule["action"]["command"]) for rule in normalized["rules"]}
             blockers = list(normalized["clarifications"])
+            if not normalized["rules"]:
+                blockers.append("no_executable_rules")
             if not policy.enabled:
                 blockers.append("automation_policy_disabled")
             if capability is None:
@@ -664,6 +666,8 @@ class SqlAlchemyAutomationPlanRepository:
         self, db: Session, device_id: str, spec: dict[str, Any], exclude: str | None = None
     ) -> list[str]:
         blockers = list(spec.get("clarifications") or [])
+        if not spec.get("rules"):
+            blockers.append("no_executable_rules")
         policy = self._ensure_policy(db, device_id)
         if not policy.enabled:
             blockers.append("automation_policy_disabled")
@@ -683,7 +687,14 @@ class SqlAlchemyAutomationPlanRepository:
     def _initialize_states(db: Session, plan: models.AutomationPlan, spec: dict[str, Any], now: datetime) -> None:
         for rule in spec["rules"]:
             trigger = rule["trigger"]
-            next_fire = now + timedelta(seconds=trigger["every_seconds"]) if trigger["type"] == "interval" else None
+            next_fire = (
+                now
+                + timedelta(
+                    seconds=(trigger["every_seconds"] if trigger["type"] == "interval" else trigger["after_seconds"])
+                )
+                if trigger["type"] in {"interval", "delay"}
+                else None
+            )
             db.add(
                 models.AutomationRuleState(
                     plan_id=plan.plan_id,
@@ -716,13 +727,10 @@ class SqlAlchemyAutomationPlanRepository:
             unchanged = old is not None and old_rules.get(rule["id"]) == rule
             preserved = old if unchanged else None
             trigger = rule["trigger"]
-            next_fire = (
-                preserved.next_fire_at
-                if preserved is not None
-                else now + timedelta(seconds=trigger["every_seconds"])
-                if trigger["type"] == "interval"
-                else None
-            )
+            next_fire = preserved.next_fire_at if preserved is not None else None
+            if preserved is None and trigger["type"] in {"interval", "delay"}:
+                seconds = trigger["every_seconds"] if trigger["type"] == "interval" else trigger["after_seconds"]
+                next_fire = now + timedelta(seconds=seconds)
             db.add(
                 models.AutomationRuleState(
                     plan_id=plan.plan_id,

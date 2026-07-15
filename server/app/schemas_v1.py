@@ -40,21 +40,59 @@ class AutomationIntervalTriggerIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["interval"]
-    every_seconds: int = Field(ge=60, le=86400)
+    every_seconds: int = Field(ge=15, le=86400)
+
+
+class AutomationDelayTriggerIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["delay"]
+    after_seconds: int = Field(ge=15, le=86400)
 
 
 AutomationTriggerIn = Annotated[
-    AutomationConditionTriggerIn | AutomationIntervalTriggerIn,
+    AutomationConditionTriggerIn | AutomationIntervalTriggerIn | AutomationDelayTriggerIn,
     Field(discriminator="type"),
 ]
 
 
-class AutomationActionIn(BaseModel):
+class AutomationEmptyParameterIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    command: Literal["window.open", "window.close", "led.on", "led.off", "voice.speak", "display.message"]
-    parameter: dict[str, Any]
+
+class AutomationDisplayParameterIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=120)
+
+
+class AutomationStateActionIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command: Literal["window.open", "window.close", "led.on", "led.off"]
+    parameter: AutomationEmptyParameterIn
+
+
+class AutomationVoiceActionIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command: Literal["voice.speak"]
+    parameter: AutomationEmptyParameterIn
+    text: str = Field(min_length=1, max_length=60)
+
+
+class AutomationDisplayActionIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command: Literal["display.message"]
+    parameter: AutomationDisplayParameterIn
     text: str | None = Field(default=None, min_length=1, max_length=120)
+
+
+AutomationActionIn = Annotated[
+    AutomationStateActionIn | AutomationVoiceActionIn | AutomationDisplayActionIn,
+    Field(discriminator="command"),
+]
 
 
 class AutomationRuleIn(BaseModel):
@@ -77,7 +115,20 @@ class AutomationPlanSpecV1In(BaseModel):
     manual_override_policy: Literal["respect"]
     end_behavior: Literal["keep_state"]
     clarifications: list[str] = Field(max_length=5)
-    rules: list[AutomationRuleIn] = Field(min_length=1, max_length=16)
+    rules: list[AutomationRuleIn] = Field(max_length=16)
+
+    @model_validator(mode="after")
+    def validate_executable_rules(self) -> AutomationPlanSpecV1In:
+        if not self.rules and not self.clarifications:
+            raise ValueError("a plan without rules must include clarifications")
+        for rule in self.rules:
+            delayed_too_long = (
+                isinstance(rule.trigger, AutomationDelayTriggerIn)
+                and rule.trigger.after_seconds > self.duration_seconds
+            )
+            if delayed_too_long:
+                raise ValueError("delay after_seconds must not exceed duration_seconds")
+        return self
 
 
 class CapabilityCommandOut(BaseModel):

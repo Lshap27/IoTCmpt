@@ -6,26 +6,41 @@ from typing import Any
 from app.domain.automation_plans import validate_plan_spec
 
 
-def _seconds(value: int, unit: str) -> int:
-    return value * (3600 if unit in {"小时", "hour", "hours"} else 60)
+def _seconds(value: float, unit: str) -> int:
+    if unit in {"秒", "second", "seconds"}:
+        return round(value)
+    return round(value * (3600 if unit in {"小时", "hour", "hours"} else 60))
+
+
+def _time_value(raw: str) -> float:
+    return 0.5 if raw == "半" else float(raw)
+
+
+def _reminder_text(goal: str) -> str:
+    quoted = re.search(r"提醒我\s*[：:,，]?\s*[“\"](.+?)[”\"]", goal)
+    if quoted:
+        return quoted.group(1).strip()
+    plain = re.search(r"提醒我\s*[：:,，]?\s*(.+?)(?:[。；;]|$)", goal)
+    if plain:
+        return plain.group(1).strip(' \t，,。；;"“”')
+    return ""
 
 
 def compile_mock_plan(goal: str, *, timezone: str = "Asia/Shanghai") -> tuple[dict[str, Any], str]:
     """Compile the supported Chinese demo grammar without bypassing plan validation."""
     duration_seconds: int | None = None
-    for match in re.finditer(r"(\d+)\s*(分钟|小时|minutes?|hours?)", goal, re.IGNORECASE):
-        prefix = goal[max(0, match.start() - 2) : match.start()]
-        if "每" not in prefix.lower():
-            duration_seconds = _seconds(int(match.group(1)), match.group(2).lower())
-            break
+    duration = re.search(
+        r"(?:持续|学习|计划(?:进行)?)\s*(\d+|半)\s*(秒|分钟|小时|seconds?|minutes?|hours?)",
+        goal,
+        re.IGNORECASE,
+    )
+    if duration:
+        duration_seconds = _seconds(_time_value(duration.group(1)), duration.group(2).lower())
 
     clarifications: list[str] = []
-    if duration_seconds is None:
-        duration_seconds = 3600
-        clarifications.append("请确认计划持续时间")
-    elif not 60 <= duration_seconds <= 86400:
+    if duration_seconds is not None and not 60 <= duration_seconds <= 86400:
         clarifications.append("计划持续时间必须在 1 分钟到 24 小时之间")
-    duration_seconds = max(60, min(duration_seconds, 86400))
+        duration_seconds = max(60, min(duration_seconds, 86400))
 
     rules: list[dict[str, Any]] = []
     dark_present = any(
@@ -99,31 +114,63 @@ def compile_mock_plan(goal: str, *, timezone: str = "Asia/Shanghai") -> tuple[di
                 "cooldown_seconds": 300,
             }
         )
-    interval = re.search(r"每\s*(\d+)\s*(分钟|小时)", goal)
-    if interval:
-        interval_seconds = _seconds(int(interval.group(1)), interval.group(2))
-        if 60 <= interval_seconds <= 86400:
+    reminder_text = _reminder_text(goal)
+    delay = re.search(r"(\d+|半)\s*(秒|分钟|小时)\s*后", goal)
+    if delay and "提醒" in goal:
+        delay_seconds = _seconds(_time_value(delay.group(1)), delay.group(2))
+        if 15 <= delay_seconds <= 86400:
             rules.append(
                 {
-                    "id": "activity-reminder",
-                    "description": f"每 {interval.group(1)} {interval.group(2)}提醒起身活动",
-                    "trigger": {"type": "interval", "every_seconds": interval_seconds},
+                    "id": "drink-water-reminder" if "喝水" in reminder_text else "one-time-reminder",
+                    "description": f"激活后 {delay_seconds} 秒提醒一次",
+                    "trigger": {"type": "delay", "after_seconds": delay_seconds},
                     "action": {
                         "command": "voice.speak",
                         "parameter": {},
-                        "text": "请起身活动一下，放松肩颈。",
+                        "text": reminder_text or "提醒时间到了。",
                     },
                     "cooldown_seconds": 0,
                 }
             )
         else:
-            clarifications.append("提醒间隔必须在 1 分钟到 24 小时之间")
+            clarifications.append("一次性提醒延迟必须在 15 秒到 24 小时之间")
+
+    interval = re.search(r"每\s*(\d+|半)\s*(秒|分钟|小时)", goal)
+    if interval:
+        interval_seconds = _seconds(_time_value(interval.group(1)), interval.group(2))
+        if 15 <= interval_seconds <= 86400:
+            rules.append(
+                {
+                    "id": "activity-reminder",
+                    "description": f"每 {interval_seconds} 秒提醒一次",
+                    "trigger": {"type": "interval", "every_seconds": interval_seconds},
+                    "action": {
+                        "command": "voice.speak",
+                        "parameter": {},
+                        "text": reminder_text or "请起身活动一下，放松肩颈。",
+                    },
+                    "cooldown_seconds": 0,
+                }
+            )
+        else:
+            clarifications.append("提醒间隔必须在 15 秒到 24 小时之间")
+
+    timed_rules = [rule for rule in rules if rule["trigger"]["type"] in {"delay", "interval"}]
+    if duration_seconds is None:
+        delays = [rule["trigger"]["after_seconds"] for rule in timed_rules if rule["trigger"]["type"] == "delay"]
+        if delays:
+            duration_seconds = max(60, max(delays) + 30)
+        elif timed_rules:
+            duration_seconds = 60
+        else:
+            duration_seconds = 3600
+            clarifications.append("请确认计划持续时间")
     if not rules:
         clarifications.append("请说明需要执行的光照、通风或提醒动作")
 
     spec = {
         "schema_version": "1.0",
-        "title": "AI 学习自动化计划" if "学习" in goal else "AI 自动化计划",
+        "title": "喝水提醒" if "喝水" in reminder_text else "AI 学习自动化计划" if "学习" in goal else "AI 自动化计划",
         "duration_seconds": duration_seconds,
         "timezone": timezone,
         "manual_override_policy": "respect",
