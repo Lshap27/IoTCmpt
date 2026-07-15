@@ -13,6 +13,7 @@ class AutomationPredicateIn(BaseModel):
         "light_is_dark",
         "human_present",
         "air_quality",
+        "recommend_open_window",
         "temperature_c",
         "humidity_percent",
         "tvoc_ppb",
@@ -204,6 +205,18 @@ class AutomationRuleStateOut(BaseModel):
     blocked_reason: str | None = None
 
 
+class AutomationActuatorClaimOut(BaseModel):
+    actuator: Literal["window", "led"]
+    owner_type: Literal["system", "user"]
+    plan_id: str
+    version: int
+    rule_ids: list[str]
+    target_command: str | None = None
+    status: Literal["claimed", "conflict"]
+    reason: str
+    updated_at: str
+
+
 class AutomationPlanOut(BaseModel):
     plan_id: str
     device_id: str
@@ -217,6 +230,7 @@ class AutomationPlanOut(BaseModel):
     explanation: str
     validation: dict[str, Any]
     rule_states: list[AutomationRuleStateOut]
+    control_claims: list[AutomationActuatorClaimOut] = Field(default_factory=list)
     started_at: str | None = None
     paused_at: str | None = None
     ends_at: str | None = None

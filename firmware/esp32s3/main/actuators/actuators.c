@@ -202,20 +202,14 @@ void actuator_refresh_alarm(void) {
     beep_set(state.alarm_on);
 }
 
-esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *state) {
-    if (!state) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
+esp_err_t actuator_apply(const cloud_command_t *command) {
     control_state_t local;
     control_state_get(&local);
 
-    /* 本地融合规则只在自动优先模式下负责开窗；空气恢复后保持当前状态，等待用户关窗。 */
+    /* 普通环境自动化由 Gateway 统一运行时负责；固件这里只执行命令和安全互锁。 */
     bool target_open = local.window_open;
     if (local.priority == CONTROL_PRIORITY_MANUAL_FIRST && local.manual_window_override) {
         target_open = local.manual_open;
-    } else if (local.priority == CONTROL_PRIORITY_AUTO_FIRST && state->recommend_open_window) {
-        target_open = true;
     }
 
     if (command) {

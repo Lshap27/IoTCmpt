@@ -329,21 +329,8 @@ static void actuator_task(void *arg) {
             continue;
         }
 
-        control_state_t before;
-        control_state_get(&before);
-        const esp_err_t command_result = actuator_apply(has_command ? &envelope.command : NULL, &fusion);
+        const esp_err_t command_result = actuator_apply(has_command ? &envelope.command : NULL);
         status_set_command_result(command_result);
-        if (!has_command && command_result == ESP_OK && before.priority == CONTROL_PRIORITY_AUTO_FIRST &&
-            !before.window_open && fusion.recommend_open_window) {
-            control_state_t after;
-            control_state_get(&after);
-            if (after.window_open) {
-                const esp_err_t voice_result = voice_announce(VOICE_ANNOUNCEMENT_AIR_VENTILATION);
-                if (voice_result != ESP_OK && voice_result != ESP_ERR_INVALID_STATE) {
-                    ESP_LOGW(TAG, "通风语音入队失败: %s", esp_err_to_name(voice_result));
-                }
-            }
-        }
         if (has_command) {
             const bool rejected = command_result == ESP_ERR_NOT_SUPPORTED || command_result == ESP_ERR_INVALID_ARG ||
                                   command_result == ESP_ERR_INVALID_STATE || command_result == ESP_ERR_INVALID_RESPONSE;

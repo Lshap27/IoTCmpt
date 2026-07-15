@@ -28,10 +28,6 @@ static bool s_smoke_silenced;
 /* “警告，检测到烟雾，请立即撤离并检查现场火源，确保人身安全。” */
 static const char *SMOKE_ANNOUNCEMENT_BASE64 =
     "vq+45qOsvOyy4rW90czO7aOsx+vBory0s7fA67KivOyy6c/Ws6G78NS0o6zIt7GjyMvJ7bCyyKuhow==";
-/* “警告，空气质量较差，已自动开窗通风，请尽快检查污染源并持续关注空气指标。” */
-static const char *AIR_VENTILATION_ANNOUNCEMENT_BASE64 =
-    "vq+45qOsv9XG+NbKwb+9z7Luo6zS0dfUtq+/qrSwzai356Osx+u+ob/svOyy6c7byL7UtLKis9bQ+LnY16K/1cb41rix6qGj";
-
 static bool wait_idle(uint32_t timeout_ms) {
     const TickType_t start = xTaskGetTickCount();
     while ((xTaskGetTickCount() - start) * portTICK_PERIOD_MS < timeout_ms) {
@@ -97,8 +93,6 @@ static const char *announcement_payload(voice_announcement_t announcement) {
     switch (announcement) {
     case VOICE_ANNOUNCEMENT_SMOKE:
         return SMOKE_ANNOUNCEMENT_BASE64;
-    case VOICE_ANNOUNCEMENT_AIR_VENTILATION:
-        return AIR_VENTILATION_ANNOUNCEMENT_BASE64;
     default:
         return NULL;
     }

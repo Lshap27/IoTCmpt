@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { BrainCircuit, FileText, Printer, Sparkles } from "lucide-react";
+import { AiTextPreview } from "@/components/ai-markdown";
 import { Panel } from "@/components/panel";
 import { Button } from "@/components/ui/button";
 import type { AiHealthReport, EventOut, ReportPeriod, TelemetryBucketPoint } from "@/lib/api";
@@ -178,23 +179,20 @@ export function HealthReport({
                   风险 {aiReport.risk_score}/100 · {aiReport.model}
                 </span>
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-ink2">{aiReport.summary}</p>
-              <div className="mt-3 grid gap-3 md:grid-cols-3">
-                {[
-                  ["异常发现", aiReport.anomalies],
-                  ["优先建议", aiReport.recommendations],
-                  ["后续检查", aiReport.next_checks],
-                ].map(([title, items]) => (
-                  <div key={title as string}>
-                    <p className="text-sm font-semibold text-ink">{title as string}</p>
-                    <ul className="mt-2 space-y-1.5 text-sm leading-relaxed text-ink2">
-                      {(items as string[]).map((item) => (
-                        <li key={item}>• {item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
+              <AiTextPreview
+                className="mt-3"
+                title={aiReport.headline}
+                description={`风险 ${aiReport.risk_score}/100 · ${aiReport.model}`}
+                content={[
+                  aiReport.summary,
+                  "## 异常发现",
+                  ...aiReport.anomalies.map((item) => `- ${item}`),
+                  "## 优先建议",
+                  ...aiReport.recommendations.map((item) => `- ${item}`),
+                  "## 后续检查",
+                  ...aiReport.next_checks.map((item) => `- ${item}`),
+                ].join("\n")}
+              />
               <p className="mt-4 text-xs text-ink3">
                 数据完整度 {aiReport.coverage.completeness_percent.toFixed(1)}% · 共{" "}
                 {aiReport.coverage.sample_count} 条采样

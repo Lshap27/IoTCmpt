@@ -49,6 +49,7 @@ export type {
   TraceTimelineOut,
   WsMessage,
   AutomationPlanOut,
+  AutomationActuatorClaimOut,
   AutomationPlanEventOut,
   AiStrategyOut,
 } from "./api-client/types.gen";

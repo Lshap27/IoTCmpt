@@ -109,12 +109,14 @@ def test_scenarios_generate_raw_values_and_fusion_matches_firmware_thresholds():
         assert len({sample["temperature_c"] for sample in samples}) > 1
 
 
-def test_auto_first_opens_window_but_recovery_does_not_close_it():
+def test_normal_air_automation_is_not_executed_inside_firmware():
     model = FirmwareModel("esp32s3-test", "air-alert", {"control_priority": "auto_first"})
-    assert model.telemetry()["state"]["window_open"] is True
+    telemetry = model.telemetry()
+    assert telemetry["fusion"]["recommend_open_window"] is True
+    assert telemetry["state"]["window_open"] is False
     model.scenario = "normal"
     model.sensor = ScenarioSensor("normal")
-    assert model.telemetry()["state"]["window_open"] is True
+    assert model.telemetry()["state"]["window_open"] is False
 
 
 def test_command_validation_checks_source_parameters_and_ttl():

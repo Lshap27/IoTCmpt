@@ -90,7 +90,10 @@ export default function Dashboard() {
       </section>
 
       <section className="bento-grid mt-5 grid grid-cols-12 gap-4 lg:gap-5">
-        <TelemetryChart history={live.history} className="col-span-12 xl:col-span-8" />
+        <TelemetryChart
+          history={live.history}
+          className="col-span-12 xl:col-span-8 xl:h-[25rem] xl:overflow-hidden"
+        />
         <AiPanel
           analyzing={live.analyzing}
           run={live.decisionRun}
@@ -100,7 +103,7 @@ export default function Dashboard() {
           onUpdatePolicy={live.updatePolicy}
           onAnalyze={live.triggerAnalysis}
           onCancelRun={live.cancelAiRun}
-          className="col-span-12 xl:col-span-4"
+          className="col-span-12 xl:col-span-4 xl:h-[25rem] xl:overflow-hidden"
         />
         <AutomationPlanPanel deviceId={deviceId} className="col-span-12 xl:col-span-6" />
 

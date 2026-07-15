@@ -37,6 +37,9 @@ class CommandRequest:
     trace_id: str = ""
     idempotency_key: str | None = None
     expires_at: datetime | None = None
+    automation_plan_id: str | None = None
+    automation_plan_version: int | None = None
+    automation_rule_ids: tuple[str, ...] = ()
 
 
 def validate_command(request: CommandRequest, *, ai_restricted: bool = False) -> None:

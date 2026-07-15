@@ -357,6 +357,30 @@ class AutomationRuleState(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
+class AutomationActuatorClaim(Base):
+    __tablename__ = "automation_actuator_claims"
+    __table_args__ = (UniqueConstraint("device_id", "actuator", name="uq_automation_actuator_claim"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[str] = mapped_column(String(64), ForeignKey("devices.device_id"), index=True)
+    actuator: Mapped[str] = mapped_column(String(16), index=True)
+    owner_type: Mapped[str] = mapped_column(String(16), index=True)
+    plan_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("automation_plans.plan_id", ondelete="CASCADE"), index=True
+    )
+    version: Mapped[int] = mapped_column(Integer)
+    rule_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    target_command: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(24), default="claimed", index=True)
+    reason: Mapped[str] = mapped_column(String(160), default="")
+    observation_key: Mapped[str] = mapped_column(String(200), default="")
+    command_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("commands.command_id", ondelete="SET NULL"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
 class AutomationPlanEvent(Base):
     __tablename__ = "automation_plan_events"
 

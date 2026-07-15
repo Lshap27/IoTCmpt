@@ -282,11 +282,14 @@ async def _transition_plan(
     plan_id: str,
     action: str,
     plans: AutomationPlanApplicationService,
+    request: Request,
     *,
     replace_active: bool = False,
 ) -> dict:
     try:
-        return await plans.transition(device_id, plan_id, action, replace_active=replace_active)
+        result = await plans.transition(device_id, plan_id, action, replace_active=replace_active)
+        await request.app.state.automation_runtime.evaluate(device_id)
+        return await plans.get(device_id, plan_id) or result
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -300,36 +303,40 @@ async def activate_automation_plan(
     device_id: str,
     plan_id: str,
     payload: AutomationPlanActivateIn,
+    request: Request,
     plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
 ):
-    return await _transition_plan(device_id, plan_id, "activate", plans, replace_active=payload.replace_active)
+    return await _transition_plan(device_id, plan_id, "activate", plans, request, replace_active=payload.replace_active)
 
 
 @router.post("/devices/{device_id}/automation-plans/{plan_id}/pause", response_model=AutomationPlanOut)
 async def pause_automation_plan(
     device_id: str,
     plan_id: str,
+    request: Request,
     plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
 ):
-    return await _transition_plan(device_id, plan_id, "pause", plans)
+    return await _transition_plan(device_id, plan_id, "pause", plans, request)
 
 
 @router.post("/devices/{device_id}/automation-plans/{plan_id}/resume", response_model=AutomationPlanOut)
 async def resume_automation_plan(
     device_id: str,
     plan_id: str,
+    request: Request,
     plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
 ):
-    return await _transition_plan(device_id, plan_id, "resume", plans)
+    return await _transition_plan(device_id, plan_id, "resume", plans, request)
 
 
 @router.post("/devices/{device_id}/automation-plans/{plan_id}/cancel", response_model=AutomationPlanOut)
 async def cancel_automation_plan(
     device_id: str,
     plan_id: str,
+    request: Request,
     plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
 ):
-    return await _transition_plan(device_id, plan_id, "cancel", plans)
+    return await _transition_plan(device_id, plan_id, "cancel", plans, request)
 
 
 @router.get("/devices/{device_id}/ai/strategies", response_model=list[AiStrategyOut])
@@ -372,9 +379,12 @@ async def _resolve_strategy(
 async def approve_ai_strategy(
     device_id: str,
     strategy_id: str,
+    request: Request,
     plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
 ):
-    return await _resolve_strategy(device_id, strategy_id, "approve", plans)
+    result = await _resolve_strategy(device_id, strategy_id, "approve", plans)
+    await request.app.state.automation_runtime.evaluate(device_id)
+    return result
 
 
 @router.post("/devices/{device_id}/ai/strategies/{strategy_id}/reject", response_model=AiStrategyOut)

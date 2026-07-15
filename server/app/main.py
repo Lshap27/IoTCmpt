@@ -33,7 +33,7 @@ from app.core.config import get_settings
 from app.db import models
 from app.db.session import SessionLocal, init_db
 from app.schemas import HealthOut, WebSocketEnvelope
-from app.services.automation_runtime import AutomationRuntimeService, LightingAutomationCompatibilityFacade
+from app.services.automation_runtime import AutomationRuntimeService
 from app.services.mqtt import MqttGateway
 from app.services.mqtt_ingest import ingest_mqtt_message
 from app.services.pose import PoseService
@@ -135,8 +135,6 @@ async def lifespan(app: FastAPI):
     app.state.mqtt_service = mqtt_service
     app.state.pose_service = pose_service
     app.state.automation_runtime = automation_runtime
-    # Compatibility alias for callers that still inspect the former lighting service state.
-    app.state.lighting_automation = LightingAutomationCompatibilityFacade(automation_runtime, SessionLocal)
     app.state.mqtt_message_handler = handle_mqtt_message
     app.state.outbox_dispatcher = outbox
     app.state.realtime_relay = realtime_relay

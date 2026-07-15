@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Legend, PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer, Tooltip } from "recharts";
+import { AiTextPreview } from "@/components/ai-markdown";
 import { useDeviceLive } from "@/hooks/use-device-live";
 import type { NotificationOut } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -1103,7 +1104,13 @@ function MessagesPanel({
                   <td className="p-3">
                     {DORM_NAME} <LiveBadge />
                   </td>
-                  <td className="max-w-xl p-3">{notification.content}</td>
+                  <td className="max-w-xl p-3">
+                    <AiTextPreview
+                      content={notification.content}
+                      title="完整通知内容"
+                      description={formatTime(notification.created_at)}
+                    />
+                  </td>
                   <td className="p-3">
                     <Badge
                       tone={

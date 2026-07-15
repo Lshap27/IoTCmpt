@@ -1,6 +1,6 @@
 # Data Model
 
-The v2 architecture adds persistent device capability/twin, command audit, transactional outbox, AI-run, MCP-tool-call, automation-policy and AI-report tables. Migration `0006_architecture_v2.py` introduces the base tables; `0007_reliable_worker_cutover.py` adds leases, realtime/trace events and worker heartbeats while migrating legacy AI history; `0008_reliability_fencing.py` adds per-claim lease tokens and MQTT inbox idempotency; `0009_voice_lighting_automation.py` adds deterministic per-device lighting rule state. Migration `0010_automation_plans.py` adds immutable plan versions, generic runtime state, audit events and AI strategy candidates while retaining the old lighting table for one rollback window.
+The v2 architecture adds persistent device capability/twin, command audit, transactional outbox, AI-run, MCP-tool-call, automation-policy and AI-report tables. Migration `0006_architecture_v2.py` introduces the base tables; `0007_reliable_worker_cutover.py` adds leases, realtime/trace events and worker heartbeats while migrating legacy AI history; `0008_reliability_fencing.py` adds per-claim lease tokens and MQTT inbox idempotency; `0009_voice_lighting_automation.py` adds deterministic per-device lighting rule state. Migration `0010_automation_plans.py` adds immutable plan versions, generic runtime state, audit events and AI strategy candidates while retaining the old lighting table for one rollback window. Migration `0011_automation_actuator_claims.py` adds the single persistent winner/conflict row for each device window or LED actuator.
 
 | Table | Purpose |
 | --- | --- |
@@ -73,6 +73,7 @@ these aggregates without inventing samples for missing periods.
 - `smoke_silenced`
 - `led_on`
 - `air_quality`
+- `recommend_open_window`
 - `recommend_open_window`
 - `alarm_enabled`
 - `reason`

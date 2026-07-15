@@ -238,6 +238,31 @@ class SqlAlchemyCommandRepository:
                         return "policy_denied", "manual window override is active"
                     if request.type.startswith("led.") and sample.manual_led_override:
                         return "policy_denied", "manual LED override is active"
+            actuator = (
+                "window" if request.type.startswith("window.") else "led" if request.type.startswith("led.") else None
+            )
+            if actuator is not None:
+                claim = (
+                    db.query(models.AutomationActuatorClaim)
+                    .filter_by(device_id=request.device_id, actuator=actuator)
+                    .one_or_none()
+                )
+                if request.source == "rule":
+                    if claim is None:
+                        return "automation_claim_missing", f"no active automation claim for {actuator}"
+                    if claim.status == "conflict":
+                        return "automation_claimed", f"{actuator} has conflicting automation rules"
+                    if (
+                        claim.plan_id != request.automation_plan_id
+                        or claim.version != request.automation_plan_version
+                        or claim.target_command != request.type
+                        or set(claim.rule_ids or []) != set(request.automation_rule_ids)
+                    ):
+                        return "automation_claimed", f"{actuator} is owned by another automation rule"
+                elif request.source in {"ai", "external_mcp"} and claim is not None:
+                    if claim.status == "claimed" and claim.target_command == request.type:
+                        return "already_managed", f"{actuator} already has the requested automation target"
+                    return "automation_claimed", f"{actuator} is controlled by deterministic automation"
             recent = (
                 db.query(models.Command)
                 .filter(

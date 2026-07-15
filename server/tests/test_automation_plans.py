@@ -10,6 +10,7 @@ from app.adapters.automation_plans import SqlAlchemyAutomationPlanRepository, ut
 from app.adapters.job_store import SqlAlchemyJobStore
 from app.adapters.mcp_server import MCP_INTERNAL, MCP_SCOPES, MCP_TRACE_ID
 from app.db import models
+from app.domain.commands import CommandRejected, CommandRequest
 from app.schemas import TelemetryIn
 from app.services.plan_compiler import compile_mock_plan
 from app.services.telemetry import record_telemetry
@@ -57,6 +58,120 @@ def test_mock_compiler_keeps_only_requested_actions_and_manual_semantics():
     assert commands == ["led.on", "window.open", "voice.speak"]
     assert not any(command in commands for command in ["led.off", "window.close"])
     assert spec["rules"][2]["trigger"]["every_seconds"] == 1800
+
+
+def test_mock_compiler_supports_explicit_two_way_lighting_without_inventing_it():
+    two_way, _ = compile_mock_plan(
+        "我要学习 10 分钟。光线暗并且检测到有人时开灯；光线明亮并且确认无人时关灯。请尊重我的手动操作。"
+    )
+    assert [rule["action"]["command"] for rule in two_way["rules"]] == ["led.on", "led.off"]
+    assert two_way["rules"][0]["trigger"]["items"] == [
+        {"fact": "light_is_dark", "op": "eq", "value": True},
+        {"fact": "human_present", "op": "eq", "value": True},
+    ]
+    assert two_way["rules"][1]["trigger"]["items"] == [
+        {"fact": "light_is_dark", "op": "eq", "value": False},
+        {"fact": "human_present", "op": "eq", "value": False},
+    ]
+
+    simple, _ = compile_mock_plan("持续 10 分钟，光线暗就开灯")
+    assert [rule["action"]["command"] for rule in simple["rules"]] == ["led.on"]
+    assert simple["rules"][0]["trigger"]["items"] == [{"fact": "light_is_dark", "op": "eq", "value": True}]
+
+
+def test_user_claim_only_owns_actuator_while_condition_matches(client):
+    seed_device(commands=["window.open", "window.close", "led.on", "led.off", "voice.speak"])
+    user_spec = {
+        "schema_version": "1.0",
+        "title": "条件接管窗户",
+        "duration_seconds": 600,
+        "timezone": "Asia/Shanghai",
+        "manual_override_policy": "respect",
+        "end_behavior": "keep_state",
+        "clarifications": [],
+        "rules": [
+            {
+                "id": "user-window-close",
+                "description": "暗光时保持关窗",
+                "trigger": {
+                    "type": "condition",
+                    "mode": "all",
+                    "items": [{"fact": "light_is_dark", "op": "eq", "value": True}],
+                    "stability_samples": 1,
+                },
+                "action": {"command": "window.close", "parameter": {}},
+                "cooldown_seconds": 0,
+            }
+        ],
+    }
+    plan = asyncio.run(
+        client.app.state.automation_plan_application.create_draft(
+            "plan-device", "dark close", user_spec, "test", None, "trace-claim"
+        )
+    )
+    from app.db.session import SessionLocal
+
+    with SessionLocal() as db:
+        latest = (
+            db.query(models.Telemetry).filter_by(device_id="plan-device").order_by(models.Telemetry.id.desc()).first()
+        )
+        latest.recommend_open_window = True
+        db.commit()
+    assert asyncio.run(client.app.state.automation_runtime.evaluate("plan-device")) == []
+    with SessionLocal() as db:
+        claim = db.query(models.AutomationActuatorClaim).filter_by(device_id="plan-device", actuator="window").one()
+        assert claim.plan_id == plan["plan_id"] and claim.target_command == "window.close"
+        record_telemetry(
+            db,
+            TelemetryIn(
+                device_id="plan-device",
+                sensors={"light_is_dark": False},
+                state={"window_open": False, "control_priority": "manual_first"},
+                fusion={"air_quality": "alert", "recommend_open_window": True},
+            ),
+        )
+    commands = asyncio.run(client.app.state.automation_runtime.evaluate("plan-device"))
+    assert [command["type"] for command in commands] == ["window.open"]
+    with SessionLocal() as db:
+        claim = db.query(models.AutomationActuatorClaim).filter_by(device_id="plan-device", actuator="window").one()
+        assert claim.owner_type == "system" and claim.target_command == "window.open"
+
+
+def test_conflicting_user_rules_block_ai_but_not_create_outbox_commands(client):
+    seed_device()
+    spec, _ = compile_mock_plan("持续 10 分钟，光线暗就开灯")
+    spec["rules"][0]["trigger"]["stability_samples"] = 1
+    opposite = {**spec["rules"][0], "id": "light-off-too", "action": {"command": "led.off", "parameter": {}}}
+    spec["rules"].append(opposite)
+    plan = asyncio.run(
+        client.app.state.automation_plan_application.create_draft(
+            "plan-device", "conflict", spec, "test", None, "trace-conflict"
+        )
+    )
+    assert asyncio.run(client.app.state.automation_runtime.evaluate("plan-device")) == []
+    from app.db.session import SessionLocal
+
+    with SessionLocal() as db:
+        claim = db.query(models.AutomationActuatorClaim).filter_by(device_id="plan-device", actuator="led").one()
+        assert claim.status == "conflict" and claim.target_command is None
+        assert (
+            db.query(models.AutomationPlanEvent).filter_by(plan_id=plan["plan_id"], event_type="rule.conflict").count()
+            == 2
+        )
+    with pytest.raises(CommandRejected) as rejected:
+        asyncio.run(
+            client.app.state.command_application.submit(
+                CommandRequest(
+                    device_id="plan-device",
+                    type="led.on",
+                    source="ai",
+                    reason="one-shot decision",
+                    trace_id="trace-ai-conflict",
+                ),
+                ai_restricted=True,
+            )
+        )
+    assert rejected.value.error_code == "automation_claimed"
 
 
 def test_auto_activation_and_existing_plan_blocker_are_visible(client):
@@ -151,6 +266,31 @@ def test_manual_override_after_a_fired_edge_is_audited_without_reopening(client)
         assert db.query(models.Command).filter_by(device_id="plan-device", type="window.open").count() == 1
 
 
+def test_failed_condition_command_retries_without_waiting_for_rule_cooldown(client):
+    seed_device(manual_window=False, commands=["window.open", "led.on", "led.off"])
+    spec, explanation = compile_mock_plan("持续 60 分钟，空气不好就通风")
+    plan = asyncio.run(
+        client.app.state.automation_plan_application.create_draft(
+            "plan-device", "air retry", spec, explanation, None, "trace-air-retry"
+        )
+    )
+    runtime = client.app.state.automation_runtime
+    first = asyncio.run(runtime.evaluate("plan-device"))[0]
+    assert asyncio.run(runtime.reconcile_command("plan-device", first["command_id"], "failed")) is None
+
+    from app.db.session import SessionLocal
+
+    with SessionLocal() as db:
+        state = db.query(models.AutomationRuleState).filter_by(plan_id=plan["plan_id"]).one()
+        state.meta = {**state.meta, "retry_after": (utcnow() - timedelta(seconds=1)).isoformat()}
+        db.query(models.Command).filter_by(command_id=first["command_id"]).one().status = "failed"
+        db.commit()
+    second = asyncio.run(runtime.evaluate("plan-device"))[0]
+    assert second["command_id"] != first["command_id"]
+    with SessionLocal() as db:
+        assert db.query(models.Command).filter_by(device_id="plan-device", type="window.open").count() == 2
+
+
 def test_restart_style_missed_interval_is_skipped_and_reanchored(client):
     seed_device(commands=["voice.speak", "led.on", "led.off"])
     spec, explanation = compile_mock_plan("持续 60 分钟，每 1 分钟提醒我起来活动")
@@ -179,6 +319,62 @@ def test_restart_style_missed_interval_is_skipped_and_reanchored(client):
         )
         assert state.next_fire_at > now
         assert db.query(models.Command).filter_by(device_id="plan-device", type="voice.speak").count() == 0
+
+
+def test_timed_actuator_claim_waits_for_terminal_ack_and_newer_state(client):
+    seed_device(commands=["window.open", "led.on", "led.off"])
+    spec = {
+        "schema_version": "1.0",
+        "title": "定时开窗",
+        "duration_seconds": 600,
+        "timezone": "Asia/Shanghai",
+        "manual_override_policy": "respect",
+        "end_behavior": "keep_state",
+        "clarifications": [],
+        "rules": [
+            {
+                "id": "timed-window-open",
+                "description": "每分钟开窗",
+                "trigger": {"type": "interval", "every_seconds": 60},
+                "action": {"command": "window.open", "parameter": {}},
+                "cooldown_seconds": 0,
+            }
+        ],
+    }
+    plan = asyncio.run(
+        client.app.state.automation_plan_application.create_draft(
+            "plan-device", "timed window", spec, "test", None, "trace-timed-window"
+        )
+    )
+    from app.db.session import SessionLocal
+
+    with SessionLocal() as db:
+        state = db.query(models.AutomationRuleState).filter_by(plan_id=plan["plan_id"]).one()
+        state.next_fire_at = utcnow() - timedelta(milliseconds=100)
+        db.commit()
+    runtime = client.app.state.automation_runtime
+    command = asyncio.run(runtime.evaluate("plan-device", include_conditions=False))[0]
+    assert asyncio.run(runtime.evaluate("plan-device", include_conditions=False)) == []
+    with SessionLocal() as db:
+        assert db.query(models.AutomationActuatorClaim).filter_by(plan_id=plan["plan_id"]).count() == 1
+        row = db.query(models.Command).filter_by(command_id=command["command_id"]).one()
+        row.status = "executed"
+        row.executed_at = utcnow()
+        db.commit()
+    asyncio.run(runtime.reconcile_command("plan-device", command["command_id"], "executed"))
+    assert asyncio.run(runtime.evaluate("plan-device", include_conditions=False)) == []
+    with SessionLocal() as db:
+        assert db.query(models.AutomationActuatorClaim).filter_by(plan_id=plan["plan_id"]).count() == 1
+        record_telemetry(
+            db,
+            TelemetryIn(
+                device_id="plan-device",
+                state={"window_open": True, "control_priority": "manual_first"},
+            ),
+        )
+    asyncio.run(runtime.evaluate("plan-device", include_conditions=False))
+    with SessionLocal() as db:
+        assert db.query(models.AutomationActuatorClaim).filter_by(plan_id=plan["plan_id"]).count() == 0
 
 
 def test_strategy_approval_is_version_fenced(client):

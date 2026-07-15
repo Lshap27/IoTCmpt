@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, Bell, CheckCircle2, ChevronDown, Volume2, VolumeX } from "lucide-react";
+import { AiTextPreview } from "@/components/ai-markdown";
 import type { NotificationOut } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +65,12 @@ export function NotificationCenter({ notifications }: { notifications: Notificat
             className="animate-fade-slide rounded-xl border border-accent/25 bg-accent/5 p-4"
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <p className="max-w-4xl whitespace-pre-wrap text-sm leading-6 text-ink">{latest.content}</p>
+              <AiTextPreview
+                content={latest.content}
+                title="完整通知"
+                description={formatTime(latest.created_at)}
+                className="min-w-0 flex-1"
+              />
               <VoiceState notification={latest} />
             </div>
             <time className="mt-3 block text-xs text-ink3" dateTime={latest.created_at}>
@@ -86,7 +92,12 @@ export function NotificationCenter({ notifications }: { notifications: Notificat
             {older.slice(0, 9).map((notification) => (
               <li key={notification.id} className="py-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <p className="whitespace-pre-wrap text-sm leading-6 text-ink2">{notification.content}</p>
+                  <AiTextPreview
+                    content={notification.content}
+                    title="历史通知"
+                    description={formatTime(notification.created_at)}
+                    className="min-w-0 flex-1"
+                  />
                   <VoiceState notification={notification} />
                 </div>
                 <time className="mt-1 block text-xs text-ink3" dateTime={notification.created_at}>

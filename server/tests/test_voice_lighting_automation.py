@@ -9,12 +9,13 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.adapters.ai_worker import AiRunWorker
+from app.adapters.automation_plans import SqlAlchemyAutomationPlanRepository
 from app.adapters.mcp_server import MCP_INTERNAL, MCP_SCOPES, MCP_TRACE_ID
 from app.core.config import get_settings
 from app.db import models
 from app.domain.commands import CommandRejected
 from app.schemas import TelemetryIn
-from app.services.lighting_automation import LightingAutomationService
+from app.services.automation_runtime import AutomationRuntimeService
 from app.services.llm import LLMService
 from app.services.telemetry import record_command_ack, record_telemetry
 from app.services.voice_commands import encode_voice_text
@@ -82,11 +83,12 @@ def seed_lighting_inputs(
 
 def test_dark_present_turns_light_on_then_speaks_once_after_executed_ack(client):
     seed_lighting_inputs(light_values=(True, True), human_present=True, led_on=False)
-    service = client.app.state.lighting_automation
+    service = client.app.state.automation_runtime
 
-    led = asyncio.run(service.evaluate("lighting-device"))
+    commands = asyncio.run(service.evaluate("lighting-device"))
+    led = commands[0] if commands else None
     assert led is not None and led["type"] == "led.on" and led["source"] == "rule"
-    assert asyncio.run(service.evaluate("lighting-device")) is None
+    assert asyncio.run(service.evaluate("lighting-device")) == []
 
     from app.db.session import SessionLocal
 
@@ -106,9 +108,15 @@ def test_dark_present_turns_light_on_then_speaks_once_after_executed_ack(client)
             ),
         )
 
-    restarted = LightingAutomationService(SessionLocal, client.app.state.command_application)
-    assert asyncio.run(restarted.evaluate("lighting-device")) is None
-    assert asyncio.run(restarted.reconcile_command("lighting-device", led["command_id"])) is None
+    restarted = AutomationRuntimeService(
+        get_settings(),
+        SessionLocal,
+        client.app.state.command_application,
+        SqlAlchemyAutomationPlanRepository(SessionLocal),
+    )
+    assert asyncio.run(restarted.evaluate("lighting-device")) == []
+    speech = asyncio.run(restarted.reconcile_command("lighting-device", led["command_id"], "executed"))
+    assert speech is not None and speech["type"] == "voice.speak"
 
     with SessionLocal() as db:
         voices = db.query(models.Command).filter(models.Command.type == "voice.speak").all()
@@ -119,8 +127,9 @@ def test_dark_present_turns_light_on_then_speaks_once_after_executed_ack(client)
 
 def test_rejected_lighting_command_never_creates_speech(client):
     seed_lighting_inputs(light_values=(True, True), human_present=True, led_on=False)
-    service = client.app.state.lighting_automation
-    led = asyncio.run(service.evaluate("lighting-device"))
+    service = client.app.state.automation_runtime
+    commands = asyncio.run(service.evaluate("lighting-device"))
+    led = commands[0] if commands else None
     assert led is not None
 
     from app.db.session import SessionLocal
@@ -141,7 +150,7 @@ def test_rejected_lighting_command_never_creates_speech(client):
             ),
         )
 
-    assert asyncio.run(service.reconcile_command("lighting-device", led["command_id"])) is None
+    assert asyncio.run(service.reconcile_command("lighting-device", led["command_id"], "rejected")) is None
     with SessionLocal() as db:
         assert db.query(models.Command).filter(models.Command.type == "voice.speak").count() == 0
 
@@ -167,8 +176,8 @@ def test_lighting_combinations_and_unstable_light(
         human_present=human_present,
         led_on=led_on,
     )
-    result = asyncio.run(client.app.state.lighting_automation.evaluate("lighting-device"))
-    assert (result or {}).get("type") == expected
+    result = asyncio.run(client.app.state.automation_runtime.evaluate("lighting-device"))
+    assert (result[0] if result else {}).get("type") == expected
 
 
 @pytest.mark.parametrize(
@@ -189,7 +198,7 @@ def test_lighting_respects_global_switch_manual_priority_and_pose_freshness(
         manual_override=manual_override,
         pose_age_seconds=pose_age_seconds,
     )
-    assert asyncio.run(client.app.state.lighting_automation.evaluate("lighting-device")) is None
+    assert asyncio.run(client.app.state.automation_runtime.evaluate("lighting-device")) == []
 
 
 def test_voice_encoding_replaces_unsupported_characters_and_enforces_220_bytes():

@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { Bot, Check, Clock3, Pause, Play, RefreshCw, Send, Sparkles, Square, X } from "lucide-react";
+import { AiTextPreview } from "@/components/ai-markdown";
 import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAutomationPlans } from "@/hooks/use-automation-plans";
-import type { AiStrategyOut, AutomationPlanOut } from "@/lib/api";
+import type { AiStrategyOut, AutomationActuatorClaimOut, AutomationPlanOut } from "@/lib/api";
 
 const STATUS: Record<string, string> = {
   draft: "草案",
@@ -29,6 +30,16 @@ const COMMAND: Record<string, string> = {
   "led.off": "关闭照明",
   "voice.speak": "语音提醒",
   "display.message": "屏幕消息",
+};
+
+const EVENT: Record<string, string> = {
+  "rule.claimed": "规则取得控制权",
+  "rule.released": "规则释放控制权",
+  "rule.conflict": "同层规则冲突，已停止执行",
+  "rule.suppressed": "系统规则被用户条件暂时压制",
+  "command.retry_scheduled": "命令失败，已安排重试",
+  "command.retry_exhausted": "命令重试已耗尽",
+  blocked_by_manual_override: "手动操作优先，规则已阻止",
 };
 
 function specOf(plan: AutomationPlanOut) {
@@ -54,7 +65,40 @@ function remaining(endsAt?: string | null) {
   return minutes >= 60 ? `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分钟` : `${minutes} 分钟`;
 }
 
-function PlanSummary({ plan }: { plan: AutomationPlanOut }) {
+function ControlOwnership({
+  claims,
+  blockedReason,
+}: {
+  claims: AutomationActuatorClaimOut[];
+  blockedReason?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-line bg-raised p-3">
+      <p className="text-xs font-semibold tracking-wide text-ink3">当前控制归属</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {blockedReason ? <Badge variant="outline">手动覆盖优先 · {blockedReason}</Badge> : null}
+        {claims.map((claim) => (
+          <Badge key={claim.actuator} variant={claim.status === "conflict" ? "destructive" : "outline"}>
+            {claim.actuator === "window" ? "窗户" : "照明"} ·{" "}
+            {claim.status === "conflict"
+              ? "规则冲突"
+              : blockedReason === claim.actuator
+                ? "规则等待手动覆盖释放"
+                : claim.owner_type === "user"
+                  ? "用户计划"
+                  : "系统规则"}
+            {claim.target_command ? ` · ${COMMAND[claim.target_command] ?? claim.target_command}` : ""}
+          </Badge>
+        ))}
+        {!claims.length && !blockedReason ? (
+          <span className="text-xs text-ink3">当前没有规则接管窗户或照明</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PlanSummary({ plan, claims }: { plan: AutomationPlanOut; claims: AutomationActuatorClaimOut[] }) {
   const spec = specOf(plan);
   const nextFire = plan.rule_states
     .map((state) => state.next_fire_at)
@@ -101,6 +145,7 @@ function PlanSummary({ plan }: { plan: AutomationPlanOut }) {
         <span>尊重手动操作 · 会话结束保持设备状态</span>
         {blocked ? <Badge variant="outline">{blocked.blocked_reason} · 已阻止重复发送</Badge> : null}
       </div>
+      <ControlOwnership claims={claims} blockedReason={blocked?.blocked_reason ?? undefined} />
       <ul className="space-y-2" aria-label="计划规则">
         {(spec.rules ?? []).map((rule) => (
           <li key={rule.id} className="rounded-lg border border-line px-3 py-2.5 text-sm">
@@ -140,7 +185,7 @@ function StrategyCard({
     <article className="rounded-xl border border-line p-3 sm:p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="font-medium text-ink">{strategy.summary || "AI 策略建议"}</div>
+          <div className="font-medium text-ink">AI 策略建议</div>
           <div className="mt-1 text-xs text-ink3">
             基础版本 {strategy.base_version ? `v${strategy.base_version}` : "新计划"} · {strategy.diff.length}{" "}
             项变化
@@ -150,6 +195,11 @@ function StrategyCard({
           {STATUS[strategy.status] ?? strategy.status}
         </Badge>
       </div>
+      <AiTextPreview
+        content={strategy.summary || "服务器已生成候选版本。"}
+        title="完整 AI 策略说明"
+        className="mt-3"
+      />
       {strategy.diff.length ? (
         <ul className="mt-3 max-h-36 space-y-1 overflow-auto rounded-lg bg-surface/70 p-2 text-xs text-ink2">
           {strategy.diff.slice(0, 12).map((item, index) => (
@@ -180,7 +230,7 @@ function StrategyCard({
 export function AutomationPlanPanel({ deviceId, className }: { deviceId: string; className?: string }) {
   const automation = useAutomationPlans(deviceId);
   const [goal, setGoal] = useState(
-    "我要学习 90 分钟。光线暗就开灯，空气不好就通风，每 30 分钟提醒我起来活动，但不要覆盖我的手动操作。",
+    "我要学习 10 分钟。光线暗并且检测到有人时开灯；光线明亮并且确认无人时关灯。请尊重我的手动操作。",
   );
   const selected = automation.selectedPlan;
   const latestEvent = automation.events[0];
@@ -219,13 +269,22 @@ export function AutomationPlanPanel({ deviceId, className }: { deviceId: string;
             {automation.compileRun?.status === "succeeded" ? (
               <span className="text-sm text-[var(--good)]">已完成编译，安全范围满足时会自动生效</span>
             ) : null}
+            {automation.compileRun?.status === "failed" ? (
+              <AiTextPreview
+                content={
+                  automation.compileRun.error_message || automation.compileRun.error_code || "计划编译失败"
+                }
+                title="计划编译失败详情"
+                className="w-full"
+              />
+            ) : null}
           </div>
         </form>
 
         <div className="my-5 h-px bg-line" />
         {selected ? (
           <>
-            <PlanSummary plan={selected} />
+            <PlanSummary plan={selected} claims={automation.controlClaims} />
             <div className="mt-4 flex flex-wrap gap-2">
               {selected.status === "active" ? (
                 <Button
@@ -274,12 +333,18 @@ export function AutomationPlanPanel({ deviceId, className }: { deviceId: string;
               <Clock3 className="mr-1 inline size-3.5" />
               最近事件：
               {latestEvent
-                ? `${latestEvent.event_type} · ${new Date(latestEvent.occurred_at).toLocaleString()}`
+                ? `${EVENT[latestEvent.event_type] ?? latestEvent.event_type} · ${new Date(latestEvent.occurred_at).toLocaleString()}`
                 : "暂无"}
             </div>
           </>
         ) : (
-          <p className="text-sm text-ink3">还没有用户计划。系统默认计划仍会按自动化总开关独立运行。</p>
+          <div className="space-y-3">
+            <p className="text-sm text-ink3">还没有用户计划。系统默认计划仍会按自动化总开关独立运行。</p>
+            <ControlOwnership
+              claims={automation.controlClaims}
+              blockedReason={automation.controlBlockedReason}
+            />
+          </div>
         )}
         {draftNotice ? (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm text-ink2">
@@ -320,6 +385,15 @@ export function AutomationPlanPanel({ deviceId, className }: { deviceId: string;
         <p className="mb-4 text-sm leading-6 text-ink3">
           策略只生成候选版本，永远不会自动替换活动计划。批准时服务器会重新校验能力、安全约束和基础版本。
         </p>
+        {automation.strategyRun?.status === "failed" ? (
+          <AiTextPreview
+            content={
+              automation.strategyRun.error_message || automation.strategyRun.error_code || "策略生成失败"
+            }
+            title="AI 策略生成失败详情"
+            className="mb-4"
+          />
+        ) : null}
         <div className="space-y-3">
           {automation.strategies.length ? (
             automation.strategies

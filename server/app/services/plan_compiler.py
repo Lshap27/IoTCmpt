@@ -28,18 +28,59 @@ def compile_mock_plan(goal: str, *, timezone: str = "Asia/Shanghai") -> tuple[di
     duration_seconds = max(60, min(duration_seconds, 86400))
 
     rules: list[dict[str, Any]] = []
-    if any(keyword in goal for keyword in ("光线暗", "光照暗", "太暗", "暗就开灯")):
+    dark_present = any(
+        keyword in goal
+        for keyword in (
+            "光线暗且有人",
+            "光线暗并且有人",
+            "光线暗并且检测到有人",
+            "暗光且有人",
+            "暗光有人",
+        )
+    )
+    if any(keyword in goal for keyword in ("光线暗", "光照暗", "太暗", "暗就开灯", "暗光")):
+        items: list[dict[str, Any]] = [{"fact": "light_is_dark", "op": "eq", "value": True}]
+        if dark_present:
+            items.append({"fact": "human_present", "op": "eq", "value": True})
         rules.append(
             {
                 "id": "dark-lighting",
-                "description": "光线持续偏暗时开启照明",
+                "description": "光线持续偏暗且检测到有人时开启照明" if dark_present else "光线持续偏暗时开启照明",
                 "trigger": {
                     "type": "condition",
                     "mode": "all",
-                    "items": [{"fact": "light_is_dark", "op": "eq", "value": True}],
+                    "items": items,
                     "stability_samples": 2,
                 },
                 "action": {"command": "led.on", "parameter": {}},
+                "cooldown_seconds": 30,
+            }
+        )
+    bright_absent = any(
+        keyword in goal
+        for keyword in (
+            "光线明亮且无人",
+            "光线明亮并且无人",
+            "光线明亮并且确认无人",
+            "明亮且无人",
+            "明亮无人",
+        )
+    )
+    if bright_absent and "关灯" in goal:
+        rules.append(
+            {
+                "id": "bright-empty-lighting",
+                "description": "光线持续明亮且确认无人时关闭照明",
+                "trigger": {
+                    "type": "condition",
+                    "mode": "all",
+                    "items": [
+                        {"fact": "light_is_dark", "op": "eq", "value": False},
+                        {"fact": "human_present", "op": "eq", "value": False},
+                    ],
+                    "stability_samples": 2,
+                },
+                "action": {"command": "led.off", "parameter": {}},
                 "cooldown_seconds": 30,
             }
         )

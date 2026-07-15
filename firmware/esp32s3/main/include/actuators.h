@@ -5,5 +5,5 @@
 #include "fusion.h"
 
 esp_err_t actuator_init(void);
-esp_err_t actuator_apply(const cloud_command_t *command, const fusion_state_t *state);
+esp_err_t actuator_apply(const cloud_command_t *command);
 void actuator_refresh_alarm(void);

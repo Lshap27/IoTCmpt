@@ -27,9 +27,10 @@ def system_plan_id(device_id: str) -> str:
     return f"plan-system-lighting-{digest}"
 
 
-SYSTEM_LIGHTING_SPEC: dict[str, Any] = {
+SYSTEM_PLAN_VERSION = 2
+SYSTEM_ENVIRONMENT_SPEC: dict[str, Any] = {
     "schema_version": "1.0",
-    "title": "系统默认照明自动化",
+    "title": "系统默认环境自动化",
     "duration_seconds": 86400,
     "timezone": "Asia/Shanghai",
     "manual_override_policy": "respect",
@@ -66,6 +67,18 @@ SYSTEM_LIGHTING_SPEC: dict[str, Any] = {
             "action": {"command": "led.off", "parameter": {}},
             "cooldown_seconds": 1,
         },
+        {
+            "id": "system-air-open",
+            "description": "融合结果建议通风时打开窗户",
+            "trigger": {
+                "type": "condition",
+                "mode": "all",
+                "items": [{"fact": "recommend_open_window", "op": "eq", "value": True}],
+                "stability_samples": 1,
+            },
+            "action": {"command": "window.open", "parameter": {}},
+            "cooldown_seconds": 300,
+        },
     ],
 }
 
@@ -87,6 +100,12 @@ def serialize_plan(db: Session, plan: models.AutomationPlan) -> dict[str, Any]:
         db.query(models.AutomationRuleState)
         .filter_by(plan_id=plan.plan_id, version=plan.current_version)
         .order_by(models.AutomationRuleState.rule_id.asc())
+        .all()
+    )
+    claims = (
+        db.query(models.AutomationActuatorClaim)
+        .filter_by(plan_id=plan.plan_id, version=plan.current_version)
+        .order_by(models.AutomationActuatorClaim.actuator.asc())
         .all()
     )
     return {
@@ -111,6 +130,20 @@ def serialize_plan(db: Session, plan: models.AutomationPlan) -> dict[str, Any]:
                 "blocked_reason": state.blocked_reason,
             }
             for state in states
+        ],
+        "control_claims": [
+            {
+                "actuator": claim.actuator,
+                "owner_type": claim.owner_type,
+                "plan_id": claim.plan_id,
+                "version": claim.version,
+                "rule_ids": claim.rule_ids or [],
+                "target_command": claim.target_command,
+                "status": claim.status,
+                "reason": claim.reason,
+                "updated_at": iso_utc(claim.updated_at) or "",
+            }
+            for claim in claims
         ],
         "started_at": iso_utc(plan.started_at),
         "paused_at": iso_utc(plan.paused_at),
@@ -162,15 +195,15 @@ class SqlAlchemyAutomationPlanRepository:
             plan = db.query(models.AutomationPlan).filter(models.AutomationPlan.plan_id == plan_id).one_or_none()
             if plan is None:
                 now = utcnow()
-                spec = validate_plan_spec(SYSTEM_LIGHTING_SPEC)
+                spec = validate_plan_spec(SYSTEM_ENVIRONMENT_SPEC)
                 plan = models.AutomationPlan(
                     plan_id=plan_id,
                     device_id=device_id,
                     plan_type="system",
                     title=spec["title"],
                     status="active",
-                    current_version=1,
-                    source_prompt="system-default-lighting",
+                    current_version=SYSTEM_PLAN_VERSION,
+                    source_prompt="system-default-environment",
                     activation_blockers=[],
                     started_at=now,
                 )
@@ -178,23 +211,24 @@ class SqlAlchemyAutomationPlanRepository:
                 db.add(
                     models.AutomationPlanVersion(
                         plan_id=plan_id,
-                        version=1,
+                        version=SYSTEM_PLAN_VERSION,
                         spec=spec,
-                        explanation="由现有确定性灯光规则迁移的系统计划",
-                        validation={"valid": True, "system": True},
+                        explanation="由确定性灯光与空气通风规则组成的系统计划",
+                        validation={"valid": True, "system": True, "managed_version": SYSTEM_PLAN_VERSION},
                     )
                 )
                 legacy = db.get(models.LightingRuleState, device_id)
                 for rule in spec["rules"]:
+                    inherited = legacy if legacy and rule["id"].startswith("system-light-") else None
                     db.add(
                         models.AutomationRuleState(
                             plan_id=plan_id,
-                            version=1,
+                            version=SYSTEM_PLAN_VERSION,
                             rule_id=rule["id"],
-                            last_condition=legacy.condition if legacy else "unknown",
-                            last_command_id=legacy.last_action_command_id if legacy else None,
+                            last_condition=inherited.condition if inherited else "unknown",
+                            last_command_id=inherited.last_action_command_id if inherited else None,
                             meta={
-                                "legacy_speech_command_id": legacy.speech_command_id if legacy else None,
+                                "legacy_speech_command_id": inherited.speech_command_id if inherited else None,
                                 "system": True,
                             },
                         )
@@ -202,7 +236,74 @@ class SqlAlchemyAutomationPlanRepository:
                 self._event(db, plan, None, "plan.created", {"system": True})
                 db.commit()
                 db.refresh(plan)
+            elif plan.current_version < SYSTEM_PLAN_VERSION:
+                self._upgrade_system_plan(db, plan)
             return serialize_plan(db, plan)
+
+    def _upgrade_system_plan(self, db: Session, plan: models.AutomationPlan) -> None:
+        previous_version = plan.current_version
+        previous_states = {
+            row.rule_id: row
+            for row in db.query(models.AutomationRuleState).filter_by(plan_id=plan.plan_id, version=previous_version)
+        }
+        spec = validate_plan_spec(SYSTEM_ENVIRONMENT_SPEC)
+        version = (
+            db.query(models.AutomationPlanVersion)
+            .filter_by(plan_id=plan.plan_id, version=SYSTEM_PLAN_VERSION)
+            .one_or_none()
+        )
+        if version is None:
+            db.add(
+                models.AutomationPlanVersion(
+                    plan_id=plan.plan_id,
+                    version=SYSTEM_PLAN_VERSION,
+                    spec=spec,
+                    explanation="系统计划加入融合空气通风规则",
+                    validation={
+                        "valid": True,
+                        "system": True,
+                        "managed_version": SYSTEM_PLAN_VERSION,
+                        "upgraded_from": previous_version,
+                    },
+                )
+            )
+        for rule in spec["rules"]:
+            existing = (
+                db.query(models.AutomationRuleState)
+                .filter_by(plan_id=plan.plan_id, version=SYSTEM_PLAN_VERSION, rule_id=rule["id"])
+                .one_or_none()
+            )
+            if existing is not None:
+                continue
+            prior = previous_states.get(rule["id"])
+            db.add(
+                models.AutomationRuleState(
+                    plan_id=plan.plan_id,
+                    version=SYSTEM_PLAN_VERSION,
+                    rule_id=rule["id"],
+                    last_condition=prior.last_condition if prior else "unknown",
+                    stable_count=prior.stable_count if prior else 0,
+                    last_fired_at=prior.last_fired_at if prior else None,
+                    next_fire_at=prior.next_fire_at if prior else None,
+                    last_command_id=prior.last_command_id if prior else None,
+                    last_occurrence_key=prior.last_occurrence_key if prior else None,
+                    blocked_reason=prior.blocked_reason if prior else None,
+                    meta={**(prior.meta or {})} if prior else {"system": True},
+                )
+            )
+        db.query(models.AutomationActuatorClaim).filter_by(plan_id=plan.plan_id).delete(synchronize_session=False)
+        plan.title = spec["title"]
+        plan.current_version = SYSTEM_PLAN_VERSION
+        plan.source_prompt = "system-default-environment"
+        self._event(
+            db,
+            plan,
+            None,
+            "plan.version_upgraded",
+            {"from_version": previous_version, "to_version": SYSTEM_PLAN_VERSION},
+        )
+        db.commit()
+        db.refresh(plan)
 
     def create_draft(
         self,
@@ -328,6 +429,9 @@ class SqlAlchemyAutomationPlanRepository:
                         raise ValueError(f"active plan exists: {active.plan_id}")
                     active.status = "superseded"
                     active.completed_at = now
+                    db.query(models.AutomationActuatorClaim).filter_by(plan_id=active.plan_id).delete(
+                        synchronize_session=False
+                    )
                     self._event(db, active, None, "plan.superseded", {"replacement_plan_id": plan.plan_id})
                 blockers = self._activation_blockers(db, device_id, spec, exclude=plan.plan_id)
                 if blockers:
@@ -355,6 +459,9 @@ class SqlAlchemyAutomationPlanRepository:
                     raise ValueError("only active plans can be paused")
                 plan.status = "paused"
                 plan.paused_at = now
+                db.query(models.AutomationActuatorClaim).filter_by(plan_id=plan.plan_id).delete(
+                    synchronize_session=False
+                )
                 event_type = "plan.paused"
             elif action == "resume":
                 if plan.status != "paused":
@@ -375,6 +482,9 @@ class SqlAlchemyAutomationPlanRepository:
                     raise ValueError("plan is already terminal")
                 plan.status = "cancelled"
                 plan.completed_at = now
+                db.query(models.AutomationActuatorClaim).filter_by(plan_id=plan.plan_id).delete(
+                    synchronize_session=False
+                )
                 event_type = "plan.cancelled"
             else:
                 raise ValueError(f"unsupported plan action: {action}")
@@ -474,6 +584,9 @@ class SqlAlchemyAutomationPlanRepository:
                         )
                     )
                     self._copy_or_initialize_states(db, plan, spec, next_version, now)
+                    db.query(models.AutomationActuatorClaim).filter_by(plan_id=plan.plan_id).delete(
+                        synchronize_session=False
+                    )
                     plan.current_version = next_version
                     plan.title = spec["title"]
                     self._event(db, plan, None, "plan.version_activated", {"strategy_id": strategy.strategy_id})

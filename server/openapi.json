@@ -410,6 +410,80 @@
         "title": "AiStrategyOut",
         "type": "object"
       },
+      "AutomationActuatorClaimOut": {
+        "properties": {
+          "actuator": {
+            "enum": [
+              "window",
+              "led"
+            ],
+            "title": "Actuator",
+            "type": "string"
+          },
+          "owner_type": {
+            "enum": [
+              "system",
+              "user"
+            ],
+            "title": "Owner Type",
+            "type": "string"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "rule_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rule Ids",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "claimed",
+              "conflict"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Command"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "actuator",
+          "owner_type",
+          "plan_id",
+          "version",
+          "rule_ids",
+          "status",
+          "reason",
+          "updated_at"
+        ],
+        "title": "AutomationActuatorClaimOut",
+        "type": "object"
+      },
       "AutomationPlanActivateIn": {
         "properties": {
           "replace_active": {
@@ -614,6 +688,13 @@
               }
             ],
             "title": "Completed At"
+          },
+          "control_claims": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationActuatorClaimOut"
+            },
+            "title": "Control Claims",
+            "type": "array"
           },
           "created_at": {
             "title": "Created At",

@@ -300,6 +300,9 @@ def create_mcp_server(app: Any, settings: Settings, internal_token: str) -> tupl
             )
         except ValueError as exc:
             return tool_result(error={"code": "invalid_automation_plan", "message": str(exc)})
+        if plan.get("status") == "active":
+            await app.state.automation_runtime.evaluate(device_id)
+            plan = await app.state.automation_plan_application.get(device_id, plan["plan_id"]) or plan
         return tool_result(data=plan)
 
     @server.tool(name="automation_strategy_propose", structured_output=True)

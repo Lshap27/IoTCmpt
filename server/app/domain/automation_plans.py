@@ -14,6 +14,7 @@ PLAN_FACTS = {
     "light_is_dark",
     "human_present",
     "air_quality",
+    "recommend_open_window",
     "temperature_c",
     "humidity_percent",
     "tvoc_ppb",

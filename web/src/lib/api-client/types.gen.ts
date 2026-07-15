@@ -232,6 +232,48 @@ export type AiStrategyOut = {
 };
 
 /**
+ * AutomationActuatorClaimOut
+ */
+export type AutomationActuatorClaimOut = {
+    /**
+     * Actuator
+     */
+    actuator: 'window' | 'led';
+    /**
+     * Owner Type
+     */
+    owner_type: 'system' | 'user';
+    /**
+     * Plan Id
+     */
+    plan_id: string;
+    /**
+     * Reason
+     */
+    reason: string;
+    /**
+     * Rule Ids
+     */
+    rule_ids: Array<string>;
+    /**
+     * Status
+     */
+    status: 'claimed' | 'conflict';
+    /**
+     * Target Command
+     */
+    target_command?: string | null;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
  * AutomationPlanActivateIn
  */
 export type AutomationPlanActivateIn = {
@@ -369,6 +411,10 @@ export type AutomationPlanOut = {
      * Completed At
      */
     completed_at?: string | null;
+    /**
+     * Control Claims
+     */
+    control_claims?: Array<AutomationActuatorClaimOut>;
     /**
      * Created At
      */

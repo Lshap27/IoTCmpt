@@ -6,7 +6,6 @@
 
 typedef enum {
     VOICE_ANNOUNCEMENT_SMOKE,
-    VOICE_ANNOUNCEMENT_AIR_VENTILATION,
 } voice_announcement_t;
 
 esp_err_t voice_init(void);

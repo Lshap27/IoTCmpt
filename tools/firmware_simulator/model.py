@@ -195,12 +195,6 @@ class FirmwareModel:
         sensors = self.sensor.sample()
         fusion = fuse_sample(sensors)
         self.update_safety(bool(sensors["smoke_detected"]))
-        if (
-            self.state["control_priority"] == "auto_first"
-            and fusion["recommend_open_window"]
-            and not self.state["manual_window_override"]
-        ):
-            self.state["window_open"] = True
         self._refresh_override()
         payload = {
             "device_id": self.device_id,

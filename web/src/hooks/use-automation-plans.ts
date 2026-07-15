@@ -29,6 +29,12 @@ export function useAutomationPlans(deviceId: string) {
     queryFn: () => fetchAiRuns(deviceId),
   });
   const plans = plansQuery.data ?? [];
+  const controlClaims = plans.flatMap((plan) => plan.control_claims ?? []);
+  const controlBlockedReason =
+    plans
+      .flatMap((plan) => plan.rule_states)
+      .find((state) => state.blocked_reason === "window" || state.blocked_reason === "led")?.blocked_reason ??
+    undefined;
   const userPlans = plans.filter((plan) => plan.plan_type === "user");
   const selectedPlan =
     userPlans.find((plan) => plan.status === "active" || plan.status === "paused") ?? userPlans[0] ?? null;
@@ -82,6 +88,8 @@ export function useAutomationPlans(deviceId: string) {
 
   return {
     plans: userPlans,
+    controlClaims,
+    controlBlockedReason,
     selectedPlan,
     events: eventsQuery.data ?? [],
     strategies: strategiesQuery.data ?? [],
