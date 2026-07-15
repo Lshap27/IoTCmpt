@@ -57,3 +57,11 @@ If the Gateway has already marked a command `timed_out`, a later device ACK is r
 Errors use stable codes: `device_offline`, `unsupported_command`, `invalid_parameter`, `policy_denied`, `safety_interlock`, `expired`, `transport_error`, `device_rejected`, `timeout`.
 
 The command catalog is `contracts/commands.json`. `display.message` is implemented by the firmware display module; unsupported build features are omitted from capabilities.
+
+## Local voice and smoke timing
+
+The 100 ms firmware safety loop drives the buzzer from the current MQ-2 input. A new smoke episode queues its local warning immediately and repeats the warning every 30 seconds while smoke remains present. A low input must remain stable for 1 second before the episode is cleared; shorter low pulses stop the buzzer immediately but do not create a new first-warning edge when smoke returns.
+
+`alarm.silence` suppresses both the smoke buzzer and periodic smoke voice for its configured 10 to 600 second window. If smoke remains present when the window expires, both resume. A stable clear resets the episode and silence window.
+
+Local smoke and automatic-ventilation announcements are deduplicated by announcement type. Smoke has queue priority. Recoverable SYN6288 BY-busy, shared-UART lock, UART write and TX-completion failures are diagnosed separately and retried at most three times with 250 ms exponential backoff. Automatic-ventilation voice is queued only after the firmware itself successfully changes the window from closed to open; MQTT, Web, AI and external MCP window commands do not add that local announcement.

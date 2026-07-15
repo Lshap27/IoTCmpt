@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
+from app.adapters.automation_plans import SqlAlchemyAutomationPlanRepository
 from app.adapters.mcp_server import create_mcp_server
 from app.adapters.outbox import OutboxDispatcher
 from app.adapters.persistence import (
@@ -25,12 +26,14 @@ from app.adapters.realtime import RealtimeEventWriter, RealtimeRelay
 from app.adapters.triggers import enqueue_event_run
 from app.api.routes import router as api_router
 from app.application.automation import AiRunApplicationService, AutomationApplicationService
+from app.application.automation_plans import AutomationPlanApplicationService
 from app.application.commands import CommandApplicationService
 from app.application.queries import DeviceQueryApplicationService
 from app.core.config import get_settings
 from app.db import models
 from app.db.session import SessionLocal, init_db
 from app.schemas import HealthOut, WebSocketEnvelope
+from app.services.automation_runtime import AutomationRuntimeService, LightingAutomationCompatibilityFacade
 from app.services.mqtt import MqttGateway
 from app.services.mqtt_ingest import ingest_mqtt_message
 from app.services.pose import PoseService
@@ -56,23 +59,49 @@ async def lifespan(app: FastAPI):
 
     mqtt_service = MqttGateway(settings)
     pose_service = PoseService(settings)
+    command_repository = SqlAlchemyCommandRepository(SessionLocal)
+    command_notifier = RealtimeEventWriter(SessionLocal)
+    app.state.command_application = CommandApplicationService(command_repository, command_notifier)
+    plan_repository = SqlAlchemyAutomationPlanRepository(SessionLocal)
+    plan_application = AutomationPlanApplicationService(plan_repository)
+    automation_runtime = AutomationRuntimeService(
+        settings,
+        SessionLocal,
+        app.state.command_application,
+        plan_repository,
+    )
+
+    async def evaluate_automation(device_id: str) -> None:
+        try:
+            await automation_runtime.evaluate(device_id)
+        except Exception:
+            LOGGER.exception("automation evaluation failed for %s", device_id)
 
     async def handle_mqtt_message(topic: str, payload: dict[str, Any]) -> None:
-        # DB writes stay on a worker thread; smoke/air rules run locally in firmware, so MQTT ingress only broadcasts.
+        # DB writes stay on a worker thread; deterministic automation runs after committed ingress.
         envelope = await asyncio.to_thread(_ingest_sync, topic, payload)
         if envelope is None:
             return
         await manager.broadcast(envelope.device_id, envelope.model_dump(mode="json"))
+        if envelope.type in {"telemetry.received", "device.status_changed", "device.capabilities_changed"}:
+            await evaluate_automation(envelope.device_id)
+        elif envelope.type == "command.status_changed":
+            command_id = str(envelope.payload.get("command_id") or "")
+            command_status = str(envelope.payload.get("status") or "")
+            if command_id:
+                try:
+                    await automation_runtime.reconcile_command(envelope.device_id, command_id, command_status)
+                except Exception:
+                    LOGGER.exception("automation command reconciliation failed for %s", command_id)
         if topic.endswith("/event"):
             event_payload = payload.get("payload") if payload.get("schema_version") == "2.0" else payload
             event_type = str((event_payload or {}).get("type") or "event")
             await asyncio.to_thread(enqueue_event_run, SessionLocal, settings, envelope.device_id, event_type)
 
+    pose_service.result_handler = lambda device_id, _payload: evaluate_automation(device_id)
     mqtt_service.start(handle_mqtt_message)
-    command_repository = SqlAlchemyCommandRepository(SessionLocal)
-    command_notifier = RealtimeEventWriter(SessionLocal)
-    app.state.command_application = CommandApplicationService(command_repository, command_notifier)
     app.state.automation_application = AutomationApplicationService(SqlAlchemyAutomationRepository(SessionLocal))
+    app.state.automation_plan_application = plan_application
     app.state.ai_run_application = AiRunApplicationService(SqlAlchemyAiRunRepository(SessionLocal))
     app.state.device_queries = DeviceQueryApplicationService(SqlAlchemyDeviceQueryRepository(SessionLocal))
     outbox = OutboxDispatcher(
@@ -86,8 +115,12 @@ async def lifespan(app: FastAPI):
     outbox.start()
     realtime_relay.start()
     await pose_service.start()
+    await automation_runtime.start()
     app.state.mqtt_service = mqtt_service
     app.state.pose_service = pose_service
+    app.state.automation_runtime = automation_runtime
+    # Compatibility alias for callers that still inspect the former lighting service state.
+    app.state.lighting_automation = LightingAutomationCompatibilityFacade(automation_runtime, SessionLocal)
     app.state.mqtt_message_handler = handle_mqtt_message
     app.state.outbox_dispatcher = outbox
     app.state.realtime_relay = realtime_relay
@@ -97,6 +130,7 @@ async def lifespan(app: FastAPI):
             yield
         finally:
             await realtime_relay.stop()
+    await automation_runtime.stop()
     await outbox.stop()
     await pose_service.stop()
     await mqtt_service.stop()
@@ -181,7 +215,7 @@ def create_app() -> FastAPI:
                 )
                 worker = "healthy" if recent else "unavailable"
                 version = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-                migration = "current" if version == "0007" else str(version or "missing")
+                migration = "current" if version == "0010" else str(version or "missing")
         except Exception:
             database = "unavailable"
         return {

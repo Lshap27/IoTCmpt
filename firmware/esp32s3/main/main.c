@@ -251,28 +251,51 @@ static void telemetry_task(void *arg) {
 
 static void safety_task(void *arg) {
     (void)arg;
-    bool previous = false;
-    bool has_previous = false;
+    bool episode_active = false;
+    TickType_t clear_since = 0;
+    TickType_t last_announcement = 0;
 
     while (true) {
         bool detected = false;
         bool valid = false;
         if (sensors_read_smoke(&detected, &valid) == ESP_OK && valid) {
+            const TickType_t now = xTaskGetTickCount();
             latest_smoke_update(detected, true);
             control_state_set_alarm_source(CONTROL_ALARM_SMOKE, detected);
             actuator_refresh_alarm();
-            if (!has_previous || detected != previous) {
-                if (detected) {
+
+            control_state_t control;
+            control_state_get(&control);
+            voice_set_smoke_state(episode_active || detected, control.smoke_silenced);
+
+            if (detected) {
+                clear_since = 0;
+                const bool first_announcement = !episode_active;
+                const bool periodic_announcement =
+                    episode_active &&
+                    (now - last_announcement) >= pdMS_TO_TICKS(AIOT_SMOKE_REANNOUNCE_SECONDS * 1000U);
+                if (first_announcement) {
+                    episode_active = true;
+                    mqtt_app_publish_event("smoke.detected", "critical", "MQ-2 检测到烟雾");
+                }
+                if ((first_announcement || periodic_announcement) && !control.smoke_silenced) {
                     const esp_err_t voice_result = voice_announce(VOICE_ANNOUNCEMENT_SMOKE);
+                    last_announcement = now;
                     if (voice_result != ESP_OK && voice_result != ESP_ERR_INVALID_STATE) {
                         ESP_LOGW(TAG, "烟雾语音入队失败: %s", esp_err_to_name(voice_result));
                     }
-                    mqtt_app_publish_event("smoke.detected", "critical", "MQ-2 检测到烟雾");
-                } else if (has_previous) {
+                }
+            } else if (episode_active) {
+                if (clear_since == 0) {
+                    clear_since = now;
+                } else if ((now - clear_since) >= pdMS_TO_TICKS(AIOT_SMOKE_CLEAR_STABLE_MS)) {
+                    episode_active = false;
+                    clear_since = 0;
+                    last_announcement = 0;
+                    control_state_clear_smoke_silence();
+                    voice_set_smoke_state(false, false);
                     mqtt_app_publish_event("smoke.cleared", "info", "MQ-2 烟雾状态已解除");
                 }
-                previous = detected;
-                has_previous = true;
             }
         }
         vTaskDelay(pdMS_TO_TICKS(100));

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AiPanel } from "@/components/ai-panel";
+import { AutomationPlanPanel } from "@/components/automation-plan-panel";
 import { CameraPanel } from "@/components/camera-panel";
 import { CommandPad } from "@/components/command-pad";
 import { DeviceHeader } from "@/components/device-header";
@@ -101,6 +102,7 @@ export default function Dashboard() {
           onCancelRun={live.cancelAiRun}
           className="col-span-12 xl:col-span-4"
         />
+        <AutomationPlanPanel deviceId={deviceId} className="col-span-12 xl:col-span-6" />
 
         <CameraPanel
           image={live.latest?.image}

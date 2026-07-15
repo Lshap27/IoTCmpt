@@ -3,7 +3,20 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -247,12 +260,135 @@ class AutomationPolicy(Base):
     vision_interval_seconds: Mapped[int] = mapped_column(Integer, default=300)
     sedentary_trigger_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     sedentary_threshold_seconds: Mapped[int] = mapped_column(Integer, default=7200)
+    strategy_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    strategy_min_interval_seconds: Mapped[int] = mapped_column(Integer, default=300)
+    strategy_force_interval_seconds: Mapped[int] = mapped_column(Integer, default=3600)
     execution_mode: Mapped[str] = mapped_column(String(24), default="automatic")
     thresholds: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     last_fingerprint: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime)
     last_model_run_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_strategy_fingerprint: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    last_strategy_run_at: Mapped[datetime | None] = mapped_column(DateTime)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class LightingRuleState(Base):
+    __tablename__ = "lighting_rule_states"
+
+    device_id: Mapped[str] = mapped_column(String(64), ForeignKey("devices.device_id"), primary_key=True)
+    condition: Mapped[str] = mapped_column(String(48), default="unknown")
+    last_telemetry_id: Mapped[int | None] = mapped_column(Integer)
+    last_pose_result_id: Mapped[int | None] = mapped_column(Integer)
+    last_action_command_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("commands.command_id", ondelete="SET NULL"), unique=True
+    )
+    speech_command_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("commands.command_id", ondelete="SET NULL"), unique=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class AutomationPlan(Base):
+    __tablename__ = "automation_plans"
+    __table_args__ = (
+        Index(
+            "uq_active_user_plan_per_device",
+            "device_id",
+            unique=True,
+            postgresql_where=text("plan_type = 'user' AND status IN ('active', 'paused')"),
+            sqlite_where=text("plan_type = 'user' AND status IN ('active', 'paused')"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    plan_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    device_id: Mapped[str] = mapped_column(String(64), ForeignKey("devices.device_id"), index=True)
+    plan_type: Mapped[str] = mapped_column(String(16), default="user", index=True)
+    title: Mapped[str] = mapped_column(String(120), default="")
+    status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
+    current_version: Mapped[int] = mapped_column(Integer, default=1)
+    source_prompt: Mapped[str] = mapped_column(Text, default="")
+    activation_blockers: Mapped[list[str]] = mapped_column(JSON, default=list)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class AutomationPlanVersion(Base):
+    __tablename__ = "automation_plan_versions"
+    __table_args__ = (UniqueConstraint("plan_id", "version", name="uq_automation_plan_version"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    plan_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("automation_plans.plan_id", ondelete="CASCADE"), index=True
+    )
+    version: Mapped[int] = mapped_column(Integer)
+    source_ai_run_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("ai_runs.run_id"), index=True)
+    spec: Mapped[dict[str, Any]] = mapped_column(JSON)
+    explanation: Mapped[str] = mapped_column(Text, default="")
+    validation: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
+class AutomationRuleState(Base):
+    __tablename__ = "automation_rule_states"
+    __table_args__ = (UniqueConstraint("plan_id", "version", "rule_id", name="uq_automation_rule_state"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    plan_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("automation_plans.plan_id", ondelete="CASCADE"), index=True
+    )
+    version: Mapped[int] = mapped_column(Integer)
+    rule_id: Mapped[str] = mapped_column(String(48))
+    last_condition: Mapped[str] = mapped_column(String(32), default="unknown")
+    stable_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_fired_at: Mapped[datetime | None] = mapped_column(DateTime)
+    next_fire_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    last_command_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("commands.command_id", ondelete="SET NULL"), index=True
+    )
+    last_occurrence_key: Mapped[str | None] = mapped_column(String(160), index=True)
+    blocked_reason: Mapped[str | None] = mapped_column(String(64))
+    meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class AutomationPlanEvent(Base):
+    __tablename__ = "automation_plan_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    plan_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("automation_plans.plan_id", ondelete="CASCADE"), index=True
+    )
+    device_id: Mapped[str] = mapped_column(String(64), ForeignKey("devices.device_id"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    rule_id: Mapped[str | None] = mapped_column(String(48), index=True)
+    trace_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    detail: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
+class AiStrategy(Base):
+    __tablename__ = "ai_strategies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    strategy_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    device_id: Mapped[str] = mapped_column(String(64), ForeignKey("devices.device_id"), index=True)
+    run_id: Mapped[str] = mapped_column(String(64), ForeignKey("ai_runs.run_id"), unique=True, index=True)
+    plan_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("automation_plans.plan_id"), index=True)
+    base_version: Mapped[int | None] = mapped_column(Integer)
+    proposed_spec: Mapped[dict[str, Any]] = mapped_column(JSON)
+    diff: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(24), default="proposed", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class AiReport(Base):

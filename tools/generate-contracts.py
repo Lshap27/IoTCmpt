@@ -72,6 +72,11 @@ def render_behavior_python(behavior: dict) -> str:
         f"TERMINAL_ACK_CACHE_SIZE = {behavior['terminal_ack_cache_size']}\n"
         f"SMOKE_SILENCE_MIN_SECONDS = {behavior['smoke_silence_seconds']['minimum']}\n"
         f"SMOKE_SILENCE_MAX_SECONDS = {behavior['smoke_silence_seconds']['maximum']}\n"
+        f"SMOKE_REANNOUNCE_SECONDS = {behavior['smoke_reannounce_seconds']}\n"
+        f"SMOKE_CLEAR_STABLE_MS = {behavior['smoke_clear_stable_ms']}\n"
+        f"VOICE_LOCAL_RETRY_ATTEMPTS = {behavior['voice_local_retry_attempts']}\n"
+        f"VOICE_RETRY_BACKOFF_MS = {behavior['voice_retry_backoff_ms']}\n"
+        f"VOICE_TX_TIMEOUT_MS = {behavior['voice_tx_timeout_ms']}\n"
         f"COMMAND_EXECUTION_PERIOD_MS = {behavior['command_execution_period_ms']}\n"
     )
 
@@ -96,6 +101,11 @@ def render_behavior_c(behavior: dict) -> str:
         f"#define AIOT_TERMINAL_ACK_CACHE_SIZE {behavior['terminal_ack_cache_size']}U\n"
         f"#define AIOT_SMOKE_SILENCE_MIN_SECONDS {behavior['smoke_silence_seconds']['minimum']}U\n"
         f"#define AIOT_SMOKE_SILENCE_MAX_SECONDS {behavior['smoke_silence_seconds']['maximum']}U\n"
+        f"#define AIOT_SMOKE_REANNOUNCE_SECONDS {behavior['smoke_reannounce_seconds']}U\n"
+        f"#define AIOT_SMOKE_CLEAR_STABLE_MS {behavior['smoke_clear_stable_ms']}U\n"
+        f"#define AIOT_VOICE_LOCAL_RETRY_ATTEMPTS {behavior['voice_local_retry_attempts']}U\n"
+        f"#define AIOT_VOICE_RETRY_BACKOFF_MS {behavior['voice_retry_backoff_ms']}U\n"
+        f"#define AIOT_VOICE_TX_TIMEOUT_MS {behavior['voice_tx_timeout_ms']}U\n"
         f"#define AIOT_COMMAND_EXECUTION_PERIOD_MS {behavior['command_execution_period_ms']}U\n"
     )
 

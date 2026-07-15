@@ -25,7 +25,9 @@
               "decision",
               "report",
               "vision",
-              "patrol"
+              "patrol",
+              "plan_compile",
+              "strategy"
             ],
             "title": "Kind",
             "type": "string"
@@ -45,6 +47,19 @@
               }
             ],
             "title": "Period"
+          },
+          "plan_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Id"
           },
           "trigger": {
             "default": "manual",
@@ -303,6 +318,426 @@
         "title": "AiRunStatusPayload",
         "type": "object"
       },
+      "AiStrategyOut": {
+        "properties": {
+          "base_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Version"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "diff": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Diff",
+            "type": "array"
+          },
+          "plan_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Id"
+          },
+          "proposed_spec": {
+            "additionalProperties": true,
+            "title": "Proposed Spec",
+            "type": "object"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "proposed",
+              "approved",
+              "rejected",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "device_id",
+          "run_id",
+          "proposed_spec",
+          "diff",
+          "summary",
+          "status",
+          "created_at"
+        ],
+        "title": "AiStrategyOut",
+        "type": "object"
+      },
+      "AutomationPlanActivateIn": {
+        "properties": {
+          "replace_active": {
+            "default": false,
+            "title": "Replace Active",
+            "type": "boolean"
+          }
+        },
+        "title": "AutomationPlanActivateIn",
+        "type": "object"
+      },
+      "AutomationPlanChangedEnvelope": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "schema_version": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trace Id"
+          },
+          "type": {
+            "const": "automation.plan.changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "device_id",
+          "occurred_at",
+          "type",
+          "payload"
+        ],
+        "title": "AutomationPlanChangedEnvelope",
+        "type": "object"
+      },
+      "AutomationPlanEventEnvelope": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "schema_version": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trace Id"
+          },
+          "type": {
+            "const": "automation.plan.event",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "device_id",
+          "occurred_at",
+          "type",
+          "payload"
+        ],
+        "title": "AutomationPlanEventEnvelope",
+        "type": "object"
+      },
+      "AutomationPlanEventOut": {
+        "properties": {
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "event_id",
+          "plan_id",
+          "device_id",
+          "version",
+          "event_type",
+          "detail",
+          "occurred_at"
+        ],
+        "title": "AutomationPlanEventOut",
+        "type": "object"
+      },
+      "AutomationPlanOut": {
+        "properties": {
+          "activation_blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Activation Blockers",
+            "type": "array"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_version": {
+            "title": "Current Version",
+            "type": "integer"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "paused_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paused At"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "plan_type": {
+            "enum": [
+              "system",
+              "user"
+            ],
+            "title": "Plan Type",
+            "type": "string"
+          },
+          "rule_states": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationRuleStateOut"
+            },
+            "title": "Rule States",
+            "type": "array"
+          },
+          "source_prompt": {
+            "title": "Source Prompt",
+            "type": "string"
+          },
+          "spec": {
+            "additionalProperties": true,
+            "title": "Spec",
+            "type": "object"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "active",
+              "paused",
+              "completed",
+              "cancelled",
+              "failed",
+              "superseded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": true,
+            "title": "Validation",
+            "type": "object"
+          }
+        },
+        "required": [
+          "plan_id",
+          "device_id",
+          "plan_type",
+          "title",
+          "status",
+          "current_version",
+          "source_prompt",
+          "activation_blockers",
+          "spec",
+          "explanation",
+          "validation",
+          "rule_states",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AutomationPlanOut",
+        "type": "object"
+      },
       "AutomationPolicyChangedEnvelope": {
         "properties": {
           "device_id": {
@@ -454,6 +889,43 @@
             ],
             "title": "Sedentary Trigger Enabled"
           },
+          "strategy_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Enabled"
+          },
+          "strategy_force_interval_seconds": {
+            "anyOf": [
+              {
+                "maximum": 604800.0,
+                "minimum": 300.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Force Interval Seconds"
+          },
+          "strategy_min_interval_seconds": {
+            "anyOf": [
+              {
+                "maximum": 86400.0,
+                "minimum": 300.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Min Interval Seconds"
+          },
           "vision_interval_seconds": {
             "anyOf": [
               {
@@ -523,6 +995,17 @@
             ],
             "title": "Last Model Run At"
           },
+          "last_strategy_run_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Strategy Run At"
+          },
           "patrol_enabled": {
             "title": "Patrol Enabled",
             "type": "boolean"
@@ -542,6 +1025,18 @@
           "sedentary_trigger_enabled": {
             "title": "Sedentary Trigger Enabled",
             "type": "boolean"
+          },
+          "strategy_enabled": {
+            "title": "Strategy Enabled",
+            "type": "boolean"
+          },
+          "strategy_force_interval_seconds": {
+            "title": "Strategy Force Interval Seconds",
+            "type": "integer"
+          },
+          "strategy_min_interval_seconds": {
+            "title": "Strategy Min Interval Seconds",
+            "type": "integer"
           },
           "thresholds": {
             "additionalProperties": {
@@ -570,10 +1065,129 @@
           "vision_interval_seconds",
           "sedentary_trigger_enabled",
           "sedentary_threshold_seconds",
+          "strategy_enabled",
+          "strategy_min_interval_seconds",
+          "strategy_force_interval_seconds",
           "execution_mode",
           "thresholds"
         ],
         "title": "AutomationPolicyOut",
+        "type": "object"
+      },
+      "AutomationRuleStateOut": {
+        "properties": {
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason"
+          },
+          "last_command_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Command Id"
+          },
+          "last_condition": {
+            "title": "Last Condition",
+            "type": "string"
+          },
+          "last_fired_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fired At"
+          },
+          "next_fire_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Fire At"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_id",
+          "last_condition"
+        ],
+        "title": "AutomationRuleStateOut",
+        "type": "object"
+      },
+      "AutomationStrategyChangedEnvelope": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "schema_version": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trace Id"
+          },
+          "type": {
+            "const": "automation.strategy.changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "device_id",
+          "occurred_at",
+          "type",
+          "payload"
+        ],
+        "title": "AutomationStrategyChangedEnvelope",
         "type": "object"
       },
       "Body_upload_image": {
@@ -2463,7 +3077,10 @@
         "discriminator": {
           "mapping": {
             "ai.run.status_changed": "#/components/schemas/AiRunStatusChangedEnvelope",
+            "automation.plan.changed": "#/components/schemas/AutomationPlanChangedEnvelope",
+            "automation.plan.event": "#/components/schemas/AutomationPlanEventEnvelope",
             "automation.policy.changed": "#/components/schemas/AutomationPolicyChangedEnvelope",
+            "automation.strategy.changed": "#/components/schemas/AutomationStrategyChangedEnvelope",
             "command.status_changed": "#/components/schemas/CommandStatusChangedEnvelope",
             "device.capabilities_changed": "#/components/schemas/DeviceCapabilitiesChangedEnvelope",
             "device.status_changed": "#/components/schemas/DeviceStatusChangedEnvelope",
@@ -2498,6 +3115,15 @@
           },
           {
             "$ref": "#/components/schemas/AutomationPolicyChangedEnvelope"
+          },
+          {
+            "$ref": "#/components/schemas/AutomationPlanChangedEnvelope"
+          },
+          {
+            "$ref": "#/components/schemas/AutomationPlanEventEnvelope"
+          },
+          {
+            "$ref": "#/components/schemas/AutomationStrategyChangedEnvelope"
           },
           {
             "$ref": "#/components/schemas/SystemErrorEnvelope"
@@ -2762,6 +3388,550 @@
           }
         },
         "summary": "Cancel Ai Run"
+      }
+    },
+    "/api/v1/devices/{device_id}/ai/strategies": {
+      "get": {
+        "operationId": "list_ai_strategies",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AiStrategyOut"
+                  },
+                  "title": "Response List Ai Strategies",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ai Strategies"
+      }
+    },
+    "/api/v1/devices/{device_id}/ai/strategies/{strategy_id}": {
+      "get": {
+        "operationId": "get_ai_strategy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiStrategyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ai Strategy"
+      }
+    },
+    "/api/v1/devices/{device_id}/ai/strategies/{strategy_id}/approve": {
+      "post": {
+        "operationId": "approve_ai_strategy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiStrategyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Ai Strategy"
+      }
+    },
+    "/api/v1/devices/{device_id}/ai/strategies/{strategy_id}/reject": {
+      "post": {
+        "operationId": "reject_ai_strategy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiStrategyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Ai Strategy"
+      }
+    },
+    "/api/v1/devices/{device_id}/automation-plans": {
+      "get": {
+        "operationId": "list_automation_plans",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AutomationPlanOut"
+                  },
+                  "title": "Response List Automation Plans",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Automation Plans"
+      }
+    },
+    "/api/v1/devices/{device_id}/automation-plans/{plan_id}": {
+      "get": {
+        "operationId": "get_automation_plan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationPlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Automation Plan"
+      }
+    },
+    "/api/v1/devices/{device_id}/automation-plans/{plan_id}/activate": {
+      "post": {
+        "operationId": "activate_automation_plan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationPlanActivateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationPlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Automation Plan"
+      }
+    },
+    "/api/v1/devices/{device_id}/automation-plans/{plan_id}/cancel": {
+      "post": {
+        "operationId": "cancel_automation_plan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationPlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Automation Plan"
+      }
+    },
+    "/api/v1/devices/{device_id}/automation-plans/{plan_id}/events": {
+      "get": {
+        "operationId": "list_automation_plan_events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AutomationPlanEventOut"
+                  },
+                  "title": "Response List Automation Plan Events",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Automation Plan Events"
+      }
+    },
+    "/api/v1/devices/{device_id}/automation-plans/{plan_id}/pause": {
+      "post": {
+        "operationId": "pause_automation_plan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationPlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Automation Plan"
+      }
+    },
+    "/api/v1/devices/{device_id}/automation-plans/{plan_id}/resume": {
+      "post": {
+        "operationId": "resume_automation_plan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationPlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Automation Plan"
       }
     },
     "/api/v1/devices/{device_id}/automation-policy": {

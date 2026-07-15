@@ -43,10 +43,24 @@ class McpToolClient:
             yield session
 
     @staticmethod
-    def openai_tools(tools: list[Tool], *, allow_control: bool) -> list[dict[str, Any]]:
+    def openai_tools(
+        tools: list[Tool],
+        *,
+        allow_control: bool,
+        allowed_names: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
+        internal_control_tools = {"automation_plan_create_draft", "automation_strategy_propose"}
         for tool in tools:
-            if not allow_control and tool.name in {"device_execute_command", "device_create_notification"}:
+            if allowed_names is not None and tool.name not in allowed_names:
+                continue
+            if allowed_names is None and tool.name in internal_control_tools:
+                continue
+            if not allow_control and tool.name in {
+                "device_execute_command",
+                "device_speak",
+                "device_create_notification",
+            }:
                 continue
             rows.append(
                 {

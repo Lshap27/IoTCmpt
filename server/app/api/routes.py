@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-import base64
-
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
     get_ai_run_application,
     get_automation_application,
+    get_automation_plan_application,
     get_command_application,
     get_device_queries,
     get_pose_service,
 )
 from app.application.automation import AiRunApplicationService, AutomationApplicationService
+from app.application.automation_plans import AutomationPlanApplicationService
 from app.application.commands import CommandApplicationService
 from app.application.queries import DeviceQueryApplicationService
 from app.core.config import get_settings
@@ -35,6 +35,10 @@ from app.schemas import (
 from app.schemas_v1 import (
     AiRunCreate,
     AiRunOut,
+    AiStrategyOut,
+    AutomationPlanActivateIn,
+    AutomationPlanEventOut,
+    AutomationPlanOut,
     AutomationPolicyIn,
     AutomationPolicyOut,
     CommandCreateV1,
@@ -46,6 +50,7 @@ from app.services.events import acknowledge_event, serialize_event
 from app.services.images import save_image
 from app.services.pose import PoseService
 from app.services.telemetry import fetch_history_bucketed
+from app.services.voice_commands import submit_speech
 from app.services.websocket import manager
 
 router = APIRouter()
@@ -196,7 +201,9 @@ async def get_device_capabilities(
 async def get_automation_policy(
     device_id: str,
     automation: AutomationApplicationService = Depends(get_automation_application),
+    plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
 ):
+    await plans.ensure_system_plan(device_id)
     return await automation.get_policy(device_id)
 
 
@@ -206,8 +213,10 @@ async def update_automation_policy(
     payload: AutomationPolicyIn,
     request: Request,
     automation: AutomationApplicationService = Depends(get_automation_application),
+    plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
 ):
     try:
+        await plans.ensure_system_plan(device_id)
         updated = await automation.update_policy(device_id, payload.model_dump(exclude_none=True))
         await manager.broadcast(
             device_id,
@@ -231,6 +240,150 @@ async def create_ai_run(
     runs: AiRunApplicationService = Depends(get_ai_run_application),
 ):
     return await runs.create(device_id, payload.model_dump(mode="json"), request.state.trace_id)
+
+
+@router.get("/devices/{device_id}/automation-plans", response_model=list[AutomationPlanOut])
+async def list_automation_plans(
+    device_id: str,
+    plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
+):
+    return await plans.list_plans(device_id)
+
+
+@router.get("/devices/{device_id}/automation-plans/{plan_id}", response_model=AutomationPlanOut)
+async def get_automation_plan(
+    device_id: str,
+    plan_id: str,
+    plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
+):
+    plan = await plans.get(device_id, plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Automation plan not found")
+    return plan
+
+
+@router.get(
+    "/devices/{device_id}/automation-plans/{plan_id}/events",
+    response_model=list[AutomationPlanEventOut],
+)
+async def list_automation_plan_events(
+    device_id: str,
+    plan_id: str,
+    limit: int = Query(default=100, ge=1, le=500),
+    plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
+):
+    if await plans.get(device_id, plan_id) is None:
+        raise HTTPException(status_code=404, detail="Automation plan not found")
+    return await plans.events(device_id, plan_id, limit)
+
+
+async def _transition_plan(
+    device_id: str,
+    plan_id: str,
+    action: str,
+    plans: AutomationPlanApplicationService,
+    *,
+    replace_active: bool = False,
+) -> dict:
+    try:
+        return await plans.transition(device_id, plan_id, action, replace_active=replace_active)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/devices/{device_id}/automation-plans/{plan_id}/activate", response_model=AutomationPlanOut)
+async def activate_automation_plan(
+    device_id: str,
+    plan_id: str,
+    payload: AutomationPlanActivateIn,
+    plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
+):
+    return await _transition_plan(device_id, plan_id, "activate", plans, replace_active=payload.replace_active)
+
+
+@router.post("/devices/{device_id}/automation-plans/{plan_id}/pause", response_model=AutomationPlanOut)
+async def pause_automation_plan(
+    device_id: str,
+    plan_id: str,
+    plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
+):
+    return await _transition_plan(device_id, plan_id, "pause", plans)
+
+
+@router.post("/devices/{device_id}/automation-plans/{plan_id}/resume", response_model=AutomationPlanOut)
+async def resume_automation_plan(
+    device_id: str,
+    plan_id: str,
+    plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
+):
+    return await _transition_plan(device_id, plan_id, "resume", plans)
+
+
+@router.post("/devices/{device_id}/automation-plans/{plan_id}/cancel", response_model=AutomationPlanOut)
+async def cancel_automation_plan(
+    device_id: str,
+    plan_id: str,
+    plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
+):
+    return await _transition_plan(device_id, plan_id, "cancel", plans)
+
+
+@router.get("/devices/{device_id}/ai/strategies", response_model=list[AiStrategyOut])
+async def list_ai_strategies(
+    device_id: str,
+    plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
+):
+    return await plans.list_strategies(device_id)
+
+
+@router.get("/devices/{device_id}/ai/strategies/{strategy_id}", response_model=AiStrategyOut)
+async def get_ai_strategy(
+    device_id: str,
+    strategy_id: str,
+    plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
+):
+    strategy = await plans.get_strategy(device_id, strategy_id)
+    if strategy is None:
+        raise HTTPException(status_code=404, detail="AI strategy not found")
+    return strategy
+
+
+async def _resolve_strategy(
+    device_id: str,
+    strategy_id: str,
+    action: str,
+    plans: AutomationPlanApplicationService,
+) -> dict:
+    try:
+        return await plans.resolve_strategy(device_id, strategy_id, action)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/devices/{device_id}/ai/strategies/{strategy_id}/approve", response_model=AiStrategyOut)
+async def approve_ai_strategy(
+    device_id: str,
+    strategy_id: str,
+    plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
+):
+    return await _resolve_strategy(device_id, strategy_id, "approve", plans)
+
+
+@router.post("/devices/{device_id}/ai/strategies/{strategy_id}/reject", response_model=AiStrategyOut)
+async def reject_ai_strategy(
+    device_id: str,
+    strategy_id: str,
+    plans: AutomationPlanApplicationService = Depends(get_automation_plan_application),
+):
+    return await _resolve_strategy(device_id, strategy_id, "reject", plans)
 
 
 @router.get("/devices/{device_id}/ai/runs/{run_id}", response_model=AiRunOut)
@@ -310,17 +463,14 @@ async def send_notification(
 ):
     response = await queries.create_notification(device_id, payload.content)
     if payload.voice_broadcast:
-        encoded = base64.b64encode(payload.content.encode("gb2312", errors="replace")).decode("ascii")
-        command = await commands.submit(
-            CommandRequest(
-                device_id=device_id,
-                type="voice.speak",
-                parameter={"gb2312_base64": encoded},
-                source="frontend",
-                reason=payload.content,
-                trace_id=request.state.trace_id,
-                idempotency_key=f"notification:{response['id']}",
-            )
+        command = await submit_speech(
+            commands,
+            device_id=device_id,
+            text=payload.content,
+            source="frontend",
+            reason=payload.content,
+            trace_id=request.state.trace_id,
+            idempotency_key=f"notification:{response['id']}",
         )
         response = await queries.link_notification_command(response["id"], command["command_id"])
     envelope = WebSocketEnvelope(type="notification.created", device_id=device_id, payload=response)

@@ -256,6 +256,53 @@ export function AiPanel({
             </div>
           </div>
 
+          <div className="mt-3 rounded-xl border border-line bg-raised p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-ink">AI 计划策略复盘</p>
+                <p className="mt-0.5 text-xs text-ink3">只生成待批准候选，不自动替换计划</p>
+              </div>
+              <Switch
+                checked={policy?.strategy_enabled ?? false}
+                disabled={!policy}
+                onCheckedChange={(strategy_enabled) => onUpdatePolicy({ strategy_enabled })}
+                aria-label="AI 计划策略复盘开关"
+              />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <label className="text-xs text-ink3">
+                合并窗口（秒）
+                <input
+                  key={`strategy-min-${policy?.strategy_min_interval_seconds}`}
+                  type="number"
+                  min={300}
+                  max={86400}
+                  defaultValue={policy?.strategy_min_interval_seconds ?? 300}
+                  disabled={!policy}
+                  onBlur={(event) =>
+                    onUpdatePolicy({ strategy_min_interval_seconds: Number(event.currentTarget.value) })
+                  }
+                  className="mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-2 text-sm text-ink"
+                />
+              </label>
+              <label className="text-xs text-ink3">
+                强制复盘（秒）
+                <input
+                  key={`strategy-force-${policy?.strategy_force_interval_seconds}`}
+                  type="number"
+                  min={300}
+                  max={604800}
+                  defaultValue={policy?.strategy_force_interval_seconds ?? 3600}
+                  disabled={!policy}
+                  onBlur={(event) =>
+                    onUpdatePolicy({ strategy_force_interval_seconds: Number(event.currentTarget.value) })
+                  }
+                  className="mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-2 text-sm text-ink"
+                />
+              </label>
+            </div>
+          </div>
+
           <Button
             type="button"
             onClick={onAnalyze}

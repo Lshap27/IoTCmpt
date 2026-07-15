@@ -213,16 +213,20 @@ class FirmwareModel:
         self.last_telemetry = payload
         return payload
 
-    def update_safety(self, smoke_active: bool | None = None) -> bool:
+    def update_safety(self, smoke_active: bool | None = None, *, now: float | None = None) -> bool:
         if smoke_active is None:
             smoke_active = self.scenario == "smoke"
+        if now is None:
+            now = time.monotonic()
         self.smoke_active = smoke_active
-        silence_active = smoke_active and time.monotonic() < self.smoke_silenced_until
-        if not smoke_active:
-            self.smoke_silenced_until = 0.0
+        silence_active = smoke_active and now < self.smoke_silenced_until
         self.state["smoke_silenced"] = silence_active
         self.state["alarm_on"] = self.manual_alarm_on or (smoke_active and not silence_active)
         return smoke_active
+
+    def clear_smoke_episode(self) -> None:
+        self.smoke_silenced_until = 0.0
+        self.state["smoke_silenced"] = False
 
     def validate_command(self, envelope: dict[str, Any], payload: dict[str, Any]) -> tuple[str, str] | None:
         required = {"message_id", "trace_id", "device_id", "occurred_at", "boot_id", "sequence", "payload"}

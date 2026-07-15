@@ -214,6 +214,15 @@ export function applyEnvelope(queryClient: QueryClient, deviceId: string, envelo
       queryClient.setQueryData(deviceKeys.automationPolicy(deviceId), envelope.payload);
       break;
     }
+    case "automation.plan.changed":
+    case "automation.plan.event": {
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.automationPlans(deviceId) });
+      break;
+    }
+    case "automation.strategy.changed": {
+      void queryClient.invalidateQueries({ queryKey: deviceKeys.aiStrategies(deviceId) });
+      break;
+    }
     case "system.error":
       break;
   }

@@ -151,6 +151,8 @@ class LLMService:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
+        *,
+        required_tool: str | None = None,
     ) -> dict[str, Any]:
         """Return one OpenAI-compatible assistant message, including tool_calls."""
         if self.settings.llm_endpoint == "mock":
@@ -161,7 +163,7 @@ class LLMService:
             "model": self.settings.llm_model,
             "messages": messages,
             "tools": tools,
-            "tool_choice": "auto",
+            "tool_choice": ({"type": "function", "function": {"name": required_tool}} if required_tool else "auto"),
             "temperature": 0.1,
         }
         if self.settings.llm_thinking_enabled:
@@ -273,13 +275,23 @@ class LLMService:
             command_type, confidence, risk, reason = (None, 0.95, "low", "环境正常，无需动作")
 
         intent = str(device_state.get("analysis_intent") or "")
+        event_type = str(device_state.get("event_type") or "")
         speech = ""
-        if intent == "smoke":
-            speech = "检测到烟雾，请立即远离并检查现场安全。"
-        elif intent == "air_change":
-            speech = "空气质量正在变差，请检查污染源并保持有效通风。"
-        elif intent == "sedentary":
+        if event_type == "posture.sedentary":
             speech = "您已久坐较长时间，请起身活动并放松肩颈。"
+        elif (
+            device_state.get("run_kind") == "patrol"
+            and air_quality == "alert"
+            and state.get("window_open")
+            and device_state.get("air_trend") == "worsening"
+        ):
+            speech = "空气质量持续异常且仍在恶化，请检查污染源和通风路径。"
+        elif (
+            any(keyword in intent for keyword in ("播报", "语音", "提醒"))
+            and "烟雾" not in intent
+            and not sensors.get("smoke_detected")
+        ):
+            speech = "设备语音提醒已执行，请及时关注当前环境状态。"
         command = (
             CommandMessage(
                 type=cast(CommandType, command_type),

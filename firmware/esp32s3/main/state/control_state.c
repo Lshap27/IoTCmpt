@@ -17,14 +17,12 @@ static TickType_t s_smoke_silenced_until;
 
 static void refresh_locked(void) {
     const bool smoke_active = (s_state.alarm_sources & CONTROL_ALARM_SMOKE) != 0;
-    if (!smoke_active) {
+    const bool silence_window_active =
+        s_smoke_silenced_until != 0 && (int32_t)(s_smoke_silenced_until - xTaskGetTickCount()) > 0;
+    if (!silence_window_active) {
         s_smoke_silenced_until = 0;
     }
-    const bool silence_active =
-        smoke_active && s_smoke_silenced_until != 0 && (int32_t)(s_smoke_silenced_until - xTaskGetTickCount()) > 0;
-    if (!silence_active) {
-        s_smoke_silenced_until = 0;
-    }
+    const bool silence_active = smoke_active && silence_window_active;
     s_state.smoke_silenced = silence_active;
     const uint32_t effective = silence_active ? (s_state.alarm_sources & ~CONTROL_ALARM_SMOKE) : s_state.alarm_sources;
     s_state.alarm_on = effective != 0;
@@ -196,6 +194,14 @@ esp_err_t control_state_silence_smoke(uint32_t seconds) {
         return ESP_OK;
     }
     return ESP_ERR_INVALID_STATE;
+}
+
+void control_state_clear_smoke_silence(void) {
+    if (s_mutex && xSemaphoreTake(s_mutex, portMAX_DELAY) == pdTRUE) {
+        s_smoke_silenced_until = 0;
+        refresh_locked();
+        xSemaphoreGive(s_mutex);
+    }
 }
 
 const char *control_priority_name(control_priority_t priority) {

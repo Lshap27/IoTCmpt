@@ -65,7 +65,7 @@ class SqlAlchemyDeviceQueryRepository:
 
     def snapshot(self, device_id: str) -> dict[str, Any]:
         with self.session_factory() as db:
-            return collect_device_snapshot(db, device_id)
+            return collect_device_snapshot(db, device_id, include_trend=True)
 
     def history(
         self,
@@ -414,6 +414,8 @@ class SqlAlchemyAutomationRepository:
                     setattr(policy, name, value)
             if policy.patrol_force_interval_seconds < policy.patrol_interval_seconds:
                 raise ValueError("patrol force interval must be at least the patrol interval")
+            if policy.strategy_force_interval_seconds < policy.strategy_min_interval_seconds:
+                raise ValueError("strategy force interval must be at least the strategy minimum interval")
             db.add(policy)
             db.commit()
             db.refresh(policy)
@@ -517,10 +519,14 @@ def serialize_policy(policy: models.AutomationPolicy) -> dict[str, Any]:
         "vision_interval_seconds": policy.vision_interval_seconds,
         "sedentary_trigger_enabled": policy.sedentary_trigger_enabled,
         "sedentary_threshold_seconds": policy.sedentary_threshold_seconds,
+        "strategy_enabled": policy.strategy_enabled,
+        "strategy_min_interval_seconds": policy.strategy_min_interval_seconds,
+        "strategy_force_interval_seconds": policy.strategy_force_interval_seconds,
         "execution_mode": policy.execution_mode,
         "thresholds": policy.thresholds or dict(DEFAULT_THRESHOLDS),
         "last_checked_at": iso_utc(policy.last_checked_at),
         "last_model_run_at": iso_utc(policy.last_model_run_at),
+        "last_strategy_run_at": iso_utc(policy.last_strategy_run_at),
     }
 
 

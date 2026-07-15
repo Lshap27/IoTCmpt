@@ -7,6 +7,9 @@
     "command.status_changed",
     "ai.run.status_changed",
     "automation.policy.changed",
+    "automation.plan.changed",
+    "automation.plan.event",
+    "automation.strategy.changed",
     "notification.created",
     "device.capabilities_changed",
     "system.error"

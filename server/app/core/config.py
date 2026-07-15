@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     ai_tool_max_rounds: int = Field(default=4, ge=1, le=10)
     ai_tool_max_calls: int = Field(default=8, ge=1, le=32)
     patrol_scheduler_seconds: float = Field(default=5.0, ge=1.0, le=300.0)
+    automation_scheduler_seconds: float = Field(default=1.0, ge=0.2, le=60.0)
     gateway_internal_url: str = "http://127.0.0.1:8000"
     outbox_lease_seconds: int = Field(default=30, ge=10, le=300)
 

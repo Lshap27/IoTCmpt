@@ -70,6 +70,11 @@ Do not flash an unknown board from the full compile profile. Before flashing:
 7. Verify retained status/capabilities, telemetry, image upload, `accepted` and terminal ACK, duplicate `command_id`, command TTL and Wi-Fi/MQTT reconnect.
 8. Test smoke handling with cloud services stopped. The local alarm and safety veto must still work.
 9. Test manual priority before AI/MCP commands, and observe physical window/LED/alarm behavior rather than trusting the UI alone.
+10. Hold smoke continuously and confirm local speech near 0, 30 and 60 seconds. Briefly clear MQ-2 for less than 1 second and confirm it does not create a new first announcement; clear for at least 1 second and confirm the next episode announces immediately.
+11. While smoke remains active, issue `alarm.silence`. Confirm both buzzer and periodic speech pause, then resume after expiry. Confirm stable smoke clear cancels queued smoke retries.
+12. Trigger firmware automatic ventilation repeatedly while capturing serial logs. Confirm one local announcement follows the successful closed-to-open transition, and classify any failed attempts as BY busy, UART lock, UART write or TX completion. Confirm at most three attempts. Manual, Web, AI and MCP `window.open` commands must not add the firmware ventilation announcement.
+13. Run a `decision` speech goal and a sedentary-event run through Worker -> MCP `device_speak` -> outbox -> MQTT -> terminal ACK. A queued AI Run or a generated text decision alone is not a voice acceptance result.
+14. Lighting combinations are software-covered but physical LED/camera acceptance is intentionally deferred. Before enabling it in the lab, verify dark/present, bright/absent, the two hold combinations, stale pose, unstable light, the global automation switch and manual-priority rejection.
 
 This repository revision has no physical-board result. USB/serial, power,
 real GPIO, PSRAM, OV2640 timing, display, voice, sensor voltage/logic levels and

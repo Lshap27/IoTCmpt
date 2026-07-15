@@ -1,6 +1,6 @@
 # Data Model
 
-The v2 architecture adds persistent device capability/twin, command audit, transactional outbox, AI-run, MCP-tool-call, automation-policy and AI-report tables. Migration `0006_architecture_v2.py` introduces the base tables; `0007_reliable_worker_cutover.py` adds leases, realtime/trace events and worker heartbeats while migrating legacy AI history; `0008_reliability_fencing.py` adds per-claim lease tokens and MQTT inbox idempotency.
+The v2 architecture adds persistent device capability/twin, command audit, transactional outbox, AI-run, MCP-tool-call, automation-policy and AI-report tables. Migration `0006_architecture_v2.py` introduces the base tables; `0007_reliable_worker_cutover.py` adds leases, realtime/trace events and worker heartbeats while migrating legacy AI history; `0008_reliability_fencing.py` adds per-claim lease tokens and MQTT inbox idempotency; `0009_voice_lighting_automation.py` adds deterministic per-device lighting rule state. Migration `0010_automation_plans.py` adds immutable plan versions, generic runtime state, audit events and AI strategy candidates while retaining the old lighting table for one rollback window.
 
 | Table | Purpose |
 | --- | --- |
@@ -10,15 +10,23 @@ The v2 architecture adds persistent device capability/twin, command audit, trans
 | `outbox_messages` | recoverable MQTT publication queue |
 | `ai_runs` | persistent asynchronous AI task state and output |
 | `ai_tool_calls` | MCP tool arguments, result and error audit |
-| `automation_policies` | per-device event/patrol settings and fingerprints |
+| `lighting_rule_states` | Legacy rollback state; no longer the active execution source |
+| `automation_plans` | Per-device system/user plan identity, lifecycle and current immutable version |
+| `automation_plan_versions` | Original prompt, validated DSL, explanation and source AI Run |
+| `automation_rule_states` | Stable counts, edge state, timer anchor, cooldown and linked command |
+| `automation_plan_events` | Trigger, skip, manual block, command result and lifecycle audit |
+| `ai_strategies` | Base version, candidate DSL, server-computed diff and approval state |
+| `automation_policies` | per-device event/patrol/strategy settings and independent fingerprints |
 | `ai_reports` | report output linked to its AI run |
 | `realtime_events` | transactional Worker-to-Gateway WebSocket relay |
 | `trace_events` | ordered cross-component diagnostic timeline |
 | `runtime_instances` | worker heartbeat and metadata |
-| `runtime_leases` | singleton patrol scheduler election |
+| `runtime_leases` | singleton automation and patrol/strategy scheduler elections |
 | `mqtt_inbox_messages` | QoS 1 input deduplication by device/topic/message ID |
 
 `ai_runs`, `outbox_messages` and `realtime_events` carry `lease_owner` and a unique per-claim `lease_token`. A Worker or relay may renew or finish only while both still match. `ai_tool_calls` uses stable call identifiers, and reports are upserted by Run, so a recovered job cannot duplicate the audit row or report.
+
+At most one `user` plan per device may be `active` or `paused`; a partial unique index enforces this in both PostgreSQL and SQLite tests. System plans may coexist. Plan versions are append-only. Strategy approval compares `base_version` again and returns a conflict if the plan advanced after the proposal was generated.
 
 The gateway stores normalized records while preserving the raw JSON payload
 for debugging. The schema is managed by Alembic migrations

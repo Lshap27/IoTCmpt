@@ -18,6 +18,15 @@ import {
   telemetryHistory,
   telemetryHistoryBucketed,
   updateAutomationPolicy,
+  listAutomationPlans,
+  listAutomationPlanEvents,
+  activateAutomationPlan,
+  pauseAutomationPlan,
+  resumeAutomationPlan,
+  cancelAutomationPlan,
+  listAiStrategies,
+  approveAiStrategy,
+  rejectAiStrategy,
 } from "./api-client/sdk.gen";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -39,6 +48,9 @@ export type {
   TelemetryPoint,
   TraceTimelineOut,
   WsMessage,
+  AutomationPlanOut,
+  AutomationPlanEventOut,
+  AiStrategyOut,
 } from "./api-client/types.gen";
 
 import type {
@@ -54,6 +66,9 @@ import type {
   NotificationOut as NotificationOutT,
   TelemetryBucketPoint as TelemetryBucketPointT,
   TelemetryPoint as TelemetryPointT,
+  AutomationPlanOut as AutomationPlanOutT,
+  AutomationPlanEventOut as AutomationPlanEventOutT,
+  AiStrategyOut as AiStrategyOutT,
 } from "./api-client/types.gen";
 
 export type ReportPeriod = "hour" | "day" | "week";
@@ -299,4 +314,62 @@ export async function fetchCapabilities(deviceId: string): Promise<DeviceCapabil
     throwOnError: true,
   });
   return data;
+}
+
+export async function fetchAutomationPlans(deviceId: string): Promise<AutomationPlanOutT[]> {
+  const { data } = await listAutomationPlans({
+    path: { device_id: deviceId },
+    cache: "no-store",
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function fetchAutomationPlanEvents(
+  deviceId: string,
+  planId: string,
+): Promise<AutomationPlanEventOutT[]> {
+  const { data } = await listAutomationPlanEvents({
+    path: { device_id: deviceId, plan_id: planId },
+    query: { limit: 100 },
+    cache: "no-store",
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function changeAutomationPlan(
+  deviceId: string,
+  planId: string,
+  action: "activate" | "pause" | "resume" | "cancel",
+  replaceActive = false,
+): Promise<AutomationPlanOutT> {
+  const options = { path: { device_id: deviceId, plan_id: planId }, throwOnError: true } as const;
+  if (action === "activate") {
+    const { data } = await activateAutomationPlan({ ...options, body: { replace_active: replaceActive } });
+    return data;
+  }
+  if (action === "pause") return (await pauseAutomationPlan(options)).data;
+  if (action === "resume") return (await resumeAutomationPlan(options)).data;
+  return (await cancelAutomationPlan(options)).data;
+}
+
+export async function fetchAiStrategies(deviceId: string): Promise<AiStrategyOutT[]> {
+  const { data } = await listAiStrategies({
+    path: { device_id: deviceId },
+    cache: "no-store",
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function resolveAiStrategy(
+  deviceId: string,
+  strategyId: string,
+  action: "approve" | "reject",
+): Promise<AiStrategyOutT> {
+  const options = { path: { device_id: deviceId, strategy_id: strategyId }, throwOnError: true } as const;
+  return action === "approve"
+    ? (await approveAiStrategy(options)).data
+    : (await rejectAiStrategy(options)).data;
 }

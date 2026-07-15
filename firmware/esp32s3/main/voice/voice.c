@@ -12,11 +12,16 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "firmware_behavior.generated.h"
 #include "mbedtls/base64.h"
 #include "sensors.h"
 static const char *TAG = "VOICE";
 static SemaphoreHandle_t s_mutex;
 static QueueHandle_t s_announcement_queue;
+static portMUX_TYPE s_state_lock = portMUX_INITIALIZER_UNLOCKED;
+static uint32_t s_pending_mask;
+static bool s_smoke_active;
+static bool s_smoke_silenced;
 
 #define ANNOUNCEMENT_QUEUE_LENGTH 4
 
@@ -39,8 +44,12 @@ static bool wait_idle(uint32_t timeout_ms) {
 }
 
 static esp_err_t speak(const uint8_t *text, size_t text_len) {
-    if (!wait_idle(5000) || !sensors_air_uart_lock(1000)) {
-        ESP_LOGW(TAG, "SYN6288 busy, skipping announcement");
+    if (!wait_idle(5000)) {
+        ESP_LOGW(TAG, "SYN6288 BY busy timeout");
+        return ESP_ERR_TIMEOUT;
+    }
+    if (!sensors_air_uart_lock(1000)) {
+        ESP_LOGW(TAG, "SYN6288 UART lock timeout");
         return ESP_ERR_TIMEOUT;
     }
 
@@ -69,8 +78,19 @@ static esp_err_t speak(const uint8_t *text, size_t text_len) {
     }
     frame[index++] = checksum;
     const int written = uart_write_bytes((uart_port_t)CONFIG_APP_TVOC_UART_NUM, frame, index);
+    if (written != (int)index) {
+        ESP_LOGW(TAG, "SYN6288 UART write failed expected=%u actual=%d", (unsigned)index, written);
+        sensors_air_uart_unlock();
+        return ESP_FAIL;
+    }
+    const esp_err_t tx_result =
+        uart_wait_tx_done((uart_port_t)CONFIG_APP_TVOC_UART_NUM, pdMS_TO_TICKS(AIOT_VOICE_TX_TIMEOUT_MS));
     sensors_air_uart_unlock();
-    return written == (int)index ? ESP_OK : ESP_FAIL;
+    if (tx_result != ESP_OK) {
+        ESP_LOGW(TAG, "SYN6288 UART TX completion timeout: %s", esp_err_to_name(tx_result));
+        return tx_result == ESP_ERR_TIMEOUT ? ESP_ERR_TIMEOUT : ESP_FAIL;
+    }
+    return ESP_OK;
 }
 
 static const char *announcement_payload(voice_announcement_t announcement) {
@@ -91,9 +111,35 @@ static void announcement_task(void *arg) {
         if (xQueueReceive(s_announcement_queue, &announcement, portMAX_DELAY) != pdTRUE) {
             continue;
         }
-        const char *encoded = announcement_payload(announcement);
-        const esp_err_t err = encoded ? voice_speak_base64(encoded) : ESP_ERR_INVALID_ARG;
-        if (err != ESP_OK) {
+        esp_err_t err = ESP_ERR_INVALID_ARG;
+        for (uint32_t attempt = 0; attempt < AIOT_VOICE_LOCAL_RETRY_ATTEMPTS; attempt++) {
+            bool suppressed = false;
+            if (announcement == VOICE_ANNOUNCEMENT_SMOKE) {
+                portENTER_CRITICAL(&s_state_lock);
+                suppressed = !s_smoke_active || s_smoke_silenced;
+                portEXIT_CRITICAL(&s_state_lock);
+            }
+            if (suppressed) {
+                ESP_LOGI(TAG, "烟雾已解除或静音，取消待播语音");
+                err = ESP_ERR_INVALID_STATE;
+                break;
+            }
+            const char *encoded = announcement_payload(announcement);
+            err = encoded ? voice_speak_base64(encoded) : ESP_ERR_INVALID_ARG;
+            if (err == ESP_OK || (err != ESP_ERR_TIMEOUT && err != ESP_FAIL)) {
+                break;
+            }
+            if (attempt + 1 < AIOT_VOICE_LOCAL_RETRY_ATTEMPTS) {
+                const uint32_t delay_ms = AIOT_VOICE_RETRY_BACKOFF_MS << attempt;
+                ESP_LOGW(TAG, "本地语音重试 type=%d attempt=%u delay_ms=%u error=%s", (int)announcement,
+                         (unsigned)(attempt + 2), (unsigned)delay_ms, esp_err_to_name(err));
+                vTaskDelay(pdMS_TO_TICKS(delay_ms));
+            }
+        }
+        portENTER_CRITICAL(&s_state_lock);
+        s_pending_mask &= ~(1U << (uint32_t)announcement);
+        portEXIT_CRITICAL(&s_state_lock);
+        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
             ESP_LOGW(TAG, "本地语音播报失败 type=%d: %s", (int)announcement, esp_err_to_name(err));
         }
     }
@@ -176,14 +222,39 @@ esp_err_t voice_announce(voice_announcement_t announcement) {
     if (!CONFIG_APP_VOICE_ENABLED || !s_announcement_queue || !announcement_payload(announcement)) {
         return ESP_ERR_INVALID_STATE;
     }
+    const uint32_t pending_bit = 1U << (uint32_t)announcement;
+    portENTER_CRITICAL(&s_state_lock);
+    if ((s_pending_mask & pending_bit) != 0U) {
+        portEXIT_CRITICAL(&s_state_lock);
+        return ESP_OK;
+    }
+    s_pending_mask |= pending_bit;
+    portEXIT_CRITICAL(&s_state_lock);
+
     BaseType_t queued = announcement == VOICE_ANNOUNCEMENT_SMOKE
                             ? xQueueSendToFront(s_announcement_queue, &announcement, 0)
                             : xQueueSendToBack(s_announcement_queue, &announcement, 0);
     if (queued != pdTRUE && announcement == VOICE_ANNOUNCEMENT_SMOKE) {
         /* 队列满时丢弃一条较早的普通播报，为烟雾安全告警让位。 */
         voice_announcement_t dropped;
-        (void)xQueueReceive(s_announcement_queue, &dropped, 0);
+        if (xQueueReceive(s_announcement_queue, &dropped, 0) == pdTRUE) {
+            portENTER_CRITICAL(&s_state_lock);
+            s_pending_mask &= ~(1U << (uint32_t)dropped);
+            portEXIT_CRITICAL(&s_state_lock);
+        }
         queued = xQueueSendToFront(s_announcement_queue, &announcement, 0);
     }
+    if (queued != pdTRUE) {
+        portENTER_CRITICAL(&s_state_lock);
+        s_pending_mask &= ~pending_bit;
+        portEXIT_CRITICAL(&s_state_lock);
+    }
     return queued == pdTRUE ? ESP_OK : ESP_ERR_TIMEOUT;
+}
+
+void voice_set_smoke_state(bool active, bool silenced) {
+    portENTER_CRITICAL(&s_state_lock);
+    s_smoke_active = active;
+    s_smoke_silenced = silenced;
+    portEXIT_CRITICAL(&s_state_lock);
 }

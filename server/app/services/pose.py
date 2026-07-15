@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import suppress
+from inspect import isawaitable
 from typing import Any
 from uuid import uuid4
 
@@ -134,7 +135,7 @@ class PoseService:
         self.settings = settings
         self.queue: asyncio.Queue[tuple[str, int]] = asyncio.Queue(maxsize=1)
         self.worker: asyncio.Task[None] | None = None
-        self.result_handler: Callable[[str, dict[str, Any]], None] | None = None
+        self.result_handler: Callable[[str, dict[str, Any]], Awaitable[None] | None] | None = None
         self.presence_detector = PresenceDetector(
             settings.person_detection_model_path,
             settings.person_detection_confidence,
@@ -195,7 +196,9 @@ class PoseService:
                     ).model_dump(mode="json"),
                 )
                 if self.result_handler:
-                    self.result_handler(device_id, payload)
+                    handled = self.result_handler(device_id, payload)
+                    if isawaitable(handled):
+                        await handled
             except Exception:
                 LOGGER.exception("pose analysis failed for image %s", source_image_id)
             finally:

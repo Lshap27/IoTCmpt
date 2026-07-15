@@ -3,13 +3,19 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import time
 import uuid
 from pathlib import Path
 from typing import Any
 
 import aiomqtt
 
-from .generated_behavior import COMMAND_EXECUTION_PERIOD_MS, COMMAND_QUEUE_LENGTH
+from .generated_behavior import (
+    COMMAND_EXECUTION_PERIOD_MS,
+    COMMAND_QUEUE_LENGTH,
+    SMOKE_CLEAR_STABLE_MS,
+    SMOKE_REANNOUNCE_SECONDS,
+)
 from .model import FirmwareModel, iso_now
 from .persistence import SimulatorStateStore
 from .transport import EnvelopeEncoder, mqtt_client, upload_image
@@ -32,7 +38,10 @@ class FirmwareSimulator:
         self.command_queue: asyncio.Queue[tuple[dict[str, Any], str]] = asyncio.Queue(maxsize=COMMAND_QUEUE_LENGTH)
         self.ack_queue: asyncio.Queue[tuple[dict[str, Any], str]] = asyncio.Queue()
         self.event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-        self._previous_smoke: bool | None = None
+        self._smoke_episode_active = False
+        self._smoke_clear_since: float | None = None
+        self._last_smoke_announcement: float | None = None
+        self.local_announcements: list[tuple[str, float]] = []
         self.stop_event = asyncio.Event()
         self.mqtt_connected = False
         self.started_at = iso_now()
@@ -279,15 +288,37 @@ class FirmwareSimulator:
 
     async def _safety_loop(self) -> None:
         while True:
-            smoke = self.model.update_safety()
-            if self._previous_smoke is None:
-                self._previous_smoke = smoke
-                if smoke:
-                    await self.event_queue.put(self._smoke_event(True))
-            elif smoke != self._previous_smoke:
-                self._previous_smoke = smoke
-                await self.event_queue.put(self._smoke_event(smoke))
+            for event in self.process_safety_sample(self.model.scenario == "smoke", now=time.monotonic()):
+                await self.event_queue.put(event)
             await asyncio.sleep(0.1)
+
+    def process_safety_sample(self, smoke: bool, *, now: float) -> list[dict[str, Any]]:
+        """Advance local smoke safety using an injectable monotonic clock."""
+        events: list[dict[str, Any]] = []
+        self.model.update_safety(smoke, now=now)
+        if smoke:
+            self._smoke_clear_since = None
+            first = not self._smoke_episode_active
+            periodic = (
+                self._last_smoke_announcement is not None
+                and now - self._last_smoke_announcement >= SMOKE_REANNOUNCE_SECONDS
+            )
+            if first:
+                self._smoke_episode_active = True
+                events.append(self._smoke_event(True))
+            if (first or periodic) and not self.model.state["smoke_silenced"]:
+                self.local_announcements.append(("smoke", now))
+                self._last_smoke_announcement = now
+        elif self._smoke_episode_active:
+            if self._smoke_clear_since is None:
+                self._smoke_clear_since = now
+            elif now - self._smoke_clear_since >= SMOKE_CLEAR_STABLE_MS / 1000:
+                self._smoke_episode_active = False
+                self._smoke_clear_since = None
+                self._last_smoke_announcement = None
+                self.model.clear_smoke_episode()
+                events.append(self._smoke_event(False))
+        return events
 
     @staticmethod
     def _smoke_event(smoke: bool) -> dict[str, Any]:

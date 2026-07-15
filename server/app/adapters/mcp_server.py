@@ -15,6 +15,8 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.core.config import Settings
 from app.domain.commands import CommandRejected, CommandRequest
+from app.schemas_v1 import AutomationPlanSpecV1In
+from app.services.voice_commands import submit_speech
 
 MCP_SCOPES: ContextVar[frozenset[str]] = ContextVar("mcp_scopes", default=frozenset())
 MCP_TRACE_ID: ContextVar[str] = ContextVar("mcp_trace_id", default="")
@@ -209,11 +211,122 @@ def create_mcp_server(app: Any, settings: Settings, internal_token: str) -> tupl
             return tool_result(error={"code": "not_found", "message": "command not found"})
         return tool_result(data=command)
 
+    @server.tool(name="device_speak", structured_output=True)
+    async def device_speak(
+        device_id: str,
+        text: str,
+        reason: str = "MCP speech request",
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        """Speak plain text through the device using validated GB2312 conversion."""
+        require_scope("mcp:control")
+        try:
+            command = await submit_speech(
+                app.state.command_application,
+                device_id=device_id,
+                text=text,
+                source="ai" if MCP_INTERNAL.get() else "external_mcp",
+                reason=reason,
+                trace_id=MCP_TRACE_ID.get(),
+                idempotency_key=idempotency_key,
+                ai_restricted=True,
+            )
+        except CommandRejected as exc:
+            return tool_result(error={"code": exc.error_code, "message": str(exc)})
+        return tool_result(data=command)
+
     @server.tool(name="device_create_notification", structured_output=True)
     async def device_create_notification(device_id: str, content: str) -> dict[str, Any]:
         """Create a persisted text notification for a device."""
         require_scope("mcp:control")
         return tool_result(data=await app.state.device_queries.create_notification(device_id, content))
+
+    @server.tool(name="automation_plan_list", structured_output=True)
+    async def automation_plan_list(device_id: str) -> dict[str, Any]:
+        """List deterministic automation plans and their current immutable versions."""
+        require_scope("mcp:read")
+        return tool_result(data=await app.state.automation_plan_application.list_plans(device_id))
+
+    @server.tool(name="automation_plan_get", structured_output=True)
+    async def automation_plan_get(device_id: str, plan_id: str) -> dict[str, Any]:
+        """Read one automation plan and its current validated DSL."""
+        require_scope("mcp:read")
+        plan = await app.state.automation_plan_application.get(device_id, plan_id)
+        if plan is None:
+            return tool_result(error={"code": "not_found", "message": "automation plan not found"})
+        return tool_result(data=plan)
+
+    @server.tool(name="automation_plan_events", structured_output=True)
+    async def automation_plan_events(device_id: str, plan_id: str, limit: int = 100) -> dict[str, Any]:
+        """Read recent deterministic automation plan audit events."""
+        require_scope("mcp:read")
+        return tool_result(
+            data=await app.state.automation_plan_application.events(
+                device_id,
+                plan_id,
+                max(1, min(limit, 500)),
+            )
+        )
+
+    @server.tool(name="automation_strategy_get", structured_output=True)
+    async def automation_strategy_get(device_id: str, strategy_id: str) -> dict[str, Any]:
+        """Read one AI strategy candidate and its server-computed structural diff."""
+        require_scope("mcp:read")
+        strategy = await app.state.automation_plan_application.get_strategy(device_id, strategy_id)
+        if strategy is None:
+            return tool_result(error={"code": "not_found", "message": "AI strategy not found"})
+        return tool_result(data=strategy)
+
+    @server.tool(name="automation_plan_create_draft", structured_output=True)
+    async def automation_plan_create_draft(
+        device_id: str,
+        run_id: str,
+        source_prompt: str,
+        spec: AutomationPlanSpecV1In,
+        explanation: str,
+    ) -> dict[str, Any]:
+        """Internal-only: validate and persist an immutable AutomationPlanSpec v1 draft."""
+        require_scope("mcp:control")
+        if not MCP_INTERNAL.get():
+            raise PermissionError("automation plan drafts are internal AI Worker operations")
+        try:
+            plan = await app.state.automation_plan_application.create_draft(
+                device_id,
+                source_prompt,
+                spec.model_dump(mode="json", exclude_none=True),
+                explanation,
+                run_id,
+                MCP_TRACE_ID.get(),
+            )
+        except ValueError as exc:
+            return tool_result(error={"code": "invalid_automation_plan", "message": str(exc)})
+        return tool_result(data=plan)
+
+    @server.tool(name="automation_strategy_propose", structured_output=True)
+    async def automation_strategy_propose(
+        device_id: str,
+        run_id: str,
+        proposed_spec: AutomationPlanSpecV1In,
+        summary: str,
+        plan_id: str | None = None,
+        base_version: int | None = None,
+    ) -> dict[str, Any]:
+        """Internal-only: validate and persist a strategy candidate without activating it."""
+        require_scope("mcp:control")
+        if not MCP_INTERNAL.get():
+            raise PermissionError("strategy proposals are internal AI Worker operations")
+        try:
+            strategy = await app.state.automation_plan_application.propose_strategy(
+                device_id,
+                run_id,
+                plan_id,
+                base_version,
+                proposed_spec.model_dump(mode="json", exclude_none=True),
+                summary,
+            )
+        except (LookupError, RuntimeError, ValueError) as exc:
+            return tool_result(error={"code": "invalid_strategy", "message": str(exc)})
+        return tool_result(data=strategy)
 
     mcp_app = server.streamable_http_app()
     return server, mcp_app, McpBearerMiddleware(mcp_app, settings, internal_token)

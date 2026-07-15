@@ -84,6 +84,8 @@ export function useDeviceLive(deviceId: string) {
         deviceKeys.notifications(deviceId),
         deviceKeys.capabilities(deviceId),
         deviceKeys.automationPolicy(deviceId),
+        deviceKeys.automationPlans(deviceId),
+        deviceKeys.aiStrategies(deviceId),
         deviceKeys.ai(deviceId),
       ]) {
         void queryClient.invalidateQueries({ queryKey: key });

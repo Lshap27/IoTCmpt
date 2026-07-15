@@ -181,6 +181,38 @@ def test_command_queue_has_firmware_capacity(tmp_path):
     asyncio.run(exercise())
 
 
+def test_smoke_reannounces_every_30_seconds_and_requires_stable_clear(tmp_path):
+    simulator = FirmwareSimulator(make_args(tmp_path, scenario="smoke"))
+
+    assert [event["type"] for event in simulator.process_safety_sample(True, now=0.0)] == ["smoke.detected"]
+    simulator.process_safety_sample(True, now=29.9)
+    simulator.process_safety_sample(True, now=30.0)
+    simulator.process_safety_sample(False, now=30.2)
+    simulator.process_safety_sample(True, now=30.8)
+    simulator.process_safety_sample(True, now=60.0)
+
+    assert simulator.local_announcements == [("smoke", 0.0), ("smoke", 30.0), ("smoke", 60.0)]
+
+    assert simulator.process_safety_sample(False, now=60.1) == []
+    assert simulator.process_safety_sample(False, now=61.1)[0]["type"] == "smoke.cleared"
+    assert simulator.process_safety_sample(True, now=61.2)[0]["type"] == "smoke.detected"
+    assert simulator.local_announcements[-1] == ("smoke", 61.2)
+
+
+def test_smoke_silence_pauses_voice_and_buzzer_then_resumes(tmp_path):
+    simulator = FirmwareSimulator(make_args(tmp_path, scenario="smoke"))
+    simulator.process_safety_sample(True, now=0.0)
+    simulator.model.smoke_silenced_until = 45.0
+
+    simulator.process_safety_sample(True, now=30.0)
+    assert simulator.model.state["alarm_on"] is False
+    assert simulator.local_announcements == [("smoke", 0.0)]
+
+    simulator.process_safety_sample(True, now=45.0)
+    assert simulator.model.state["alarm_on"] is True
+    assert simulator.local_announcements[-1] == ("smoke", 45.0)
+
+
 def test_nvs_persists_priority_and_last_terminal_acks_only(tmp_path):
     store = SimulatorStateStore(tmp_path, "esp32s3-test")
     model = FirmwareModel("esp32s3-test")

@@ -39,6 +39,7 @@ def enqueue_event_run(
             existing.input_payload = {
                 **(existing.input_payload or {}),
                 "coalesced_triggers": int((existing.input_payload or {}).get("coalesced_triggers", 0)) + 1,
+                "event_type": event_type,
                 "latest_event_type": event_type,
             }
             db.commit()
@@ -53,7 +54,12 @@ def enqueue_event_run(
             status="queued",
             available_at=now,
             max_attempts=settings.ai_worker_max_attempts,
-            input_payload={"kind": "decision", "trigger": "event", "goal": f"处理事件 {event_type}"},
+            input_payload={
+                "kind": "decision",
+                "trigger": "event",
+                "event_type": event_type,
+                "goal": f"处理事件 {event_type}",
+            },
         )
         db.add(run)
         db.add(

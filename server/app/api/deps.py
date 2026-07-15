@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import HTTPException, Request
 
 from app.application.automation import AiRunApplicationService, AutomationApplicationService
+from app.application.automation_plans import AutomationPlanApplicationService
 from app.application.commands import CommandApplicationService
 from app.application.queries import DeviceQueryApplicationService
 from app.services.pose import PoseService
@@ -33,6 +34,13 @@ def get_ai_run_application(request: Request) -> AiRunApplicationService:
     service = getattr(request.app.state, "ai_run_application", None)
     if service is None:
         raise HTTPException(status_code=503, detail="AI run application is not available")
+    return service
+
+
+def get_automation_plan_application(request: Request) -> AutomationPlanApplicationService:
+    service = getattr(request.app.state, "automation_plan_application", None)
+    if service is None:
+        raise HTTPException(status_code=503, detail="Automation plan application is not available")
     return service
 
 

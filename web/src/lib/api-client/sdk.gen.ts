@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AckDeviceEventData, AckDeviceEventErrors, AckDeviceEventResponses, AnalyzeLatestPoseData, AnalyzeLatestPoseErrors, AnalyzeLatestPoseResponses, CancelAiRunData, CancelAiRunErrors, CancelAiRunResponses, CreateAiRunData, CreateAiRunErrors, CreateAiRunResponses, DeviceEventsData, DeviceEventsErrors, DeviceEventsResponses, DeviceNotificationsData, DeviceNotificationsErrors, DeviceNotificationsResponses, GetAiRunData, GetAiRunErrors, GetAiRunResponses, GetAutomationPolicyData, GetAutomationPolicyErrors, GetAutomationPolicyResponses, GetCommandV1Data, GetCommandV1Errors, GetCommandV1Responses, GetDeviceCapabilitiesData, GetDeviceCapabilitiesErrors, GetDeviceCapabilitiesResponses, GetDiagnosticsOverviewData, GetDiagnosticsOverviewResponses, GetTraceTimelineData, GetTraceTimelineErrors, GetTraceTimelineResponses, HealthData, HealthLiveData, HealthLiveResponses, HealthReadyData, HealthReadyResponses, HealthResponses, LatestDeviceStateData, LatestDeviceStateErrors, LatestDeviceStateResponses, ListAiRunsData, ListAiRunsErrors, ListAiRunsResponses, ListDevicesData, ListDevicesResponses, SendCommandData, SendCommandErrors, SendCommandResponses, SendNotificationData, SendNotificationErrors, SendNotificationResponses, TelemetryHistoryBucketedData, TelemetryHistoryBucketedErrors, TelemetryHistoryBucketedResponses, TelemetryHistoryData, TelemetryHistoryErrors, TelemetryHistoryResponses, UpdateAutomationPolicyData, UpdateAutomationPolicyErrors, UpdateAutomationPolicyResponses, UploadImageData, UploadImageErrors, UploadImageResponses } from './types.gen';
+import type { AckDeviceEventData, AckDeviceEventErrors, AckDeviceEventResponses, ActivateAutomationPlanData, ActivateAutomationPlanErrors, ActivateAutomationPlanResponses, AnalyzeLatestPoseData, AnalyzeLatestPoseErrors, AnalyzeLatestPoseResponses, ApproveAiStrategyData, ApproveAiStrategyErrors, ApproveAiStrategyResponses, CancelAiRunData, CancelAiRunErrors, CancelAiRunResponses, CancelAutomationPlanData, CancelAutomationPlanErrors, CancelAutomationPlanResponses, CreateAiRunData, CreateAiRunErrors, CreateAiRunResponses, DeviceEventsData, DeviceEventsErrors, DeviceEventsResponses, DeviceNotificationsData, DeviceNotificationsErrors, DeviceNotificationsResponses, GetAiRunData, GetAiRunErrors, GetAiRunResponses, GetAiStrategyData, GetAiStrategyErrors, GetAiStrategyResponses, GetAutomationPlanData, GetAutomationPlanErrors, GetAutomationPlanResponses, GetAutomationPolicyData, GetAutomationPolicyErrors, GetAutomationPolicyResponses, GetCommandV1Data, GetCommandV1Errors, GetCommandV1Responses, GetDeviceCapabilitiesData, GetDeviceCapabilitiesErrors, GetDeviceCapabilitiesResponses, GetDiagnosticsOverviewData, GetDiagnosticsOverviewResponses, GetTraceTimelineData, GetTraceTimelineErrors, GetTraceTimelineResponses, HealthData, HealthLiveData, HealthLiveResponses, HealthReadyData, HealthReadyResponses, HealthResponses, LatestDeviceStateData, LatestDeviceStateErrors, LatestDeviceStateResponses, ListAiRunsData, ListAiRunsErrors, ListAiRunsResponses, ListAiStrategiesData, ListAiStrategiesErrors, ListAiStrategiesResponses, ListAutomationPlanEventsData, ListAutomationPlanEventsErrors, ListAutomationPlanEventsResponses, ListAutomationPlansData, ListAutomationPlansErrors, ListAutomationPlansResponses, ListDevicesData, ListDevicesResponses, PauseAutomationPlanData, PauseAutomationPlanErrors, PauseAutomationPlanResponses, RejectAiStrategyData, RejectAiStrategyErrors, RejectAiStrategyResponses, ResumeAutomationPlanData, ResumeAutomationPlanErrors, ResumeAutomationPlanResponses, SendCommandData, SendCommandErrors, SendCommandResponses, SendNotificationData, SendNotificationErrors, SendNotificationResponses, TelemetryHistoryBucketedData, TelemetryHistoryBucketedErrors, TelemetryHistoryBucketedResponses, TelemetryHistoryData, TelemetryHistoryErrors, TelemetryHistoryResponses, UpdateAutomationPolicyData, UpdateAutomationPolicyErrors, UpdateAutomationPolicyResponses, UploadImageData, UploadImageErrors, UploadImageResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -49,6 +49,68 @@ export const getAiRun = <ThrowOnError extends boolean = false>(options: Options<
  * Cancel Ai Run
  */
 export const cancelAiRun = <ThrowOnError extends boolean = false>(options: Options<CancelAiRunData, ThrowOnError>): RequestResult<CancelAiRunResponses, CancelAiRunErrors, ThrowOnError> => (options.client ?? client).post<CancelAiRunResponses, CancelAiRunErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/ai/runs/{run_id}/cancel', ...options });
+
+/**
+ * List Ai Strategies
+ */
+export const listAiStrategies = <ThrowOnError extends boolean = false>(options: Options<ListAiStrategiesData, ThrowOnError>): RequestResult<ListAiStrategiesResponses, ListAiStrategiesErrors, ThrowOnError> => (options.client ?? client).get<ListAiStrategiesResponses, ListAiStrategiesErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/ai/strategies', ...options });
+
+/**
+ * Get Ai Strategy
+ */
+export const getAiStrategy = <ThrowOnError extends boolean = false>(options: Options<GetAiStrategyData, ThrowOnError>): RequestResult<GetAiStrategyResponses, GetAiStrategyErrors, ThrowOnError> => (options.client ?? client).get<GetAiStrategyResponses, GetAiStrategyErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/ai/strategies/{strategy_id}', ...options });
+
+/**
+ * Approve Ai Strategy
+ */
+export const approveAiStrategy = <ThrowOnError extends boolean = false>(options: Options<ApproveAiStrategyData, ThrowOnError>): RequestResult<ApproveAiStrategyResponses, ApproveAiStrategyErrors, ThrowOnError> => (options.client ?? client).post<ApproveAiStrategyResponses, ApproveAiStrategyErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/ai/strategies/{strategy_id}/approve', ...options });
+
+/**
+ * Reject Ai Strategy
+ */
+export const rejectAiStrategy = <ThrowOnError extends boolean = false>(options: Options<RejectAiStrategyData, ThrowOnError>): RequestResult<RejectAiStrategyResponses, RejectAiStrategyErrors, ThrowOnError> => (options.client ?? client).post<RejectAiStrategyResponses, RejectAiStrategyErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/ai/strategies/{strategy_id}/reject', ...options });
+
+/**
+ * List Automation Plans
+ */
+export const listAutomationPlans = <ThrowOnError extends boolean = false>(options: Options<ListAutomationPlansData, ThrowOnError>): RequestResult<ListAutomationPlansResponses, ListAutomationPlansErrors, ThrowOnError> => (options.client ?? client).get<ListAutomationPlansResponses, ListAutomationPlansErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/automation-plans', ...options });
+
+/**
+ * Get Automation Plan
+ */
+export const getAutomationPlan = <ThrowOnError extends boolean = false>(options: Options<GetAutomationPlanData, ThrowOnError>): RequestResult<GetAutomationPlanResponses, GetAutomationPlanErrors, ThrowOnError> => (options.client ?? client).get<GetAutomationPlanResponses, GetAutomationPlanErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/automation-plans/{plan_id}', ...options });
+
+/**
+ * Activate Automation Plan
+ */
+export const activateAutomationPlan = <ThrowOnError extends boolean = false>(options: Options<ActivateAutomationPlanData, ThrowOnError>): RequestResult<ActivateAutomationPlanResponses, ActivateAutomationPlanErrors, ThrowOnError> => (options.client ?? client).post<ActivateAutomationPlanResponses, ActivateAutomationPlanErrors, ThrowOnError>({
+    url: '/api/v1/devices/{device_id}/automation-plans/{plan_id}/activate',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Cancel Automation Plan
+ */
+export const cancelAutomationPlan = <ThrowOnError extends boolean = false>(options: Options<CancelAutomationPlanData, ThrowOnError>): RequestResult<CancelAutomationPlanResponses, CancelAutomationPlanErrors, ThrowOnError> => (options.client ?? client).post<CancelAutomationPlanResponses, CancelAutomationPlanErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/automation-plans/{plan_id}/cancel', ...options });
+
+/**
+ * List Automation Plan Events
+ */
+export const listAutomationPlanEvents = <ThrowOnError extends boolean = false>(options: Options<ListAutomationPlanEventsData, ThrowOnError>): RequestResult<ListAutomationPlanEventsResponses, ListAutomationPlanEventsErrors, ThrowOnError> => (options.client ?? client).get<ListAutomationPlanEventsResponses, ListAutomationPlanEventsErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/automation-plans/{plan_id}/events', ...options });
+
+/**
+ * Pause Automation Plan
+ */
+export const pauseAutomationPlan = <ThrowOnError extends boolean = false>(options: Options<PauseAutomationPlanData, ThrowOnError>): RequestResult<PauseAutomationPlanResponses, PauseAutomationPlanErrors, ThrowOnError> => (options.client ?? client).post<PauseAutomationPlanResponses, PauseAutomationPlanErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/automation-plans/{plan_id}/pause', ...options });
+
+/**
+ * Resume Automation Plan
+ */
+export const resumeAutomationPlan = <ThrowOnError extends boolean = false>(options: Options<ResumeAutomationPlanData, ThrowOnError>): RequestResult<ResumeAutomationPlanResponses, ResumeAutomationPlanErrors, ThrowOnError> => (options.client ?? client).post<ResumeAutomationPlanResponses, ResumeAutomationPlanErrors, ThrowOnError>({ url: '/api/v1/devices/{device_id}/automation-plans/{plan_id}/resume', ...options });
 
 /**
  * Get Automation Policy

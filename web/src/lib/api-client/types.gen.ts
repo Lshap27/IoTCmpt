@@ -19,11 +19,15 @@ export type AiRunCreate = {
     /**
      * Kind
      */
-    kind: 'decision' | 'report' | 'vision' | 'patrol';
+    kind: 'decision' | 'report' | 'vision' | 'patrol' | 'plan_compile' | 'strategy';
     /**
      * Period
      */
     period?: 'hour' | 'day' | 'week' | null;
+    /**
+     * Plan Id
+     */
+    plan_id?: string | null;
     /**
      * Trigger
      */
@@ -174,6 +178,268 @@ export type AiRunStatusPayload = {
 };
 
 /**
+ * AiStrategyOut
+ */
+export type AiStrategyOut = {
+    /**
+     * Base Version
+     */
+    base_version?: number | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Diff
+     */
+    diff: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Plan Id
+     */
+    plan_id?: string | null;
+    /**
+     * Proposed Spec
+     */
+    proposed_spec: {
+        [key: string]: unknown;
+    };
+    /**
+     * Resolved At
+     */
+    resolved_at?: string | null;
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Status
+     */
+    status: 'proposed' | 'approved' | 'rejected' | 'skipped';
+    /**
+     * Strategy Id
+     */
+    strategy_id: string;
+    /**
+     * Summary
+     */
+    summary: string;
+};
+
+/**
+ * AutomationPlanActivateIn
+ */
+export type AutomationPlanActivateIn = {
+    /**
+     * Replace Active
+     */
+    replace_active?: boolean;
+};
+
+/**
+ * AutomationPlanChangedEnvelope
+ */
+export type AutomationPlanChangedEnvelope = {
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Occurred At
+     */
+    occurred_at: string;
+    /**
+     * Payload
+     */
+    payload: {
+        [key: string]: unknown;
+    };
+    /**
+     * Schema Version
+     */
+    schema_version?: '2.0';
+    /**
+     * Trace Id
+     */
+    trace_id?: string | null;
+    /**
+     * Type
+     */
+    type: 'automation.plan.changed';
+};
+
+/**
+ * AutomationPlanEventEnvelope
+ */
+export type AutomationPlanEventEnvelope = {
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Occurred At
+     */
+    occurred_at: string;
+    /**
+     * Payload
+     */
+    payload: {
+        [key: string]: unknown;
+    };
+    /**
+     * Schema Version
+     */
+    schema_version?: '2.0';
+    /**
+     * Trace Id
+     */
+    trace_id?: string | null;
+    /**
+     * Type
+     */
+    type: 'automation.plan.event';
+};
+
+/**
+ * AutomationPlanEventOut
+ */
+export type AutomationPlanEventOut = {
+    /**
+     * Detail
+     */
+    detail: {
+        [key: string]: unknown;
+    };
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Event Type
+     */
+    event_type: string;
+    /**
+     * Occurred At
+     */
+    occurred_at: string;
+    /**
+     * Plan Id
+     */
+    plan_id: string;
+    /**
+     * Rule Id
+     */
+    rule_id?: string | null;
+    /**
+     * Trace Id
+     */
+    trace_id?: string | null;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * AutomationPlanOut
+ */
+export type AutomationPlanOut = {
+    /**
+     * Activation Blockers
+     */
+    activation_blockers: Array<string>;
+    /**
+     * Completed At
+     */
+    completed_at?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Current Version
+     */
+    current_version: number;
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Ends At
+     */
+    ends_at?: string | null;
+    /**
+     * Explanation
+     */
+    explanation: string;
+    /**
+     * Paused At
+     */
+    paused_at?: string | null;
+    /**
+     * Plan Id
+     */
+    plan_id: string;
+    /**
+     * Plan Type
+     */
+    plan_type: 'system' | 'user';
+    /**
+     * Rule States
+     */
+    rule_states: Array<AutomationRuleStateOut>;
+    /**
+     * Source Prompt
+     */
+    source_prompt: string;
+    /**
+     * Spec
+     */
+    spec: {
+        [key: string]: unknown;
+    };
+    /**
+     * Started At
+     */
+    started_at?: string | null;
+    /**
+     * Status
+     */
+    status: 'draft' | 'active' | 'paused' | 'completed' | 'cancelled' | 'failed' | 'superseded';
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Validation
+     */
+    validation: {
+        [key: string]: unknown;
+    };
+};
+
+/**
  * AutomationPolicyChangedEnvelope
  */
 export type AutomationPolicyChangedEnvelope = {
@@ -246,6 +512,18 @@ export type AutomationPolicyIn = {
      */
     sedentary_trigger_enabled?: boolean | null;
     /**
+     * Strategy Enabled
+     */
+    strategy_enabled?: boolean | null;
+    /**
+     * Strategy Force Interval Seconds
+     */
+    strategy_force_interval_seconds?: number | null;
+    /**
+     * Strategy Min Interval Seconds
+     */
+    strategy_min_interval_seconds?: number | null;
+    /**
      * Vision Interval Seconds
      */
     vision_interval_seconds?: number | null;
@@ -284,6 +562,10 @@ export type AutomationPolicyOut = {
      */
     last_model_run_at?: string | null;
     /**
+     * Last Strategy Run At
+     */
+    last_strategy_run_at?: string | null;
+    /**
      * Patrol Enabled
      */
     patrol_enabled: boolean;
@@ -304,6 +586,18 @@ export type AutomationPolicyOut = {
      */
     sedentary_trigger_enabled: boolean;
     /**
+     * Strategy Enabled
+     */
+    strategy_enabled: boolean;
+    /**
+     * Strategy Force Interval Seconds
+     */
+    strategy_force_interval_seconds: number;
+    /**
+     * Strategy Min Interval Seconds
+     */
+    strategy_min_interval_seconds: number;
+    /**
      * Thresholds
      */
     thresholds: {
@@ -317,6 +611,72 @@ export type AutomationPolicyOut = {
      * Vision Schedule Enabled
      */
     vision_schedule_enabled: boolean;
+};
+
+/**
+ * AutomationRuleStateOut
+ */
+export type AutomationRuleStateOut = {
+    /**
+     * Blocked Reason
+     */
+    blocked_reason?: string | null;
+    /**
+     * Last Command Id
+     */
+    last_command_id?: string | null;
+    /**
+     * Last Condition
+     */
+    last_condition: string;
+    /**
+     * Last Fired At
+     */
+    last_fired_at?: string | null;
+    /**
+     * Next Fire At
+     */
+    next_fire_at?: string | null;
+    /**
+     * Rule Id
+     */
+    rule_id: string;
+};
+
+/**
+ * AutomationStrategyChangedEnvelope
+ */
+export type AutomationStrategyChangedEnvelope = {
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Occurred At
+     */
+    occurred_at: string;
+    /**
+     * Payload
+     */
+    payload: {
+        [key: string]: unknown;
+    };
+    /**
+     * Schema Version
+     */
+    schema_version?: '2.0';
+    /**
+     * Trace Id
+     */
+    trace_id?: string | null;
+    /**
+     * Type
+     */
+    type: 'automation.strategy.changed';
 };
 
 /**
@@ -1384,6 +1744,12 @@ export type WsMessage = ({
 } & DeviceCapabilitiesChangedEnvelope) | ({
     type: 'automation.policy.changed';
 } & AutomationPolicyChangedEnvelope) | ({
+    type: 'automation.plan.changed';
+} & AutomationPlanChangedEnvelope) | ({
+    type: 'automation.plan.event';
+} & AutomationPlanEventEnvelope) | ({
+    type: 'automation.strategy.changed';
+} & AutomationStrategyChangedEnvelope) | ({
     type: 'system.error';
 } & SystemErrorEnvelope);
 
@@ -1547,6 +1913,383 @@ export type CancelAiRunResponses = {
 };
 
 export type CancelAiRunResponse = CancelAiRunResponses[keyof CancelAiRunResponses];
+
+export type ListAiStrategiesData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/ai/strategies';
+};
+
+export type ListAiStrategiesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListAiStrategiesError = ListAiStrategiesErrors[keyof ListAiStrategiesErrors];
+
+export type ListAiStrategiesResponses = {
+    /**
+     * Response List Ai Strategies
+     *
+     * Successful Response
+     */
+    200: Array<AiStrategyOut>;
+};
+
+export type ListAiStrategiesResponse = ListAiStrategiesResponses[keyof ListAiStrategiesResponses];
+
+export type GetAiStrategyData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+        /**
+         * Strategy Id
+         */
+        strategy_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/ai/strategies/{strategy_id}';
+};
+
+export type GetAiStrategyErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAiStrategyError = GetAiStrategyErrors[keyof GetAiStrategyErrors];
+
+export type GetAiStrategyResponses = {
+    /**
+     * Successful Response
+     */
+    200: AiStrategyOut;
+};
+
+export type GetAiStrategyResponse = GetAiStrategyResponses[keyof GetAiStrategyResponses];
+
+export type ApproveAiStrategyData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+        /**
+         * Strategy Id
+         */
+        strategy_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/ai/strategies/{strategy_id}/approve';
+};
+
+export type ApproveAiStrategyErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ApproveAiStrategyError = ApproveAiStrategyErrors[keyof ApproveAiStrategyErrors];
+
+export type ApproveAiStrategyResponses = {
+    /**
+     * Successful Response
+     */
+    200: AiStrategyOut;
+};
+
+export type ApproveAiStrategyResponse = ApproveAiStrategyResponses[keyof ApproveAiStrategyResponses];
+
+export type RejectAiStrategyData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+        /**
+         * Strategy Id
+         */
+        strategy_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/ai/strategies/{strategy_id}/reject';
+};
+
+export type RejectAiStrategyErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RejectAiStrategyError = RejectAiStrategyErrors[keyof RejectAiStrategyErrors];
+
+export type RejectAiStrategyResponses = {
+    /**
+     * Successful Response
+     */
+    200: AiStrategyOut;
+};
+
+export type RejectAiStrategyResponse = RejectAiStrategyResponses[keyof RejectAiStrategyResponses];
+
+export type ListAutomationPlansData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/automation-plans';
+};
+
+export type ListAutomationPlansErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListAutomationPlansError = ListAutomationPlansErrors[keyof ListAutomationPlansErrors];
+
+export type ListAutomationPlansResponses = {
+    /**
+     * Response List Automation Plans
+     *
+     * Successful Response
+     */
+    200: Array<AutomationPlanOut>;
+};
+
+export type ListAutomationPlansResponse = ListAutomationPlansResponses[keyof ListAutomationPlansResponses];
+
+export type GetAutomationPlanData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+        /**
+         * Plan Id
+         */
+        plan_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/automation-plans/{plan_id}';
+};
+
+export type GetAutomationPlanErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAutomationPlanError = GetAutomationPlanErrors[keyof GetAutomationPlanErrors];
+
+export type GetAutomationPlanResponses = {
+    /**
+     * Successful Response
+     */
+    200: AutomationPlanOut;
+};
+
+export type GetAutomationPlanResponse = GetAutomationPlanResponses[keyof GetAutomationPlanResponses];
+
+export type ActivateAutomationPlanData = {
+    body: AutomationPlanActivateIn;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+        /**
+         * Plan Id
+         */
+        plan_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/automation-plans/{plan_id}/activate';
+};
+
+export type ActivateAutomationPlanErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ActivateAutomationPlanError = ActivateAutomationPlanErrors[keyof ActivateAutomationPlanErrors];
+
+export type ActivateAutomationPlanResponses = {
+    /**
+     * Successful Response
+     */
+    200: AutomationPlanOut;
+};
+
+export type ActivateAutomationPlanResponse = ActivateAutomationPlanResponses[keyof ActivateAutomationPlanResponses];
+
+export type CancelAutomationPlanData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+        /**
+         * Plan Id
+         */
+        plan_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/automation-plans/{plan_id}/cancel';
+};
+
+export type CancelAutomationPlanErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CancelAutomationPlanError = CancelAutomationPlanErrors[keyof CancelAutomationPlanErrors];
+
+export type CancelAutomationPlanResponses = {
+    /**
+     * Successful Response
+     */
+    200: AutomationPlanOut;
+};
+
+export type CancelAutomationPlanResponse = CancelAutomationPlanResponses[keyof CancelAutomationPlanResponses];
+
+export type ListAutomationPlanEventsData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+        /**
+         * Plan Id
+         */
+        plan_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/devices/{device_id}/automation-plans/{plan_id}/events';
+};
+
+export type ListAutomationPlanEventsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListAutomationPlanEventsError = ListAutomationPlanEventsErrors[keyof ListAutomationPlanEventsErrors];
+
+export type ListAutomationPlanEventsResponses = {
+    /**
+     * Response List Automation Plan Events
+     *
+     * Successful Response
+     */
+    200: Array<AutomationPlanEventOut>;
+};
+
+export type ListAutomationPlanEventsResponse = ListAutomationPlanEventsResponses[keyof ListAutomationPlanEventsResponses];
+
+export type PauseAutomationPlanData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+        /**
+         * Plan Id
+         */
+        plan_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/automation-plans/{plan_id}/pause';
+};
+
+export type PauseAutomationPlanErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PauseAutomationPlanError = PauseAutomationPlanErrors[keyof PauseAutomationPlanErrors];
+
+export type PauseAutomationPlanResponses = {
+    /**
+     * Successful Response
+     */
+    200: AutomationPlanOut;
+};
+
+export type PauseAutomationPlanResponse = PauseAutomationPlanResponses[keyof PauseAutomationPlanResponses];
+
+export type ResumeAutomationPlanData = {
+    body?: never;
+    path: {
+        /**
+         * Device Id
+         */
+        device_id: string;
+        /**
+         * Plan Id
+         */
+        plan_id: string;
+    };
+    query?: never;
+    url: '/api/v1/devices/{device_id}/automation-plans/{plan_id}/resume';
+};
+
+export type ResumeAutomationPlanErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResumeAutomationPlanError = ResumeAutomationPlanErrors[keyof ResumeAutomationPlanErrors];
+
+export type ResumeAutomationPlanResponses = {
+    /**
+     * Successful Response
+     */
+    200: AutomationPlanOut;
+};
+
+export type ResumeAutomationPlanResponse = ResumeAutomationPlanResponses[keyof ResumeAutomationPlanResponses];
 
 export type GetAutomationPolicyData = {
     body?: never;

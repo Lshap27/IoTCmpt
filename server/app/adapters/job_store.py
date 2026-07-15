@@ -173,7 +173,8 @@ class SqlAlchemyJobStore:
                 self._append_events(db, run, "ai.run.cancelled", "cancelled")
                 db.commit()
                 raise RunCancelled(run_id)
-            run.status = "succeeded"
+            strategy_status = (output.get("strategy") or {}).get("status") if run.kind == "strategy" else None
+            run.status = "skipped" if strategy_status == "skipped" else "succeeded"
             run.output_payload = output
             run.model = model
             run.completed_at = now
@@ -201,7 +202,16 @@ class SqlAlchemyJobStore:
                 if policy is not None:
                     policy.last_model_run_at = now
                     db.add(policy)
-            self._append_events(db, run, "ai.run.succeeded", "succeeded", {"output": output})
+            if run.kind == "strategy":
+                policy = (
+                    db.query(models.AutomationPolicy)
+                    .filter(models.AutomationPolicy.device_id == run.device_id)
+                    .one_or_none()
+                )
+                if policy is not None:
+                    policy.last_strategy_run_at = now
+                    db.add(policy)
+            self._append_events(db, run, f"ai.run.{run.status}", run.status, {"output": output})
             db.commit()
 
     def fail(self, run_id: str, error: Exception, lease_token: str, *, retryable: bool = True) -> None:

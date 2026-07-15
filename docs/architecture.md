@@ -17,6 +17,8 @@ flowchart LR
     WORKER["Persistent AI worker / MCP host"] --> LLM["Cloud LLM"]
     WORKER -->|"MCP client"| MCP
     WORKER --> DB
+    RUNTIME["Deterministic Automation Runtime"] --> APP
+    RUNTIME <--> DB
 ```
 
 ## Responsibility boundaries
@@ -29,6 +31,10 @@ flowchart LR
 | Cloud LLM | asynchronous analysis, reports and MCP tool selection | direct firmware or broker access |
 
 The firmware can reject any cloud command. Smoke and other safety behavior never waits for the server or model.
+
+The Gateway owns the deterministic `AutomationPlanSpec v1` runtime. The AI Worker compiles natural language into a bounded, validated plan through MCP, but activation and every later condition/timer evaluation occur in the Gateway without an LLM. Commands still use `source=rule`, the command application, transactional outbox, MQTT and terminal ACK path. A fenced `runtime_leases` row elects one timer scheduler; per-device locks and plan/version/rule/occurrence idempotency keys prevent duplicate commands.
+
+The previous lighting automation is now a per-device `system` plan in that runtime. It retains two stable light samples, presence no older than 15 seconds, manual priority and speech only after the LED action reaches `executed`. An active user plan shadows only system rules that target the same actuator. Manual override blocks only that actuator and records one event until the override or condition changes.
 
 ## Server layers
 
@@ -63,9 +69,12 @@ sequenceDiagram
     M->>S: same application command use case
     S-->>D: MQTT command
     D-->>S: accepted, then terminal ACK
+    Note over S,D: active plans continue locally if Worker or external LLM is unavailable
 ```
 
 Every command is written together with its outbox row before MQTT publication. `trace_id` connects the HTTP request, AI run, MCP call, command events, MQTT envelope, firmware ACK and WebSocket event.
+
+Counselor voice notifications, lighting announcements and semantic MCP speech share one text-to-command service. It owns whitespace validation, GB2312 replacement encoding, the 220-byte hardware limit, capability checks and ordinary outbox submission. The firmware still owns serialization on the shared UART and the physical SYN6288 result.
 
 ## Versioned sources of truth
 
@@ -73,13 +82,14 @@ Every command is written together with its outbox row before MQTT publication. `
 - `contracts/mqtt-envelope.schema.json`: MQTT v2 envelope.
 - `contracts/device-capabilities.schema.json`: retained device capability payload.
 - `contracts/websocket-events.json`: WebSocket v2 event names.
+- `contracts/automation-plan.schema.json`: bounded AutomationPlanSpec v1 DSL.
 - `server/openapi.json`: HTTP `/api/v1` contract and generated WebSocket union.
 
 Run `python tools/generate-contracts.py` after editing the command catalog. It generates the server Python catalog and firmware C header. CI runs the generator with `--check` and fails on drift.
 
 ## Deployment boundary
 
-The gateway is one fixed single-process service containing HTTP, WebSocket, MQTT ingestion and the MCP server. AI workers are independent processes and may be safely scaled. `FOR UPDATE SKIP LOCKED` prevents concurrent claims; each claim also receives a unique `lease_token`. Every renewal, side-effect boundary and terminal update must still match `id + lease_owner + lease_token`, so a paused old Worker cannot resume after a newer Worker reclaimed the task. A separately fenced scheduler lease elects one patrol scheduler. PostgreSQL also carries Worker heartbeats and the realtime relay; Redis and Celery are not required.
+The gateway is one fixed single-process service containing HTTP, WebSocket, MQTT ingestion, deterministic automation and the MCP server. AI workers are independent processes and may be safely scaled. `FOR UPDATE SKIP LOCKED` prevents concurrent claims; each claim also receives a unique `lease_token`. Every renewal, side-effect boundary and terminal update must still match `id + lease_owner + lease_token`, so a paused old Worker cannot resume after a newer Worker reclaimed the task. Separately fenced leases elect one automation timer scheduler and one patrol/strategy scheduler. PostgreSQL also carries Worker heartbeats and the realtime relay; Redis and Celery are not required.
 
 Outbox and realtime relay use the same fencing pattern. MQTT input is deduplicated by `(device_id, topic, message_id)`. This means database ownership, broker QoS 1 redelivery, firmware `command_id` replay and frontend `event_id` deduplication form four independent reliability layers rather than one optimistic lock.
 

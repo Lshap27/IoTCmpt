@@ -10,5 +10,10 @@
   "command_queue_length": 4,
   "terminal_ack_cache_size": 16,
   "smoke_silence_seconds": { "minimum": 10, "maximum": 600 },
+  "smoke_reannounce_seconds": 30,
+  "smoke_clear_stable_ms": 1000,
+  "voice_local_retry_attempts": 3,
+  "voice_retry_backoff_ms": 250,
+  "voice_tx_timeout_ms": 1000,
   "command_execution_period_ms": 500
 }

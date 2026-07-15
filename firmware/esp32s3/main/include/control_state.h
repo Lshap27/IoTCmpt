@@ -43,4 +43,5 @@ esp_err_t control_state_set_priority(control_priority_t priority);
 void control_state_resume_auto(void);
 bool control_state_is_automatic_source_allowed(bool led);
 esp_err_t control_state_silence_smoke(uint32_t seconds);
+void control_state_clear_smoke_silence(void);
 const char *control_priority_name(control_priority_t priority);

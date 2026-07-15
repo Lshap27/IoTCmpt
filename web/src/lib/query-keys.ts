@@ -9,6 +9,10 @@ export const deviceKeys = {
   ai: (deviceId: string) => ["device", deviceId, "ai"] as const,
   aiRun: (deviceId: string, runId: string) => ["device", deviceId, "ai-runs", runId] as const,
   automationPolicy: (deviceId: string) => ["device", deviceId, "automation-policy"] as const,
+  automationPlans: (deviceId: string) => ["device", deviceId, "automation-plans"] as const,
+  automationPlanEvents: (deviceId: string, planId: string) =>
+    ["device", deviceId, "automation-plans", planId, "events"] as const,
+  aiStrategies: (deviceId: string) => ["device", deviceId, "ai-strategies"] as const,
   capabilities: (deviceId: string) => ["device", deviceId, "capabilities"] as const,
   pendingCommands: (deviceId: string) => ["device", deviceId, "pending-commands"] as const,
   commandStatuses: (deviceId: string) => ["device", deviceId, "command-statuses"] as const,

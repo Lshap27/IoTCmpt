@@ -452,6 +452,21 @@ class AutomationPolicyChangedEnvelope(_EnvelopeBase):
     payload: dict[str, Any]
 
 
+class AutomationPlanChangedEnvelope(_EnvelopeBase):
+    type: Literal["automation.plan.changed"]
+    payload: dict[str, Any]
+
+
+class AutomationPlanEventEnvelope(_EnvelopeBase):
+    type: Literal["automation.plan.event"]
+    payload: dict[str, Any]
+
+
+class AutomationStrategyChangedEnvelope(_EnvelopeBase):
+    type: Literal["automation.strategy.changed"]
+    payload: dict[str, Any]
+
+
 WsMessage = Annotated[
     TelemetryReceivedEnvelope
     | DeviceStatusChangedEnvelope
@@ -461,6 +476,9 @@ WsMessage = Annotated[
     | NotificationCreatedEnvelope
     | DeviceCapabilitiesChangedEnvelope
     | AutomationPolicyChangedEnvelope
+    | AutomationPlanChangedEnvelope
+    | AutomationPlanEventEnvelope
+    | AutomationStrategyChangedEnvelope
     | SystemErrorEnvelope,
     Field(discriminator="type"),
 ]
